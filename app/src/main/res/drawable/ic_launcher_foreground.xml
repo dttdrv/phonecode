@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    PhoneCode launcher foreground v3.
+    The prompt mark ">_" alone - big, square-footprint (~43x35dp), dead-centered at (54,54).
+    Fits every adaptive mask: half-diagonal ~27.5dp < the 33dp safe radius (the old phone outline
+    was 38x62 - half-diagonal 36.4dp - and round masks clipped it). Single-color white, so the
+    same vector doubles as the Android 13+ themed-icon monochrome layer.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Prompt chevron ">" -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M37.9,38.4 L52.8,49.2 Q55.4,51.0 55.4,54.0 Q55.4,57.0 52.8,58.8 L37.9,69.6 Q35.4,71.4 33.9,69.0 Q32.3,66.5 34.8,64.7 L49.5,54.0 L34.8,43.3 Q32.3,41.5 33.9,39.1 Q35.4,36.6 37.9,38.4 Z" />
+
+    <!-- Command-line cursor "_" on the prompt baseline -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M61.5,64 H72.5 Q75,64 75,67.2 Q75,70.5 72.5,70.5 H61.5 Q59,70.5 59,67.2 Q59,64 61.5,64 Z" />
+</vector>

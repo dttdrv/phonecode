@@ -1,0 +1,9 @@
+event: ping
+data: {"type":"ping"}
+
+event: ping
+data: {"type":"ping"}
+
+event: error
+data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+

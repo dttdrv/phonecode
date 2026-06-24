@@ -1,0 +1,12 @@
+data: {"choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}
+
+data: {"choices":[{"index":0,"delta":{"content":"Hello"}}]}
+
+data: {"choices":[{"index":0,"delta":{"content":" world"}}]}
+
+data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":42,"completion_tokens":7,"prompt_tokens_details":{"cached_tokens":10}}}
+
+data: [DONE]
+

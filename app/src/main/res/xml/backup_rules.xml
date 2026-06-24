@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Auto Backup rules (pre-Android-12). Backs up chats/projects/settings so a reinstall can
+  restore them. Excludes the encrypted API-key store (its Keystore master key can't be restored) and
+  the regenerable agent workspace (keeps the backup small + under the 25MB limit).
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="phonecode_provider_keys.xml" />
+    <exclude domain="file" path="workspace" />
+</full-backup-content>

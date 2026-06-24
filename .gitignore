@@ -1,0 +1,24 @@
+*.iml
+.gradle/
+.kotlin/
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild
+.cxx
+local.properties
+/.superpowers/
+/.tooling/
+*.apk
+*.aab
+*.keystore
+!gradle-wrapper.jar
+/.playwright-mcp/
+/opencode-home.png
+/_oc_research/
+/_research/
+/oc_research/
+
+# Roborazzi design-loop screenshots (regenerated every test run)
+app/screenshots/

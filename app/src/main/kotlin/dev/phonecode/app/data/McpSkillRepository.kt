@@ -24,6 +24,26 @@ class McpSkillRepository(private val configDir: File) {
         mcpFile.writeText(config.serialize())
     }
 
+    /**
+     * Copy any bundled `assets/skills/<name>/SKILL.md` into the config skills dir, once ever (gated by a
+     * marker), so built-in skills appear out of the box yet the user can still edit or delete them afterwards.
+     */
+    fun seedBundledSkills(assets: android.content.res.AssetManager) {
+        val marker = File(configDir, ".skills-seeded")
+        if (marker.exists()) return
+        runCatching {
+            assets.list("skills")?.forEach { name ->
+                val target = File(configDir, "skills/$name/SKILL.md")
+                if (!target.exists()) {
+                    target.parentFile?.mkdirs()
+                    assets.open("skills/$name/SKILL.md").use { input -> target.outputStream().use { input.copyTo(it) } }
+                }
+            }
+        }
+        configDir.mkdirs()
+        runCatching { marker.writeText("1") }
+    }
+
     /** Discover every `SKILL.md` under `skills/` and `.claude/skills/`, de-duplicated by name. */
     fun discoverSkills(): List<SkillManifest> {
         val roots = listOf(File(configDir, "skills"), File(configDir, ".claude/skills"))

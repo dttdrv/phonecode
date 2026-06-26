@@ -1,3 +1,9 @@
+# WebView JS bridge used to size the inline Mermaid diagram WebView: R8 must not strip the
+# @JavascriptInterface callback (the default android-optimize config keeps it, but be explicit).
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
 # JGit is reflection/ServiceLoader-heavy; keep it whole (size cost is acceptable for correctness).
 -keep class org.eclipse.jgit.** { *; }
 -dontwarn org.eclipse.jgit.**

@@ -248,6 +248,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // Load MCP config + discover skills, then connect remote MCP servers and fold their tools in.
         viewModelScope.launch(Dispatchers.IO) {
             val config = repo.loadMcpConfig()
+            repo.seedBundledSkills(app.assets) // built-in skills (e.g. diagrams) on first run; user can edit/delete after
             discoveredSkills = repo.discoverSkills()
             val connected = runCatching { connectMcpServers(config, http) }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it else emptyList() }
             mcpTools = connected
@@ -276,7 +277,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     val merged = options + custom
                     val current = s.selected
-                    val resolved = merged.firstOrNull { it.providerId == current?.providerId && it.modelId == current?.modelId }
+                    // Remember the user's model across restarts: prefer the last-picked model (persisted in
+                    // recents) over the hardcoded default, then any selection already made this session.
+                    val recentKey = modelPrefs.recents().firstOrNull()
+                    val resolved = merged.firstOrNull { modelKey(it) == recentKey }
+                        ?: merged.firstOrNull { it.providerId == current?.providerId && it.modelId == current?.modelId }
                         ?: merged.first()
                     s.copy(models = merged, selected = resolved, contextLimit = limitFor(resolved)?.context)
                 }

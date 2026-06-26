@@ -1,6 +1,6 @@
 # PhoneCode Terms of Service
 
-_Last updated: 9 June 2026_
+_Last updated: 26 June 2026_
 
 These Terms cover your use of **PhoneCode**, an Android app that runs an AI coding agent directly on your device. PhoneCode is a small, independent project. By installing or using the app, you agree to these Terms. If you don't agree, please don't use the app.
 
@@ -39,6 +39,7 @@ When you ask it to, the PhoneCode agent can:
 - **Read and write files** in its on-device workspace, including creating, modifying, and deleting files.
 - **Run Git operations**, including commits and, using the Git credentials you provide, pushing to and pulling from remote repositories such as GitHub.
 - **Run web searches** to gather information.
+- **Set up and use a Linux sandbox** on your device, which downloads a base Linux system from Alpine Linux's servers and can install and run additional software, such as Python, inside the app's sandbox.
 
 These actions are powerful. The agent acts on your instructions and on the output of an AI model, which can be wrong, incomplete, or unexpected. **You are responsible for the code the agent writes and for any action it takes, including pushes and other changes to your repositories.** Review changes before you rely on them, before you run generated code, and before you push to shared or production repositories. Keep backups and use version control so you can undo mistakes.
 
@@ -88,4 +89,4 @@ We may update these Terms as the app evolves. The "Last updated" date at the top
 
 ## 12. Contact
 
-For questions about these Terms, contact the developer through the project's public repository or listing.
+For questions about these Terms, contact the developer through the project's public repository at [github.com/dttdrv/phonecode](https://github.com/dttdrv/phonecode).

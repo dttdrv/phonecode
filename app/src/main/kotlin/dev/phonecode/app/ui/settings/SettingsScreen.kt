@@ -77,6 +77,7 @@ import dev.phonecode.app.data.CustomModel
 import dev.phonecode.app.data.CustomProvider
 import dev.phonecode.app.data.ThemeMode
 import dev.phonecode.app.ui.SettingsViewModel
+import dev.phonecode.app.ui.chat.MarkdownBlocks
 import dev.phonecode.app.ui.components.PcButton
 import dev.phonecode.app.ui.components.PcField
 import dev.phonecode.app.ui.components.PcGroup
@@ -731,7 +732,13 @@ private fun DocPage(title: String, assetName: String, onBack: () -> Unit) {
             .getOrDefault("Document unavailable.")
     }
     Page(title, onBack) {
-        Text(text, style = MaterialTheme.typography.labelMedium, color = colors.secondary, modifier = Modifier.padding(vertical = Spacing.xs))
+        // Render the markdown (headings, bold, lists) instead of dumping the raw source: the old single
+        // Text showed literal '#', '**' and '-' in a tiny caption font. The doc's own H1 title is dropped
+        // since the page header already shows it.
+        val body = remember(text) { text.replace(Regex("^#\\s+.*(\\R+)?"), "") }
+        Box(Modifier.padding(vertical = Spacing.xs)) {
+            MarkdownBlocks(body, color = colors.onSurfaceVariant)
+        }
     }
 }
 
@@ -781,6 +788,9 @@ private fun LicensesPage(onBack: () -> Unit) {
         "OkHttp - Apache License 2.0",
         "Kotlin & kotlinx libraries - Apache License 2.0",
         "AndroidX / Jetpack Compose - Apache License 2.0",
+        "Mermaid - MIT License",
+        "BusyBox - GNU GPL 2.0",
+        "PRoot - GNU GPL 2.0; talloc - GNU LGPL 3.0",
     )
     Page("Licenses", onBack) {
         PcGroup {

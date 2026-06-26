@@ -1,6 +1,12 @@
 package dev.phonecode.app.ui.chat
 
+import android.annotation.SuppressLint
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -122,7 +128,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -718,10 +727,14 @@ private fun AssistantTurn(
             val segments = remember(text) { splitFenced(text) }
             Column(Modifier.fillMaxWidth().padding(top = if (reasoning != null) 11.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 segments.forEachIndexed { i, seg ->
-                    if (seg.isCode) CodeBlock(seg.text, seg.lang)
-                    else {
-                        val live = streaming && i == segments.lastIndex
-                        MarkdownBlocks(seg.text, caret = if (live) " ▋" else "", streaming = live)
+                    val live = streaming && i == segments.lastIndex
+                    when {
+                        // Render a settled mermaid block as a diagram; while it is still streaming keep it as
+                        // code (the source is incomplete and would render as an error).
+                        seg.isCode && seg.lang.equals("mermaid", ignoreCase = true) && !live ->
+                            MermaidDiagram(seg.text)
+                        seg.isCode -> CodeBlock(seg.text, seg.lang)
+                        else -> MarkdownBlocks(seg.text, caret = if (live) " ▋" else "", streaming = live)
                     }
                 }
                 if (segments.isEmpty() && streaming) Text("▋", style = MaterialTheme.typography.bodyMedium, color = colors.secondary)
@@ -828,6 +841,76 @@ private fun CodeBlock(code: String, lang: String) {
             Text(highlighted, style = MaterialTheme.typography.labelMedium.copy(fontFamily = PcMono, fontSize = MaterialTheme.typography.labelMedium.fontSize), color = colors.onBackground)
         }
     }
+}
+
+/**
+ * Renders a ```mermaid block as an actual diagram (trees, graphs, flowcharts, sequence, ...) in a WebView.
+ * mermaid.min.js is bundled in assets and INLINED into the page, so there is no network and no file-access
+ * setting - the page is fully self-contained. securityLevel 'strict' sanitizes the model-authored source.
+ * The page reports its rendered height back so the view sizes to the diagram instead of a fixed box.
+ */
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun MermaidDiagram(source: String) {
+    val colors = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    val mermaidJs = remember { runCatching { context.assets.open("mermaid.min.js").bufferedReader().use { it.readText() } }.getOrDefault("") }
+    if (mermaidJs.isBlank()) { CodeBlock(source, "mermaid"); return } // asset missing: degrade to source
+
+    val dark = colors.background.luminance() < 0.5f
+    var heightDp by remember(source) { mutableStateOf(0) }
+    val html = remember(source, dark, mermaidJs) { mermaidHtml(source, dark, colors.onBackground, mermaidJs) }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+
+    Box(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).background(colors.surface)) {
+        AndroidView(
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    settings.javaScriptEnabled = true
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    isVerticalScrollBarEnabled = false
+                    overScrollMode = WebView.OVER_SCROLL_NEVER
+                    addJavascriptInterface(
+                        object {
+                            @JavascriptInterface fun reportHeight(px: Int) { mainHandler.post { heightDp = px } }
+                        },
+                        "AndroidBridge",
+                    )
+                    webViewClient = WebViewClient()
+                    tag = html
+                    loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+                }
+            },
+            // Reload only when the diagram source/theme actually changed (update runs on every recomposition).
+            update = { wv -> if (wv.tag != html) { wv.tag = html; wv.loadDataWithBaseURL(null, html, "text/html", "utf-8", null) } },
+            modifier = Modifier.fillMaxWidth().padding(8.dp).height(if (heightDp > 0) heightDp.dp else 160.dp),
+        )
+    }
+}
+
+private fun Color.toCssHex(): String =
+    "#%02X%02X%02X".format((red * 255).toInt(), (green * 255).toInt(), (blue * 255).toInt())
+
+private fun mermaidHtml(source: String, dark: Boolean, fg: Color, js: String): String {
+    val theme = if (dark) "dark" else "default"
+    val esc = source.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    val fgCss = fg.toCssHex()
+    return """<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;padding:0;background:transparent;}#c{width:100%;}.mermaid{display:flex;justify-content:center;}svg{max-width:100%;height:auto;}</style>
+<script>$js</script>
+</head><body>
+<div id="c"><pre class="mermaid">$esc</pre></div>
+<script>
+function done(){try{AndroidBridge.reportHeight(Math.ceil(document.documentElement.scrollHeight)+6);}catch(e){}}
+try{
+ mermaid.initialize({startOnLoad:false,theme:'$theme',securityLevel:'strict',flowchart:{useMaxWidth:true}});
+ mermaid.run({querySelector:'.mermaid'}).then(done).catch(function(e){
+  document.getElementById('c').innerHTML='<pre style="color:$fgCss;white-space:pre-wrap;font:12px monospace;">'+(e&&e.message?String(e.message):'diagram error')+'</pre>';done();
+ });
+}catch(e){done();}
+</script>
+</body></html>"""
 }
 
 @Composable

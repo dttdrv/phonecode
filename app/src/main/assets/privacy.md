@@ -1,6 +1,6 @@
 # PhoneCode Privacy Policy
 
-_Last updated: 9 June 2026_
+_Last updated: 26 June 2026_
 
 This policy explains what happens to your data when you use **PhoneCode**, an Android app that runs an AI coding agent on your device. The short version: PhoneCode runs locally, we don't run any servers, and we don't collect, receive, or see your data. The longer version is below, in plain English.
 
@@ -46,29 +46,33 @@ If you use Git features, PhoneCode uses the Git credentials you supply (for exam
 
 When the agent searches the web, it uses **DuckDuckGo**, or the search capability built into the AI model you're using, depending on configuration. Search queries go directly to that service, and that service's privacy practices apply to those queries. We don't run a search service and don't receive your queries.
 
-## 6. No selling or sharing by us
+## 6. The Linux sandbox
+
+The agent can set up an optional Linux sandbox on your device so it can install and run software such as Python. Setting it up downloads a base Linux system from **Alpine Linux's servers** (alpinelinux.org), and any packages you or the agent install come from Alpine's package repositories. These are downloads to your device. The app does not send your prompts, code, or keys to Alpine; those requests are subject to Alpine's own terms and privacy practices, and to the terms of any package source you add.
+
+## 7. No selling or sharing by us
 
 Because we don't collect your data in the first place, we don't sell it, rent it, share it, or use it for advertising or profiling. The only places your data goes are the third-party services **you** connect (AI providers, Git hosts, search), and only when you direct the app to use them.
 
-## 7. Children's privacy
+## 8. Children's privacy
 
 PhoneCode is intended for users aged 13 and over and is not directed at children under 13. We don't knowingly collect personal information from children. In fact, we don't collect personal information from anyone, since the app has no telemetry or backend. The third-party providers you connect may set their own age requirements, which you must meet.
 
-## 8. Security
+## 9. Security
 
 Your API keys and credentials are encrypted on your device using the Android Keystore. The app communicates with providers over encrypted connections. That said, no system is perfectly secure, and the overall security of your data also depends on your device, your provider accounts, and how you handle your keys. Keep your device secured, and revoke and rotate keys with your providers if you suspect they've been exposed.
 
-## 9. Your control
+## 10. Your control
 
 You're in control of your data because it lives on your device and with the providers you chose:
 
 - **On your device:** clear chats, settings, and stored keys within the app, clear the app's storage, or uninstall PhoneCode to remove local data.
 - **With providers:** to access, export, or delete data you've sent to an AI provider or Git host, or to revoke a key, use that provider's account tools and follow their privacy policy.
 
-## 10. Changes to this policy
+## 11. Changes to this policy
 
 We may update this policy as the app evolves. The "Last updated" date at the top shows the current version, which is bundled with the app. Material changes will be reflected in the version shipped with the app.
 
-## 11. Contact
+## 12. Contact
 
-For questions about this Privacy Policy, contact the developer through the project's public repository or listing.
+For questions about this Privacy Policy, contact the developer through the project's public repository at [github.com/dttdrv/phonecode](https://github.com/dttdrv/phonecode).

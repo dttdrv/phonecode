@@ -1,4 +1,3 @@
 <resources>
     <string name="app_name">PhoneCode</string>
-    <string name="nav_service_description">Lets the PhoneCode agent read the screen and navigate it (tap, type, swipe) when you ask it to. Every action also asks for your approval inside the app first. Nothing runs in the background.</string>
 </resources>

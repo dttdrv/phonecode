@@ -64,6 +64,20 @@ class SessionStoreTest {
         assertNull(store.load("nope"))
     }
 
+    @Test fun loadLatestReturnsMostRecentlyWritten() {
+        // loadLatest backs the at-startup restore; it must return the conversation last saved (the one the
+        // user was in), so a relaunch after a process kill continues it instead of starting blank.
+        assertNull(store.loadLatest())
+        store.save(PersistedSession("old", "Old", 100L, emptyList()))
+        store.save(PersistedSession("current", "Current", 200L, sample.map { it.toPersisted() }))
+        // Pin mtimes so the assertion can't flake on a filesystem with coarse timestamp resolution.
+        File(dir, "old.json").setLastModified(1_000L)
+        File(dir, "current.json").setLastModified(2_000L)
+        val latest = store.loadLatest()!!
+        assertEquals("current", latest.id)
+        assertEquals(sample, latest.messages.map { it.toDomain() })
+    }
+
     @Test fun toleratesCorruptFile() {
         File(dir, "broken.json").writeText("{ not valid json")
         // A corrupt file must not crash listing; it is simply skipped.

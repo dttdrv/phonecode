@@ -229,21 +229,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         reloadProviders()
         // The agent's todo list (a StateFlow) drives the on-screen checklist directly.
         viewModelScope.launch { todoStore.items.collect { todos -> _state.update { it.copy(todos = todos) } } }
-        // Restore the most recent conversation so it survives app restart (only if nothing's started yet).
-        // The launch-time sessionId acts as a one-shot guard: any user action that changes the session
-        // (newChat, switchSession) reassigns it, permanently disabling the auto-restore.
-        val launchSessionId = sessionId
-        viewModelScope.launch(Dispatchers.IO) {
-            val latest = sessionStore.list().firstOrNull()?.let { sessionStore.load(it.id) } ?: return@launch
-            val restored = latest.messages.map { it.toDomain() }
-            // Check-and-assign on Main so it can't interleave with newChat/switchSession/send (also Main).
-            withContext(Dispatchers.Main) {
-                if (sessionId == launchSessionId && history.isEmpty() && !_state.value.isRunning && _state.value.lines.isEmpty()) {
-                    sessionId = latest.id
-                    setActiveProject(latest.projectId)
-                    history = restored
-                    _state.update { it.copy(lines = restored.toChatLines(), currentSessionId = latest.id, currentProjectId = latest.projectId) }
-                }
+        // Restore the most recent conversation SYNCHRONOUSLY, before the UI can send. The old restore ran
+        // on a background coroutine and bailed once the user touched the screen, so reopening the app
+        // (Android kills it aggressively) and sending right away started a cold session and orphaned the
+        // real one - "a new instance with no context" on every relaunch. loadLatest reads a single file.
+        // ponytail: one small main-thread read at startup; if a huge transcript ever hitches launch, move
+        // the body off-thread and have send() await it.
+        runCatching {
+            sessionStore.loadLatest()?.let { latest ->
+                sessionId = latest.id
+                setActiveProject(latest.projectId)
+                history = latest.messages.map { it.toDomain() }
+                _state.update { it.copy(lines = history.toChatLines(), currentSessionId = latest.id, currentProjectId = latest.projectId) }
             }
         }
         // Load MCP config + discover skills, then connect remote MCP servers and fold their tools in.
@@ -860,6 +857,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // the app or locking the phone killed responses mid-stream - device feedback). The
         // session persists on TurnComplete, so a reopened app restores the finished reply.
         job = (getApplication<Application>() as PhoneCodeApplication).turnScope.launch {
+            // Persist the user's message to history + disk right now, so a process kill mid-turn (Android
+            // does this) doesn't drop it - history was otherwise only written when the turn completed, so an
+            // interrupted first turn restored as a blank chat. loop.run() re-appends it from startingHistory,
+            // so it is not duplicated; TurnComplete later overwrites history with the full turn.
+            if (gen == generation) {
+                history = startingHistory + ChatMessage(Role.USER, listOf(MessagePart.Text(text)))
+                persist()
+            }
             val custom = appSettings.load().customInstructions.trim()
             val config = AgentConfig(
                 model = selected.modelId,

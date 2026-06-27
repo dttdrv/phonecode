@@ -134,6 +134,17 @@ class SessionStore(private val dir: File) {
     /** All sessions, newest first, served from the in-memory catalog (no per-call file parse). */
     fun list(): List<SessionMeta> = locked { cache().values.sortedByDescending { it.updatedAt } }
 
+    /**
+     * The most recently updated session, or null. Reads a single file (the newest by mtime), so it is
+     * cheap enough to call synchronously at startup - the restore must land before the UI can send, or a
+     * quick first message after the app is killed starts cold and orphans the real conversation.
+     */
+    fun loadLatest(): PersistedSession? = locked {
+        (dir.listFiles { f -> f.isFile && f.extension == "json" } ?: emptyArray())
+            .maxByOrNull { it.lastModified() }
+            ?.let { runCatching { json.decodeFromString(PersistedSession.serializer(), it.readText()) }.getOrNull() }
+    }
+
     fun delete(id: String): Unit = locked {
         fileFor(id).delete()
         cache().remove(id)

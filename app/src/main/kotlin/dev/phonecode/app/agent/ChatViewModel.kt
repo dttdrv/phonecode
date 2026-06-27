@@ -207,9 +207,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         refreshSessions()
-        // Prewarm the userland bootstrap (symlink install on first run) off the main thread so
-        // neither the first shell call nor the first prompt assembly pays for it.
-        viewModelScope.launch(Dispatchers.IO) { userland }
+        // Prewarm the userland bootstrap (symlink install + bundled Alpine rootfs extract) off the main
+        // thread, so the Linux env is ready before the agent's first shell call instead of the model
+        // hitting a "provisioning" window and improvising.
+        viewModelScope.launch(Dispatchers.IO) { userland.ensureLinux() }
         viewModelScope.launch(Dispatchers.IO) {
             val saved = appSettings.load()
             _state.update {

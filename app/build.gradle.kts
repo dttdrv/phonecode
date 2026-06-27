@@ -16,8 +16,8 @@ android {
         applicationId = "dev.phonecode"
         minSdk = 26
         targetSdk = 34
-        versionCode = 10
-        versionName = "0.1.1"
+        versionCode = 11
+        versionName = "0.1.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
@@ -61,6 +61,12 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    androidResources {
+        // The bundled Alpine rootfs (alpine-aarch64.rootfs) is already gzip; store it verbatim so AGP
+        // neither gunzips a `.gz` (it does, dropping the extension) nor wastefully re-compresses it.
+        noCompress += "rootfs"
     }
 
     packaging {

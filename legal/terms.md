@@ -39,7 +39,7 @@ When you ask it to, the PhoneCode agent can:
 - **Read and write files** in its on-device workspace, including creating, modifying, and deleting files.
 - **Run Git operations**, including commits and, using the Git credentials you provide, pushing to and pulling from remote repositories such as GitHub.
 - **Run web searches** to gather information.
-- **Set up and use a Linux sandbox** on your device, which downloads a base Linux system from Alpine Linux's servers and can install and run additional software, such as Python, inside the app's sandbox.
+- **Set up and use a Linux sandbox** on your device (a small Alpine Linux system bundled in the app) and install and run additional software, such as Python, inside it by fetching packages from Alpine's repositories.
 
 These actions are powerful. The agent acts on your instructions and on the output of an AI model, which can be wrong, incomplete, or unexpected. **You are responsible for the code the agent writes and for any action it takes, including pushes and other changes to your repositories.** Review changes before you rely on them, before you run generated code, and before you push to shared or production repositories. Keep backups and use version control so you can undo mistakes.
 

@@ -25,3 +25,19 @@ To re-verify:
 
     curl -fsSL https://raw.githubusercontent.com/green-green-avk/build-proot-android/01f83b8841358450c78333d1b33ab30d4943bec4/packages/proot-android-aarch64.tar.gz | tar -xz
     shasum -a 256 root/bin/proot root/libexec/proot/loader
+
+## busybox - arm64-v8a
+
+- **What:** `arm64-v8a/libbusybox.so` is a static aarch64 busybox - the on-device POSIX shell toolkit,
+  invoked through a `busybox`-named symlink and per-applet symlinks. (The previous arm64 binary was
+  mistakenly a 32-bit ARM build, which does not run on arm64-only devices and broke the whole shell.)
+- **Source:** Alpine Linux `busybox-static` package, v3.21 aarch64.
+- **Pinned:** `busybox-static-1.37.0-r14.apk`, file `bin/busybox.static`.
+- **SHA-256:** `e383c8bc25a1137b8ee88718cc6df1f1e84c54521d6045fc837385995dcdf031`
+- **License:** GPL-2.0.
+- The armeabi-v7a and x86_64 busybox binaries are pre-existing and the correct architecture for their ABI.
+
+To re-verify:
+
+    curl -fsSL https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/busybox-static-1.37.0-r14.apk | tar -xz
+    shasum -a 256 bin/busybox.static

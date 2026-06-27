@@ -48,7 +48,7 @@ When the agent searches the web, it uses **DuckDuckGo**, or the search capabilit
 
 ## 6. The Linux sandbox
 
-The agent can set up an optional Linux sandbox on your device so it can install and run software such as Python. Setting it up downloads a base Linux system from **Alpine Linux's servers** (alpinelinux.org), and any packages you or the agent install come from Alpine's package repositories. These are downloads to your device. The app does not send your prompts, code, or keys to Alpine; those requests are subject to Alpine's own terms and privacy practices, and to the terms of any package source you add.
+The agent can set up an optional Linux sandbox on your device so it can install and run software such as Python. The base Alpine Linux system is **bundled in the app** (no download). When you or the agent install additional packages (for example python3), the package manager fetches them from **Alpine's package repositories** (alpinelinux.org). The app does not send your prompts, code, or keys to Alpine; those package requests are subject to Alpine's own terms and privacy practices, and to the terms of any package source you add.
 
 ## 7. No selling or sharing by us
 

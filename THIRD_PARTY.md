@@ -39,6 +39,17 @@ interoperability and origins.
 Prebuilt third-party files committed into the app, with pinned sources so each is auditable: re-fetch
 from the pinned version and compare the SHA-256.
 
+## Alpine Linux rootfs (bundled, for the proot Linux tier)
+
+- **File:** `app/src/main/assets/alpine-aarch64.rootfs` (a gzipped tar; opaque extension so AGP stores it
+  verbatim). Extracted on first run into the app's storage; proot runs the agent's shell inside it, so
+  `apk add python3 ...` works offline of any rootfs download.
+- **Source:** Alpine Linux aarch64 minirootfs, https://alpinelinux.org
+  (`https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/alpine-minirootfs-3.21.7-aarch64.tar.gz`).
+- **SHA-256:** `d1d1a3fae5f4d6146e9742790a47fcb116199622cfb8439f218a4d5fbe5000da`
+- **Licenses:** a base system of free software - musl (MIT), busybox (GPL-2.0), apk-tools (GPL-2.0), and
+  others; installed packages carry their own licenses. See https://alpinelinux.org.
+
 ## Mermaid (diagram rendering)
 
 - **File:** `app/src/main/assets/mermaid.min.js`

@@ -792,6 +792,7 @@ private fun LicensesPage(onBack: () -> Unit) {
         "Mermaid - MIT License",
         "BusyBox - GNU GPL 2.0",
         "PRoot - GNU GPL 2.0; talloc - GNU LGPL 3.0",
+        "Alpine Linux base (musl MIT, apk-tools GNU GPL 2.0) - bundled rootfs",
     )
     Page("Licenses", onBack) {
         PcGroup {

@@ -275,6 +275,7 @@ object RequestBodyBuilders {
                 put("summary", "auto")
             }
         }
-        req.maxTokens?.let { put("max_output_tokens", it) }
+        // NOTE: no max_output_tokens. The ChatGPT/Codex backend rejects it ("unsupported parameter") -
+        // output length is governed by the model's reasoning effort + verbosity, not a token cap.
     }.toString()
 }

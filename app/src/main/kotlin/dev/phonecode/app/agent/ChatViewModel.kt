@@ -302,10 +302,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun catalogToOptions(catalog: Catalog): List<ModelOption> {
         val out = mutableListOf<ModelOption>()
         BuiltInPresets.all.forEach { preset ->
-            // Codex serves a small, specific set (NOT all of OpenAI's API models); models.dev doesn't carry
-            // a "codex" provider, so always use the pinned supported list from builtInModels - see there.
+            if (preset.id == "codex") {
+                // Match OpenCode's codex integration exactly: the ChatGPT/Codex backend serves OpenAI's
+                // allow-listed models plus anything newer than 5.4 (minus the pro tier). Catalog-driven so
+                // it tracks new releases; falls back to the bundled list when the catalog hasn't loaded.
+                val live = catalog["openai"]?.models?.values
+                    ?.filter { codexEligible(it.id) }
+                    ?.sortedByDescending { it.id }
+                    ?.map { ModelOption("codex", it.id, "${preset.displayName} · ${it.name}") }
+                    ?.takeIf { it.isNotEmpty() }
+                out += live ?: builtInModels().filter { it.providerId == "codex" }
+                return@forEach
+            }
             val key = when {
-                preset.id == "codex" -> null
                 preset.id == "opencode-zen" -> catalog.keys.firstOrNull { it == "opencode-zen" || it == "opencode" }
                 else -> catalog.keys.firstOrNull { it == preset.id }
             }
@@ -319,6 +328,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         return out
+    }
+
+    // OpenCode's codex allow/deny rule (packages/opencode/src/plugin/openai/codex.ts): these ids plus any
+    // OpenAI model newer than 5.4, minus the pro tier the Codex backend won't serve.
+    private fun codexEligible(id: String): Boolean = when (id) {
+        in setOf("gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini") -> true
+        in setOf("gpt-5.5-pro") -> false
+        else -> Regex("^gpt-(\\d+\\.\\d+)").find(id)?.groupValues?.get(1)?.toDoubleOrNull()?.let { it > 5.4 } ?: false
     }
 
     private fun modelKey(o: ModelOption) = "${o.providerId}/${o.modelId}"
@@ -901,11 +918,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 persist()
             }
             val custom = appSettings.load().customInstructions.trim()
+            // Drive the reasoning param off the model's own "thinking" config (from the models.dev catalog -
+            // OpenCode's source). Send an effort only to models that actually reason; force DEFAULT otherwise
+            // so we never send a control a model rejects.
+            val reasons = supportsReasoning(selected)
             val config = AgentConfig(
                 model = selected.modelId,
                 mode = _state.value.agentMode,
                 environment = environment(),
-                reasoningEffort = _state.value.effort,
+                reasoningEffort = if (reasons) _state.value.effort else ReasoningEffort.DEFAULT,
                 skills = discoveredSkills.map { SkillInfo(it.name, it.description) },
                 sessionId = sessionId,
                 projectInstructions = if (custom.isNotEmpty()) listOf(custom) else emptyList(),
@@ -926,7 +947,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     provider, tools, toolContext, config,
                     steering = queueSource, // messages queued mid-turn are picked up at the next step (steer)
                     followUp = queueSource, // ...or run as a follow-up turn if queued right as the turn ends
-                    turnSettings = { TurnSettings(config.model, _state.value.effort, limit?.context, limit?.output) },
+                    turnSettings = { TurnSettings(config.model, if (reasons) _state.value.effort else ReasoningEffort.DEFAULT, limit?.context, limit?.output) },
                     modeProvider = { _state.value.agentMode }, // live so a plan_exit approval flips PLAN→BUILD mid-run
                 )
                 if (startingHistory.isEmpty()) autoBranchIfEnabled(pinnedWorkspace)
@@ -1191,14 +1212,12 @@ fun builtInModels(): List<ModelOption> = listOf(
     ModelOption("deepseek", "deepseek-chat", "DeepSeek Chat"),
     ModelOption("deepseek", "deepseek-reasoner", "DeepSeek Reasoner"),
     ModelOption("mistral", "mistral-large-latest", "Mistral Large"),
-    // ChatGPT plan via "Sign in with ChatGPT" (Codex). EXACTLY the user-selectable models the Codex backend
-    // serves, per the codex CLI's own catalog (the same set OpenCode uses) - not OpenAI's full API line-up.
-    // All have a 272k context window on this backend. Update this list when Codex changes its catalog.
+    // ChatGPT plan via "Sign in with ChatGPT" (Codex). Offline fallback matching OpenCode's codex allow-list;
+    // the live list is catalog-driven via codexEligible(). Update if OpenCode's allow-list changes.
     ModelOption("codex", "gpt-5.5", "ChatGPT · GPT-5.5"),
     ModelOption("codex", "gpt-5.4", "ChatGPT · GPT-5.4"),
     ModelOption("codex", "gpt-5.4-mini", "ChatGPT · GPT-5.4 Mini"),
-    ModelOption("codex", "gpt-5.3-codex", "ChatGPT · GPT-5.3 Codex"),
-    ModelOption("codex", "gpt-5.2", "ChatGPT · GPT-5.2"),
+    ModelOption("codex", "gpt-5.3-codex-spark", "ChatGPT · GPT-5.3 Codex Spark"),
 )
 
 private const val BUNDLED_CATALOG = """

@@ -191,9 +191,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun limitFor(option: ModelOption?): dev.phonecode.provider.catalog.Limit? = option?.let {
         catalog[it.providerId]?.models?.get(it.modelId)?.limit
             ?: customLimits["${it.providerId}/${it.modelId}"]?.let { c -> dev.phonecode.provider.catalog.Limit(context = c) }
-            // Codex models aren't in the models.dev catalog (it lists them under "openai"); give them the
-            // ChatGPT GPT-5 window so compaction fires before the Responses API rejects an oversized request.
-            ?: if (it.providerId == "codex") dev.phonecode.provider.catalog.Limit(context = 272_000, output = 128_000) else null
+            // Codex model ids ARE OpenAI ids (catalog lists them under "openai"); reuse their real limits so
+            // compaction fires correctly, falling back to the GPT-5 window if the catalog hasn't loaded.
+            ?: if (it.providerId == "codex") {
+                catalog["openai"]?.models?.get(it.modelId)?.limit
+                    ?: dev.phonecode.provider.catalog.Limit(context = 400_000, output = 128_000)
+            } else {
+                null
+            }
     }
 
     private val _state = MutableStateFlow(ChatUiState())
@@ -298,10 +303,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Build the picker from the catalog for our four presets; fall back to built-ins per provider. */
+    /** Build the picker from the catalog for our presets; fall back to built-ins per provider. */
     private fun catalogToOptions(catalog: Catalog): List<ModelOption> {
         val out = mutableListOf<ModelOption>()
         BuiltInPresets.all.forEach { preset ->
+            if (preset.id == "codex") {
+                // Codex has no catalog provider of its own; "Sign in with ChatGPT" exposes OpenAI's current
+                // GPT-5 family. Source it live from the openai catalog so the list tracks new releases
+                // (GPT-5.5, the latest Codex models, whatever ships next) instead of a hardcoded, stale set.
+                val live = catalog["openai"]?.models?.values
+                    ?.filter { it.id.startsWith("gpt-5") }
+                    ?.sortedByDescending { it.id }
+                    ?.map { ModelOption("codex", it.id, "${preset.displayName} · ${it.name}") }
+                    ?.takeIf { it.isNotEmpty() }
+                out += live ?: builtInModels().filter { it.providerId == "codex" }
+                return@forEach
+            }
             val key = catalog.keys.firstOrNull { it == preset.id }
                 ?: if (preset.id == "opencode-zen") catalog.keys.firstOrNull { it == "opencode" } else null
             val info = key?.let { catalog[it] }
@@ -1179,10 +1196,10 @@ fun builtInModels(): List<ModelOption> = listOf(
     ModelOption("deepseek", "deepseek-chat", "DeepSeek Chat"),
     ModelOption("deepseek", "deepseek-reasoner", "DeepSeek Reasoner"),
     ModelOption("mistral", "mistral-large-latest", "Mistral Large"),
-    // ChatGPT plan via "Sign in with ChatGPT" (Codex). Usable once signed in; selecting before sign-in
-    // prompts for it. The model ids match what the Codex backend accepts.
-    ModelOption("codex", "gpt-5-codex", "ChatGPT · GPT-5 Codex"),
-    ModelOption("codex", "gpt-5", "ChatGPT · GPT-5"),
+    // ChatGPT plan via "Sign in with ChatGPT" (Codex). Offline fallback only - the real list is sourced
+    // live from the catalog's GPT-5 family (see catalogToOptions), so it stays current.
+    ModelOption("codex", "gpt-5.5", "ChatGPT · GPT-5.5"),
+    ModelOption("codex", "gpt-5.3-codex", "ChatGPT · GPT-5.3 Codex"),
 )
 
 private const val BUNDLED_CATALOG = """

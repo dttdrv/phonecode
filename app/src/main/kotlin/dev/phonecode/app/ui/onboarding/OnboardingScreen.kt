@@ -173,9 +173,7 @@ private fun Connect(onConnectModels: () -> Unit, onConnectGitHub: () -> Unit, on
         Box(Modifier.entrance(150)) {
             PcGroup {
                 // Both model options land on the Providers page on purpose: it hosts BOTH the API-key entry
-                // and the "Sign in with ChatGPT (Codex)" button. Onboarding doesn't start the Codex OAuth
-                // directly because the Codex model path isn't wired yet, so a one-tap sign-in here would
-                // leave the user "signed in" with no usable models.
+                // and the "Sign in with ChatGPT (Codex)" button, so the user finishes setup in one place.
                 OptionRow(
                     icon = Icons.Outlined.Forum,
                     title = "Sign in with ChatGPT",

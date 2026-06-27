@@ -6,7 +6,13 @@ import org.junit.Test
 class BuiltInPresetsTest {
 
     @Test fun presetsWithExpectedWiring() {
-        assertEquals(9, BuiltInPresets.all.size)
+        assertEquals(10, BuiltInPresets.all.size)
+
+        // ChatGPT/Codex speaks the Responses API; the OAuth token is the Bearer key.
+        val codex = BuiltInPresets.byId("codex")!!
+        assertEquals("https://chatgpt.com/backend-api/codex", codex.baseUrl)
+        assertEquals(WireFormat.OPENAI_RESPONSES, codex.wireFormat)
+        assertEquals(AuthScheme.BEARER, codex.authScheme)
 
         val zen = BuiltInPresets.byId("opencode-zen")!!
         assertEquals("https://opencode.ai/zen/v1", zen.baseUrl)

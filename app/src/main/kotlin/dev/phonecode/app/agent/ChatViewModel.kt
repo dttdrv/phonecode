@@ -41,6 +41,7 @@ import dev.phonecode.provider.domain.Role
 import dev.phonecode.provider.http.ProviderFactory
 import dev.phonecode.provider.preset.BuiltInPresets
 import dev.phonecode.provider.preset.ProviderPreset
+import dev.phonecode.provider.preset.WireFormat
 import dev.phonecode.tools.Tool
 import dev.phonecode.tools.ToolRegistry
 import dev.phonecode.tools.UserAnswer
@@ -190,6 +191,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun limitFor(option: ModelOption?): dev.phonecode.provider.catalog.Limit? = option?.let {
         catalog[it.providerId]?.models?.get(it.modelId)?.limit
             ?: customLimits["${it.providerId}/${it.modelId}"]?.let { c -> dev.phonecode.provider.catalog.Limit(context = c) }
+            // Codex models aren't in the models.dev catalog (it lists them under "openai"); give them the
+            // ChatGPT GPT-5 window so compaction fires before the Responses API rejects an oversized request.
+            ?: if (it.providerId == "codex") dev.phonecode.provider.catalog.Limit(context = 272_000, output = 128_000) else null
     }
 
     private val _state = MutableStateFlow(ChatUiState())
@@ -651,7 +655,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         codexAuth.startLoopback(expectedState) { code ->
             viewModelScope.launch(Dispatchers.IO) {
                 runCatching { codexAuth.exchangeCode(code, verifier) }
-                    .onSuccess { _state.update { it.copy(codexConnected = true, notice = "Signed in with ChatGPT - models arrive in a future update") } }
+                    .onSuccess { _state.update { it.copy(codexConnected = true, notice = "Signed in with ChatGPT - pick a ChatGPT model from the model menu") } }
                     .onFailure { e ->
                         codexAuth.stopLoopback()
                         _state.update { it.copy(error = "Codex sign-in failed: ${e.message}") }
@@ -841,8 +845,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         val selected = _state.value.selected ?: return fail("Select a model first.")
         val preset = providerFor(selected.providerId) ?: return fail("Unknown provider: ${selected.providerId}")
-        val key = keyStore.get(selected.providerId)
-        if (key.isNullOrBlank()) return fail("Set an API key for ${preset.displayName} in Settings.")
+        // Codex authenticates with the ChatGPT OAuth token (not an API key); gate on being signed in here,
+        // then resolve a fresh token off the main thread inside the turn (accessToken() may refresh, i.e. hit
+        // the network). Every other provider uses its stored API key directly.
+        val isCodex = preset.wireFormat == WireFormat.OPENAI_RESPONSES
+        val key = if (isCodex) keyStore.get("codex.access") else keyStore.get(selected.providerId)
+        if (key.isNullOrBlank()) {
+            return fail(if (isCodex) "Sign in with ChatGPT in Settings to use Codex." else "Set an API key for ${preset.displayName} in Settings.")
+        }
 
         _state.update {
             it.copy(
@@ -889,14 +899,24 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 projectInstructions = if (custom.isNotEmpty()) listOf(custom) else emptyList(),
             )
             val limit = limitFor(selected) // context/output token limits drive the gauge + compaction
-            val loop = AgentLoop(
-                ProviderFactory.create(preset, key, http), tools, toolContext, config,
-                steering = queueSource, // messages queued mid-turn are picked up at the next step (steer)
-                followUp = queueSource, // ...or run as a follow-up turn if queued right as the turn ends
-                turnSettings = { TurnSettings(config.model, _state.value.effort, limit?.context, limit?.output) },
-                modeProvider = { _state.value.agentMode }, // live so a plan_exit approval flips PLAN→BUILD mid-run
-            )
             try {
+                val provider = if (isCodex) {
+                    val token = codexAuth.accessToken() // refreshes if near expiry (off the main thread)
+                    if (token.isNullOrBlank()) { fail("Sign in with ChatGPT again in Settings."); return@launch }
+                    // The per-user account id can't live in the static preset; attach it for this turn.
+                    val withAccount = codexAuth.accountId()
+                        ?.let { preset.copy(extraHeaders = preset.extraHeaders + ("chatgpt-account-id" to it)) } ?: preset
+                    ProviderFactory.create(withAccount, token, http)
+                } else {
+                    ProviderFactory.create(preset, key, http)
+                }
+                val loop = AgentLoop(
+                    provider, tools, toolContext, config,
+                    steering = queueSource, // messages queued mid-turn are picked up at the next step (steer)
+                    followUp = queueSource, // ...or run as a follow-up turn if queued right as the turn ends
+                    turnSettings = { TurnSettings(config.model, _state.value.effort, limit?.context, limit?.output) },
+                    modeProvider = { _state.value.agentMode }, // live so a plan_exit approval flips PLAN→BUILD mid-run
+                )
                 if (startingHistory.isEmpty()) autoBranchIfEnabled(pinnedWorkspace)
                 loop.run(startingHistory, text).collect { event -> if (gen == generation) reduce(event) }
             } finally {
@@ -1159,6 +1179,10 @@ fun builtInModels(): List<ModelOption> = listOf(
     ModelOption("deepseek", "deepseek-chat", "DeepSeek Chat"),
     ModelOption("deepseek", "deepseek-reasoner", "DeepSeek Reasoner"),
     ModelOption("mistral", "mistral-large-latest", "Mistral Large"),
+    // ChatGPT plan via "Sign in with ChatGPT" (Codex). Usable once signed in; selecting before sign-in
+    // prompts for it. The model ids match what the Codex backend accepts.
+    ModelOption("codex", "gpt-5-codex", "ChatGPT · GPT-5 Codex"),
+    ModelOption("codex", "gpt-5", "ChatGPT · GPT-5"),
 )
 
 private const val BUNDLED_CATALOG = """

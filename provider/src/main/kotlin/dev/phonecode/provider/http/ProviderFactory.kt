@@ -11,5 +11,6 @@ object ProviderFactory {
         when (preset.wireFormat) {
             WireFormat.OPENAI_COMPAT -> OpenAiCompatProvider(preset, apiKey, client)
             WireFormat.ANTHROPIC -> AnthropicProvider(preset, apiKey, client)
+            WireFormat.OPENAI_RESPONSES -> CodexProvider(preset, apiKey, client)
         }
 }

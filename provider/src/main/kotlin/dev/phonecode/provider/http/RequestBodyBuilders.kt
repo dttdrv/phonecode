@@ -211,4 +211,70 @@ object RequestBodyBuilders {
                 JsonObject(emptyMap())
             }
         }
+
+    // ---- OpenAI Responses API (ChatGPT "Codex" backend) ----
+
+    /**
+     * Serializes a request for OpenAI's Responses API, which the ChatGPT/Codex backend speaks (it does NOT
+     * accept Chat Completions). Differences from [toOpenAiBody]: the system prompt is `instructions`; the
+     * conversation is a flat `input` list of typed items (one per message part) - `message` with
+     * input_text/output_text, `function_call`, and `function_call_output` - and tools are bare
+     * `{type:function, name, parameters}` (not nested under `function`).
+     */
+    fun toResponsesBody(req: ChatRequest): String = buildJsonObject {
+        put("model", req.model)
+        req.system?.let { put("instructions", it) }
+        putJsonArray("input") {
+            for (msg in req.messages) {
+                for (part in msg.parts) {
+                    when (part) {
+                        is MessagePart.Text -> addJsonObject {
+                            put("type", "message")
+                            put("role", if (msg.role == Role.USER) "user" else "assistant")
+                            putJsonArray("content") {
+                                addJsonObject {
+                                    put("type", if (msg.role == Role.USER) "input_text" else "output_text")
+                                    put("text", part.text)
+                                }
+                            }
+                        }
+                        is MessagePart.ToolCall -> addJsonObject {
+                            put("type", "function_call")
+                            put("call_id", part.id)
+                            put("name", part.name)
+                            put("arguments", part.argsJson.ifBlank { "{}" })
+                        }
+                        is MessagePart.ToolResult -> addJsonObject {
+                            put("type", "function_call_output")
+                            put("call_id", part.callId)
+                            put("output", part.content)
+                        }
+                        is MessagePart.Reasoning -> Unit // not replayed
+                    }
+                }
+            }
+        }
+        if (req.tools.isNotEmpty()) {
+            putJsonArray("tools") {
+                req.tools.forEach { t ->
+                    addJsonObject {
+                        put("type", "function")
+                        put("name", t.name)
+                        put("description", t.description)
+                        put("parameters", t.parametersJsonSchema)
+                    }
+                }
+            }
+            put("parallel_tool_calls", true)
+        }
+        put("stream", true)
+        put("store", false)
+        if (req.reasoningEffort != ReasoningEffort.DEFAULT) {
+            putJsonObject("reasoning") {
+                put("effort", req.reasoningEffort.name.lowercase())
+                put("summary", "auto")
+            }
+        }
+        req.maxTokens?.let { put("max_output_tokens", it) }
+    }.toString()
 }

@@ -22,8 +22,36 @@ class RequestBodyBuildersTest {
     private val json = Json
     private fun openAi(req: ChatRequest) = json.parseToJsonElement(RequestBodyBuilders.toOpenAiBody(req)).jsonObject
     private fun anthropic(req: ChatRequest) = json.parseToJsonElement(RequestBodyBuilders.toAnthropicBody(req)).jsonObject
+    private fun responses(req: ChatRequest) = json.parseToJsonElement(RequestBodyBuilders.toResponsesBody(req)).jsonObject
 
     private fun user(text: String) = ChatMessage(Role.USER, listOf(MessagePart.Text(text)))
+
+    @Test fun responsesBodyMapsSystemAndMessagesToResponsesShape() {
+        val req = ChatRequest(
+            model = "gpt-5-codex",
+            system = "be brief",
+            messages = listOf(
+                user("hello"),
+                ChatMessage(Role.ASSISTANT, listOf(MessagePart.ToolCall("call_1", "read", """{"path":"a"}"""))),
+                ChatMessage(Role.USER, listOf(MessagePart.ToolResult("call_1", "file body"))),
+            ),
+        )
+        val body = responses(req)
+        assertEquals("be brief", body["instructions"]!!.jsonPrimitive.content) // system -> instructions
+        assertEquals(true, body["stream"]!!.jsonPrimitive.boolean)
+        assertEquals(false, body["store"]!!.jsonPrimitive.boolean)
+        val input = body["input"]!!.jsonArray
+        // user text -> message/input_text
+        assertEquals("message", input[0].jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("input_text", input[0].jsonObject["content"]!!.jsonArray[0].jsonObject["type"]!!.jsonPrimitive.content)
+        // assistant tool call -> function_call with call_id + arguments
+        assertEquals("function_call", input[1].jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("call_1", input[1].jsonObject["call_id"]!!.jsonPrimitive.content)
+        assertEquals("read", input[1].jsonObject["name"]!!.jsonPrimitive.content)
+        // tool result -> function_call_output
+        assertEquals("function_call_output", input[2].jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("file body", input[2].jsonObject["output"]!!.jsonPrimitive.content)
+    }
 
     @Test fun consecutiveSameRoleMessagesAreMerged() {
         // A stopped turn leaves two user turns in a row; Anthropic requires strict alternation, so they must

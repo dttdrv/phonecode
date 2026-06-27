@@ -1,7 +1,7 @@
 package dev.phonecode.provider.preset
 
 /** Which wire format a provider speaks. Drives endpoint path and body shape. */
-enum class WireFormat { OPENAI_COMPAT, ANTHROPIC }
+enum class WireFormat { OPENAI_COMPAT, ANTHROPIC, OPENAI_RESPONSES }
 
 /** How the API key is attached. BEARER → `Authorization: Bearer k`; X_API_KEY → `x-api-key: k`. */
 enum class AuthScheme { BEARER, X_API_KEY }
@@ -98,9 +98,23 @@ object BuiltInPresets {
         authScheme = AuthScheme.BEARER,
     )
 
+    /**
+     * ChatGPT "Sign in with ChatGPT" (Codex). Speaks the Responses API against the ChatGPT backend; the key
+     * is the OAuth access token (Bearer), and the per-user `chatgpt-account-id` header is attached at send
+     * time (it can't be a static value here). Requires a paid ChatGPT plan.
+     */
+    val codex = ProviderPreset(
+        id = "codex",
+        displayName = "ChatGPT (Codex)",
+        baseUrl = "https://chatgpt.com/backend-api/codex",
+        wireFormat = WireFormat.OPENAI_RESPONSES,
+        authScheme = AuthScheme.BEARER,
+        extraHeaders = mapOf("OpenAI-Beta" to "responses=experimental", "originator" to "codex_cli_rs"),
+    )
+
     // Together + Groq removed per user direction (round-3 feedback); OpenCode Go added.
     val all: List<ProviderPreset> = listOf(
-        openai, anthropic, openrouter, opencodeZen, opencodeGo, google, xai, deepseek, mistral,
+        openai, anthropic, openrouter, opencodeZen, opencodeGo, google, xai, deepseek, mistral, codex,
     )
 
     fun byId(id: String): ProviderPreset? = all.firstOrNull { it.id == id }

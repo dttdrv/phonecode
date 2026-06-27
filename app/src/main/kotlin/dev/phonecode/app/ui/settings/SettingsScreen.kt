@@ -413,9 +413,7 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
                 PcRow {
                     Column(Modifier.weight(1f)) {
                         Text("ChatGPT (Codex)", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                        // Honest status: tokens are stored, but no provider consumes them yet
-                        // (Responses API wire format not implemented - review finding #1).
-                        Text("Signed in - models arrive in a future update", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                        Text("Signed in - pick a ChatGPT model from the model menu", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
                     }
                     Text(
                         "Sign out",

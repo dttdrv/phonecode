@@ -24,7 +24,8 @@ your prompts go only to the provider you pick.
   providers, hide models, and mark favourites. The agent can add providers and models itself by
   editing `providers.json`, which is hot-reloaded.
 - **Sign-in flows**: GitHub uses the OAuth device flow (you type a code, with no tokens to paste)
-  for push and pull. The ChatGPT (Codex PKCE) flow is in place as groundwork.
+  for push and pull. "Sign in with ChatGPT" (Codex, OAuth + PKCE) lets you use a paid ChatGPT plan
+  as a provider through OpenAI's Responses API - no API key needed.
 - **Projects and chats**: chats are organized into projects. Each project is its own workspace
   folder and git repository, with snapshots (commits), branch switching, and push and pull from the
   chat's git button.
@@ -55,8 +56,8 @@ unit-tested.
 
 - The GitHub sign-in ships with the gh CLI's public client id for personal builds. Register your own
   OAuth app (one checkbox: Enable Device Flow) before distributing.
-- Codex sign-in stores tokens securely. Using a ChatGPT plan as an inference provider requires the
-  Responses API wire format, which is not implemented yet.
+- Codex (Sign in with ChatGPT) authenticates over OAuth + PKCE with a loopback redirect, stores the
+  tokens encrypted, and talks to ChatGPT's Responses API backend. It needs a paid ChatGPT plan.
 - The Terms of Service and Privacy Policy live in `legal/` and are also shown in-app under
   Settings > About.
 

@@ -15,7 +15,7 @@ class CatalogLoaderTest {
     // Includes unknown keys (modalities, release_date) to prove tolerance.
     private val fixture = """
         {
-          "anthropic": {"id":"anthropic","name":"Anthropic","api":"https://api.anthropic.com","env":["ANTHROPIC_API_KEY"],"doc":"https://d","models":{"claude-opus-4-8":{"id":"claude-opus-4-8","name":"Claude Opus 4.8","reasoning":true,"tool_call":true,"attachment":true,"cost":{"input":15.0,"output":75.0,"cache_read":1.5},"limit":{"context":200000,"output":64000},"modalities":{"input":["text"],"output":["text"]},"release_date":"2026-01-01"}}},
+          "anthropic": {"id":"anthropic","name":"Anthropic","api":"https://api.anthropic.com","env":["ANTHROPIC_API_KEY"],"doc":"https://d","models":{"claude-opus-4-8":{"id":"claude-opus-4-8","name":"Claude Opus 4.8","reasoning":true,"reasoning_options":[{"type":"effort","values":["low","medium","high","xhigh","max"]}],"tool_call":true,"attachment":true,"cost":{"input":15.0,"output":75.0,"cache_read":1.5},"limit":{"context":200000,"output":64000},"modalities":{"input":["text"],"output":["text"]},"release_date":"2026-01-01"}}},
           "openrouter": {"id":"openrouter","name":"OpenRouter","env":["OPENROUTER_API_KEY"],"models":{"z-model":{"id":"z-model","name":"Z Model"},"a-model":{"id":"a-model","name":"A Model"}}}
         }
     """.trimIndent()
@@ -38,6 +38,7 @@ class CatalogLoaderTest {
         val catalog: Catalog = catalogJson.decodeFromString(fixture)
         val model = catalog.getValue("anthropic").models.getValue("claude-opus-4-8")
         assertTrue(model.reasoning)
+        assertEquals(listOf("low", "medium", "high", "xhigh", "max"), model.reasoningOptions.single().values)
         assertTrue(model.toolCall)
         assertEquals(15.0, model.cost!!.input!!, 1e-9)
         assertEquals(200000L, model.limit!!.context)

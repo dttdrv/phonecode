@@ -53,16 +53,11 @@ class UiSmokeTest {
     @Test
     fun chatControlsOpenWithoutCrashing() {
         dismissOnboardingIfPresent()
-        // Wrench sheet: attach row, thinking panel, plan toggle.
         compose.onNodeWithContentDescription("Tools").performClick()
-        compose.onNodeWithText("Photo or file").assertIsDisplayed()
-        // A restored conversation (ScreenshotTest seeds leak across worker tests) can also contain
-        // a "Thinking" row - the wrench panel's row is composed last.
+        compose.onNodeWithText("Upload").assertIsDisplayed()
         compose.onAllNodesWithText("Thinking").onLast().performClick()
         compose.onNodeWithContentDescription("Back").performClick()
-        // The M3 sheet lives in its own window, out of reach of the activity's back dispatcher -
-        // dismiss by selecting the attach row (the SAF intent is inert under Robolectric).
-        compose.onNodeWithText("Photo or file").performClick()
+        compose.onNodeWithText("Upload").performClick()
         compose.waitForIdle()
 
         // Model sheet opens from the composer's model pill (header is always visible; specific

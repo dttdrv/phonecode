@@ -1,5 +1,7 @@
 package dev.phonecode.provider.preset
 
+import java.net.URI
+
 /** Which wire format a provider speaks. Drives endpoint path and body shape. */
 enum class WireFormat { OPENAI_COMPAT, ANTHROPIC, OPENAI_RESPONSES }
 
@@ -17,7 +19,17 @@ data class ProviderPreset(
     val wireFormat: WireFormat,
     val authScheme: AuthScheme,
     val extraHeaders: Map<String, String> = emptyMap(),
-)
+) {
+    fun withCatalogApi(api: String?): ProviderPreset {
+        if (api.isNullOrBlank()) return this
+        val trusted = runCatching {
+            val current = URI(baseUrl)
+            val update = URI(api)
+            update.scheme == "https" && current.host.equals(update.host, ignoreCase = true)
+        }.getOrDefault(false)
+        return if (trusted) copy(baseUrl = api.trimEnd('/')) else this
+    }
+}
 
 /** The four MVP providers. OpenCode Go is modeled as a Zen-style OPENAI_COMPAT preset if needed. */
 object BuiltInPresets {

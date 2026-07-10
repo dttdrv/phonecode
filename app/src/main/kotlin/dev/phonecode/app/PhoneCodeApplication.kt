@@ -4,6 +4,7 @@ import android.app.Application
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import java.io.File
 
 class PhoneCodeApplication : Application() {
     /**
@@ -18,6 +19,6 @@ class PhoneCodeApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        CrashLog.install(this)
+        File(filesDir, "crash.log").delete()
     }
 }

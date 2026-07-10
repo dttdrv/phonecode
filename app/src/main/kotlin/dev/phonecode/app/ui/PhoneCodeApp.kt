@@ -3,8 +3,7 @@ package dev.phonecode.app.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -14,17 +13,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.AnchoredDraggableState
+import androidx.compose.foundation.gestures.DraggableAnchors
+import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.systemBars
@@ -54,8 +52,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -73,8 +70,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -95,18 +90,20 @@ import dev.phonecode.app.ui.chat.ChatScreen
 import dev.phonecode.app.ui.onboarding.OnboardingScreen
 import dev.phonecode.app.ui.components.PcButton
 import dev.phonecode.app.ui.components.PcField
+import dev.phonecode.app.ui.components.elasticOverscroll
 import dev.phonecode.app.ui.components.pressFeedback
 import androidx.compose.material3.ripple
 import dev.phonecode.app.ui.settings.SettingsScreen
 import dev.phonecode.app.ui.theme.PhoneCodeTheme
+import dev.phonecode.app.ui.theme.PhoneEasings
 import dev.phonecode.app.ui.theme.PhoneSprings
-import dev.phonecode.app.ui.theme.PhoneTweens
 import dev.phonecode.app.ui.theme.Spacing
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 private val WHEN = SimpleDateFormat("d MMM", Locale.getDefault())
+private enum class DrawerValue { CLOSED, OPEN }
 
 /** Unwrap ContextWrappers (themes, Compose test hosts) to the owning Activity, if any. */
 private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
@@ -169,19 +166,40 @@ fun PhoneCodeApp() {
         }
 
         var route by rememberSaveable { mutableStateOf("chat") }
-        var drawerOpen by rememberSaveable { mutableStateOf(false) }
-        // Opening the drawer dismisses the keyboard so the sidebar isn't squeezed by the IME.
         val focusManager = LocalFocusManager.current
-        LaunchedEffect(drawerOpen) { if (drawerOpen) focusManager.clearFocus() }
-        // Onboarding deep-links open settings on a specific sub-page; normal entry resets to home.
         var settingsInitial by rememberSaveable { mutableStateOf("home") }
 
-        val progress by animateFloatAsState(if (drawerOpen) 1f else 0f, PhoneSprings.drawer, label = "drawer")
         val screenWidth = LocalConfiguration.current.screenWidthDp.dp
         val density = LocalDensity.current
         val drawerWidth = screenWidth * 0.82f
+        val drawerWidthPx = with(density) { drawerWidth.toPx() }
+        val drawerState = remember {
+            AnchoredDraggableState(DrawerValue.CLOSED)
+        }
+        val drawerAnchors = remember(drawerWidthPx) {
+            DraggableAnchors {
+                DrawerValue.CLOSED at 0f
+                DrawerValue.OPEN at drawerWidthPx
+            }
+        }
+        SideEffect { drawerState.updateAnchors(drawerAnchors) }
+        val drawerOffset = drawerState.offset.takeUnless(Float::isNaN) ?: 0f
+        val progress = (drawerOffset / drawerWidthPx).coerceIn(0f, 1f)
+        val drawerVisible = progress > 0.001f || drawerState.targetValue == DrawerValue.OPEN
+        val drawerScope = rememberCoroutineScope()
+        val openDrawer: () -> Unit = {
+            drawerScope.launch { drawerState.animateTo(DrawerValue.OPEN, PhoneSprings.drawer) }
+            Unit
+        }
+        val closeDrawer: () -> Unit = {
+            drawerScope.launch { drawerState.animateTo(DrawerValue.CLOSED, PhoneSprings.drawer) }
+            Unit
+        }
+        LaunchedEffect(drawerState.targetValue) {
+            if (drawerState.targetValue == DrawerValue.OPEN) focusManager.clearFocus()
+        }
 
-        BackHandler(enabled = drawerOpen) { drawerOpen = false }
+        BackHandler(enabled = drawerVisible) { closeDrawer() }
         // Predictive back for the settings route: the page follows the gesture and, on commit,
         // FINISHES its slide before the route flips - the old reset-then-reanimate handoff
         // visibly snapped (round-4: "the animation [is] kind of too cheap-like"). The transform
@@ -189,7 +207,7 @@ fun PhoneCodeApp() {
         var backingOutRoute by remember { mutableStateOf<String?>(null) }
         val backAnim = remember { androidx.compose.animation.core.Animatable(0f) }
         val backScope = androidx.compose.runtime.rememberCoroutineScope()
-        androidx.activity.compose.PredictiveBackHandler(enabled = !drawerOpen && route != "chat") { events ->
+        androidx.activity.compose.PredictiveBackHandler(enabled = !drawerVisible && route != "chat") { events ->
             backingOutRoute = route
             try {
                 events.collect { backAnim.snapTo(it.progress) }
@@ -214,30 +232,9 @@ fun PhoneCodeApp() {
         Box(Modifier.fillMaxSize().background(colors.background)) {
             // ----- main pane: stays put; the drawer overlays it (Grok/ChatGPT pattern - the old
             // push-back scale read as "disabled", not depth; see revamp-diagnosis.md #8) -----
-            // Edge-swipe right opens the sidebar. INITIAL pass: child scrollables would otherwise
-            // consume the events first and the gesture never fired on device (round-3 feedback).
-            // Only gestures that BEGIN in the left 28dp strip are claimed.
             Box(
                 Modifier.fillMaxSize()
-                    .then(if (showOnboarding) Modifier.clearAndSetSemantics {} else Modifier)
-                    .pointerInput(Unit) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                        if (down.position.x > 28.dp.toPx()) return@awaitEachGesture
-                        var acc = 0f
-                        while (true) {
-                            val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                            val drag = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!drag.pressed) break
-                            acc += drag.positionChange().x
-                            if (acc > 40.dp.toPx()) {
-                                drawerOpen = true
-                                drag.consume()
-                                break
-                            }
-                        }
-                    }
-                },
+                    .then(if (showOnboarding) Modifier.clearAndSetSemantics {} else Modifier),
             ) {
                 // Only HORIZONTAL insets at the root: BOTH vertical edges stay unpadded so the
                 // conversation slides under the status bar AND the nav bar, frosting through the
@@ -249,7 +246,7 @@ fun PhoneCodeApp() {
                         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                         // Drawer open: swallow the IME inset so focusing the sidebar search field
                         // can't push the chat composer (behind the drawer) up with the keyboard.
-                        .then(if (drawerOpen) Modifier.consumeWindowInsets(WindowInsets.ime) else Modifier)
+                        .then(if (drawerVisible) Modifier.consumeWindowInsets(WindowInsets.ime) else Modifier)
                         .graphicsLayer {
                             // Drawer open: the main pane settles back (the push-back depth cue)
                             // while the sidebar overlays it.
@@ -262,13 +259,14 @@ fun PhoneCodeApp() {
                     AnimatedContent(
                         targetState = route,
                         transitionSpec = {
-                            if (targetState == "chat") {
-                                (slideInHorizontally(PhoneSprings.standardSpec()) { -it / 4 } + fadeIn(PhoneTweens.popEnter)) togetherWith
-                                    (slideOutHorizontally(PhoneSprings.standardSpec()) { it / 4 } + fadeOut(PhoneTweens.popExit))
+                            val pop = targetState == "chat"
+                            (if (pop) {
+                                (slideInHorizontally(tween(380, easing = PhoneEasings.iOSStandard)) { -it / 4 }) togetherWith
+                                    slideOutHorizontally(tween(420, easing = PhoneEasings.iOSStandard)) { it }
                             } else {
-                                (slideInHorizontally(PhoneSprings.standardSpec()) { it / 4 } + fadeIn(PhoneTweens.popEnter)) togetherWith
-                                    (slideOutHorizontally(PhoneSprings.standardSpec()) { -it / 4 } + fadeOut(PhoneTweens.popExit))
-                            }
+                                (slideInHorizontally(tween(420, easing = PhoneEasings.iOSStandard)) { it }) togetherWith
+                                    slideOutHorizontally(tween(380, easing = PhoneEasings.iOSStandard)) { -it / 4 }
+                            }).apply { targetContentZIndex = if (pop) -1f else 1f }
                         },
                         label = "route",
                     ) { r ->
@@ -289,7 +287,7 @@ fun PhoneCodeApp() {
                         ) {
                             when (r) {
                                 "settings" -> SettingsScreen(vm, settingsVm, onBack = { route = "chat" }, initialPage = settingsInitial)
-                                else -> ChatScreen(vm, onOpenDrawer = { drawerOpen = true }, sendOnEnter = settings.sendOnEnter)
+                                else -> ChatScreen(vm, onOpenDrawer = openDrawer, sendOnEnter = settings.sendOnEnter)
                             }
                         }
                     }
@@ -297,33 +295,29 @@ fun PhoneCodeApp() {
             }
 
             // ----- dim over the pushed-back main -----
-            if (progress > 0.01f) {
-                Box(
-                    Modifier.fillMaxSize().graphicsLayer { alpha = (0.5f * progress).coerceIn(0f, 1f) }.background(colors.scrim)
-                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { drawerOpen = false },
-                )
-            }
-
-            // ----- drawer over the dim (composed only while visible/animating) -----
-            // Collapse state lives HERE (not in Sidebar): the drawer subtree leaves composition
-            // when closed, so any state inside it would reset on every open.
             var collapsedProjects by remember { mutableStateOf(setOf<String>()) }
-            if (drawerOpen || progress > 0.001f) {
+            if (drawerVisible) {
                 Box(
-                    Modifier.fillMaxSize().graphicsLayer {
-                        translationX = with(density) { (-drawerWidth).toPx() } * (1f - progress)
-                    },
+                    Modifier.fillMaxSize(),
                 ) {
-                    Sidebar(
-                        vm = vm,
-                        width = drawerWidth,
-                        collapsed = collapsedProjects,
-                        onToggleCollapse = { id ->
-                            collapsedProjects = if (id in collapsedProjects) collapsedProjects - id else collapsedProjects + id
-                        },
-                        onOpenChat = { drawerOpen = false; route = "chat" },
-                        onOpenSettings = { drawerOpen = false; settingsInitial = "home"; route = "settings" },
+                    Box(
+                        Modifier.fillMaxSize().graphicsLayer { alpha = (0.5f * progress).coerceIn(0f, 1f) }.background(colors.scrim)
+                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { closeDrawer() },
                     )
+                    Box(
+                        Modifier.fillMaxSize().graphicsLayer { translationX = -drawerWidthPx * (1f - progress) },
+                    ) {
+                        Sidebar(
+                            vm = vm,
+                            width = drawerWidth,
+                            collapsed = collapsedProjects,
+                            onToggleCollapse = { id ->
+                                collapsedProjects = if (id in collapsedProjects) collapsedProjects - id else collapsedProjects + id
+                            },
+                            onOpenChat = { closeDrawer(); route = "chat" },
+                            onOpenSettings = { closeDrawer(); settingsInitial = "home"; route = "settings" },
+                        )
+                    }
                 }
             }
 
@@ -376,9 +370,33 @@ private fun Sidebar(
     val archived = filtered.filter { it.archived }
     val byProject = filtered.filter { !it.pinned && !it.archived }.groupBy { it.projectId }
 
+    @Composable
+    fun SessionItem(meta: SessionMeta, indent: androidx.compose.ui.unit.Dp) {
+        ChatRow(
+            meta = meta,
+            active = meta.id == state.currentSessionId,
+            indent = indent,
+            onClick = { vm.switchSession(meta.id); onOpenChat() },
+            onMenu = { chatMenu = meta },
+            menuExpanded = chatMenu?.id == meta.id,
+            onDismissMenu = { chatMenu = null },
+        ) {
+            ChatOptionsMenu(
+                meta = meta,
+                projects = state.projects,
+                onDismiss = { chatMenu = null },
+                onPin = { vm.setSessionPinned(meta.id, !meta.pinned) },
+                onRequestRename = { renameChat = meta },
+                onMove = { vm.moveSession(meta.id, it) },
+                onArchive = { vm.setSessionArchived(meta.id, !meta.archived) },
+                onDelete = { vm.deleteSession(meta.id) },
+            )
+        }
+    }
+
     Column(
         // One tone above the (scrimmed) canvas behind it - the drawer separates by material.
-        Modifier.width(width).fillMaxSize().background(colors.surfaceContainerLow).windowInsetsPadding(WindowInsets.systemBars),
+        Modifier.elasticOverscroll().width(width).fillMaxSize().background(colors.surfaceContainerLow).windowInsetsPadding(WindowInsets.systemBars),
     ) {
         // Header: wordmark + a prominent New chat button.
         Row(
@@ -416,13 +434,12 @@ private fun Sidebar(
             }
         }
 
-        LazyColumn(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+        LazyColumn(Modifier.weight(1f).padding(horizontal = 10.dp), overscrollEffect = null) {
             if (pinned.isNotEmpty()) {
                 item(key = "h_pinned") { SectionHeader("Pinned") }
                 pinned.forEach { meta ->
                     item(key = "pin_${meta.id}") {
-                        ChatRow(meta, active = meta.id == state.currentSessionId, indent = 12.dp,
-                            onClick = { vm.switchSession(meta.id); onOpenChat() }, onMenu = { chatMenu = meta })
+                        SessionItem(meta, 12.dp)
                     }
                 }
             }
@@ -463,6 +480,33 @@ private fun Sidebar(
                         ) {
                             Icon(Icons.Filled.Add, "New chat in ${project.name}", tint = colors.secondary, modifier = Modifier.size(16.dp))
                         }
+                        Box {
+                            val menuInteraction = remember { MutableInteractionSource() }
+                            Box(
+                                Modifier.size(34.dp).pressFeedback(menuInteraction, pressedScale = 0.86f)
+                                    .clip(MaterialTheme.shapes.extraSmall)
+                                    .clickable(interactionSource = menuInteraction, indication = ripple(bounded = false, radius = 18.dp)) { projectMenu = project },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Filled.MoreVert, "Project options", tint = colors.secondary, modifier = Modifier.size(18.dp))
+                            }
+                            DropdownMenu(
+                                expanded = projectMenu?.id == project.id,
+                                onDismissRequest = { projectMenu = null },
+                                modifier = Modifier.width(240.dp),
+                                shape = MaterialTheme.shapes.extraLarge,
+                                containerColor = colors.surfaceContainerHigh,
+                                tonalElevation = 6.dp,
+                                shadowElevation = 12.dp,
+                            ) {
+                                ProjectOptionsMenu(
+                                    project = project,
+                                    onDismiss = { projectMenu = null },
+                                    onRequestRename = { renameProject = project },
+                                    onDelete = { vm.deleteProject(project.id) },
+                                )
+                            }
+                        }
                     }
                 }
                 if (open) {
@@ -472,8 +516,7 @@ private fun Sidebar(
                     }
                     chats.forEach { meta ->
                         item(key = "c_${meta.id}") {
-                            ChatRow(meta, active = meta.id == state.currentSessionId, indent = 40.dp,
-                                onClick = { vm.switchSession(meta.id); onOpenChat() }, onMenu = { chatMenu = meta })
+                            SessionItem(meta, 40.dp)
                         }
                     }
                 }
@@ -485,8 +528,7 @@ private fun Sidebar(
                 }
                 chats.forEach { meta ->
                     item(key = "u_${meta.id}") {
-                        ChatRow(meta, active = meta.id == state.currentSessionId, indent = 12.dp,
-                            onClick = { vm.switchSession(meta.id); onOpenChat() }, onMenu = { chatMenu = meta })
+                        SessionItem(meta, 12.dp)
                     }
                 }
             }
@@ -507,8 +549,7 @@ private fun Sidebar(
                 }
                 if (archivedOpen) archived.forEach { meta ->
                     item(key = "a_${meta.id}") {
-                        ChatRow(meta, active = meta.id == state.currentSessionId, indent = 35.dp,
-                            onClick = { vm.switchSession(meta.id); onOpenChat() }, onMenu = { chatMenu = meta })
+                        SessionItem(meta, 35.dp)
                     }
                 }
             }
@@ -535,26 +576,6 @@ private fun Sidebar(
         TextPromptDialog(title = "New project", placeholder = "Project name", initial = "", onDismiss = { newProject = false }) {
             vm.createProject(it); newProject = false
         }
-    }
-    chatMenu?.let { meta ->
-        ChatOptionsSheet(
-            meta = meta,
-            projects = state.projects,
-            onDismiss = { chatMenu = null },
-            onPin = { vm.setSessionPinned(meta.id, !meta.pinned) },
-            onRequestRename = { renameChat = meta },
-            onMove = { vm.moveSession(meta.id, it) },
-            onArchive = { vm.setSessionArchived(meta.id, !meta.archived) },
-            onDelete = { vm.deleteSession(meta.id) },
-        )
-    }
-    projectMenu?.let { project ->
-        ProjectOptionsSheet(
-            project = project,
-            onDismiss = { projectMenu = null },
-            onRequestRename = { renameProject = project },
-            onDelete = { vm.deleteProject(project.id) },
-        )
     }
     renameChat?.let { meta ->
         TextPromptDialog("Rename chat", "Chat title", meta.title, { renameChat = null }) {
@@ -598,7 +619,16 @@ private fun SectionHeader(label: String) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatRow(meta: SessionMeta, active: Boolean, indent: androidx.compose.ui.unit.Dp, onClick: () -> Unit, onMenu: () -> Unit) {
+private fun ChatRow(
+    meta: SessionMeta,
+    active: Boolean,
+    indent: androidx.compose.ui.unit.Dp,
+    onClick: () -> Unit,
+    onMenu: () -> Unit,
+    menuExpanded: Boolean,
+    onDismissMenu: () -> Unit,
+    menuContent: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().padding(vertical = 1.dp).clip(MaterialTheme.shapes.medium)
@@ -635,6 +665,16 @@ private fun ChatRow(meta: SessionMeta, active: Boolean, indent: androidx.compose
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Filled.MoreVert, "Chat options", tint = colors.secondary, modifier = Modifier.size(18.dp))
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = onDismissMenu,
+                modifier = Modifier.width(280.dp),
+                shape = MaterialTheme.shapes.extraLarge,
+                containerColor = colors.surfaceContainerHigh,
+                tonalElevation = 6.dp,
+                shadowElevation = 12.dp,
+                content = menuContent,
+            )
         }
     }
 }
@@ -658,49 +698,22 @@ private fun OptionsCard(title: String, onDismiss: () -> Unit, content: @Composab
     }
 }
 
-/**
- * Native action bottom sheet - the app-wide menu language (matches the tools/model sheets). The
- * platform owns the slide/scrim/drag; rows wrap their action with [close] so the sheet glides shut
- * on tap instead of snapping. One quiet caption title, then the action rows.
- */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun ActionSheet(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.(close: () -> Unit) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
-    val close: () -> Unit = { scope.launch { sheetState.hide() }.invokeOnCompletion { if (!sheetState.isVisible) onDismiss() } }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = colors.surfaceContainerLow) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 2.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.tertiary,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 14.dp, top = 2.dp, bottom = 6.dp),
-            )
-            content(close)
-        }
-    }
-}
-
-/** One action-sheet row: thin line icon + label, spring press-pop. Destructive rows tint to error. */
-@Composable
-private fun SheetActionRow(label: String, icon: ImageVector, destructive: Boolean = false, onClick: () -> Unit) {
+private fun MenuActionRow(label: String, icon: ImageVector, destructive: Boolean = false, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
             .pressFeedback(interaction, pressedScale = 0.97f)
             .clickable(interactionSource = interaction, indication = ripple(), onClick = onClick)
-            .heightIn(min = 52.dp).padding(start = 14.dp, end = 12.dp),
+            .heightIn(min = 48.dp).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
-        Icon(icon, null, tint = if (destructive) colors.error else colors.secondary, modifier = Modifier.size(20.dp))
+        Icon(icon, null, tint = if (destructive) colors.error else colors.secondary, modifier = Modifier.size(19.dp))
         Text(
             label,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
             color = if (destructive) colors.error else colors.onBackground,
             modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
@@ -708,7 +721,7 @@ private fun SheetActionRow(label: String, icon: ImageVector, destructive: Boolea
 }
 
 @Composable
-private fun ChatOptionsSheet(
+private fun ChatOptionsMenu(
     meta: SessionMeta,
     projects: List<Project>,
     onDismiss: () -> Unit,
@@ -719,25 +732,54 @@ private fun ChatOptionsSheet(
     onDelete: () -> Unit,
 ) {
     var mode by remember { mutableStateOf("menu") }
-    ActionSheet(title = if (mode == "move") "Move to" else meta.title, onDismiss = onDismiss) { close ->
+    Column(Modifier.fillMaxWidth().padding(6.dp)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 42.dp).padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (mode == "move") {
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    "Back",
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = 180f }.clickable { mode = "menu" },
+                )
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(
+                if (mode == "move") "Move to" else meta.title,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (mode == "move") {
-            SheetActionRow("Unsorted", Icons.Outlined.Inbox) { onMove(null); close() }
-            projects.forEach { p -> SheetActionRow(p.name, Icons.Outlined.Folder) { onMove(p.id); close() } }
+            MenuActionRow("Unsorted", Icons.Outlined.Inbox) { onMove(null); onDismiss() }
+            projects.forEach { p -> MenuActionRow(p.name, Icons.Outlined.Folder) { onMove(p.id); onDismiss() } }
         } else {
-            SheetActionRow(if (meta.pinned) "Unpin" else "Pin", Icons.Outlined.PushPin) { onPin(); close() }
-            SheetActionRow("Rename", Icons.Outlined.Edit) { onRequestRename(); close() }
-            SheetActionRow("Move to...", Icons.Outlined.Folder) { mode = "move" }
-            SheetActionRow(if (meta.archived) "Unarchive" else "Archive", Icons.Outlined.Archive) { onArchive(); close() }
-            SheetActionRow("Delete", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); close() }
+            MenuActionRow(if (meta.pinned) "Unpin" else "Pin", Icons.Outlined.PushPin) { onPin(); onDismiss() }
+            MenuActionRow("Rename", Icons.Outlined.Edit) { onDismiss(); onRequestRename() }
+            MenuActionRow("Move to…", Icons.Outlined.Folder) { mode = "move" }
+            MenuActionRow(if (meta.archived) "Unarchive" else "Archive", Icons.Outlined.Archive) { onArchive(); onDismiss() }
+            MenuActionRow("Delete", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); onDismiss() }
         }
     }
 }
 
 @Composable
-private fun ProjectOptionsSheet(project: Project, onDismiss: () -> Unit, onRequestRename: () -> Unit, onDelete: () -> Unit) {
-    ActionSheet(title = project.name, onDismiss = onDismiss) { close ->
-        SheetActionRow("Rename", Icons.Outlined.Edit) { onRequestRename(); close() }
-        SheetActionRow("Delete project", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); close() }
+private fun ProjectOptionsMenu(project: Project, onDismiss: () -> Unit, onRequestRename: () -> Unit, onDelete: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(6.dp)) {
+        Text(
+            project.name,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+        )
+        MenuActionRow("Rename", Icons.Outlined.Edit) { onDismiss(); onRequestRename() }
+        MenuActionRow("Delete project", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); onDismiss() }
     }
 }
 

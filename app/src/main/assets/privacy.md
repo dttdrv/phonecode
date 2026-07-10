@@ -75,4 +75,4 @@ We may update this policy as the app evolves. The "Last updated" date at the top
 
 ## 12. Contact
 
-For questions about this Privacy Policy, contact the developer through the project's public repository at [github.com/dttdrv/phonecode](https://github.com/dttdrv/phonecode).
+For questions about this Privacy Policy, visit [dttdrv.xyz/phonecode](https://dttdrv.xyz/phonecode) or the public repository at [github.com/dttdrv/phonecode](https://github.com/dttdrv/phonecode).

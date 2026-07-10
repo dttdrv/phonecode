@@ -19,6 +19,7 @@ enum class PersistedRole { USER, ASSISTANT }
 @Serializable
 sealed interface PersistedPart {
     @Serializable @SerialName("text") data class Text(val text: String) : PersistedPart
+    @Serializable @SerialName("image") data class Image(val mimeType: String, val data: String) : PersistedPart
     @Serializable @SerialName("tool_call") data class ToolCall(val id: String, val name: String, val argsJson: String) : PersistedPart
     @Serializable @SerialName("tool_result") data class ToolResult(val callId: String, val content: String, val isError: Boolean = false) : PersistedPart
     @Serializable @SerialName("reasoning") data class Reasoning(val text: String) : PersistedPart
@@ -71,6 +72,7 @@ fun ChatMessage.toPersisted(): PersistedMessage =
 
 private fun MessagePart.toPersisted(): PersistedPart = when (this) {
     is MessagePart.Text -> PersistedPart.Text(text)
+    is MessagePart.Image -> PersistedPart.Image(mimeType, data)
     is MessagePart.ToolCall -> PersistedPart.ToolCall(id, name, argsJson)
     is MessagePart.ToolResult -> PersistedPart.ToolResult(callId, content, isError)
     is MessagePart.Reasoning -> PersistedPart.Reasoning(text)
@@ -81,6 +83,7 @@ fun PersistedMessage.toDomain(): ChatMessage =
 
 private fun PersistedPart.toDomain(): MessagePart = when (this) {
     is PersistedPart.Text -> MessagePart.Text(text)
+    is PersistedPart.Image -> MessagePart.Image(mimeType, data)
     is PersistedPart.ToolCall -> MessagePart.ToolCall(id, name, argsJson)
     is PersistedPart.ToolResult -> MessagePart.ToolResult(callId, content, isError)
     is PersistedPart.Reasoning -> MessagePart.Reasoning(text)

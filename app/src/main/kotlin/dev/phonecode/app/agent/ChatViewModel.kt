@@ -83,7 +83,7 @@ data class PermissionRequest(val tool: String, val summary: String)
 data class QuestionRequest(val questions: List<UserQuestion>)
 
 sealed interface ChatLine {
-    data class User(val text: String) : ChatLine
+    data class User(val text: String, val images: List<MessagePart.Image> = emptyList()) : ChatLine
     data class Assistant(val text: String) : ChatLine
     data class Reasoning(val text: String) : ChatLine
     data class ToolActivity(val id: String, val name: String, val status: ToolStatus, val detail: String) : ChatLine
@@ -181,8 +181,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     @Volatile private var customPresets: Map<String, ProviderPreset> = emptyMap()
     @Volatile private var customLimits: Map<String, Long> = emptyMap()
 
-    /** Resolve a provider id against the built-ins, then any agent-defined custom providers. */
-    private fun providerFor(id: String): ProviderPreset? = BuiltInPresets.byId(id) ?: customPresets[id]
+    private fun providerFor(id: String): ProviderPreset? {
+        val preset = BuiltInPresets.byId(id) ?: customPresets[id] ?: return null
+        if (preset.wireFormat != WireFormat.OPENAI_COMPAT) return preset
+        val catalogId = if (id == "opencode-zen") "opencode" else id
+        return preset.withCatalogApi(catalog[catalogId]?.api)
+    }
 
     /** All providers for Settings: built-ins plus any agent-defined custom providers. */
     fun allProviders(): List<ProviderPreset> = BuiltInPresets.all + customPresets.values.sortedBy { it.displayName }
@@ -382,9 +386,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) { modelPrefs.recordRecent(modelKey(option)) }
     }
 
-    /** Whether the model exposes reasoning controls, per the models.dev catalog. */
-    fun supportsReasoning(option: ModelOption?): Boolean =
-        option?.let { catalog[it.providerId]?.models?.get(it.modelId)?.reasoning } ?: true
+    private fun catalogModel(option: ModelOption?) = option?.let {
+        catalog[if (it.providerId == "codex") "openai" else it.providerId]?.models?.get(it.modelId)
+    }
+
+    fun reasoningEfforts(option: ModelOption?): List<ReasoningEffort> {
+        val model = catalogModel(option) ?: return if (option == null) emptyList() else listOf(ReasoningEffort.DEFAULT)
+        if (!model.reasoning) return emptyList()
+        val efforts = model.reasoningOptions
+            .firstOrNull { it.type == "effort" }
+            ?.values
+            .orEmpty()
+            .mapNotNull(ReasoningEffort::fromWire)
+        return (listOf(ReasoningEffort.DEFAULT) + efforts).distinct()
+    }
+
+    fun supportsReasoning(option: ModelOption?): Boolean = reasoningEfforts(option).isNotEmpty()
 
     fun toggleFavourite(option: ModelOption) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -460,7 +477,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setAgentMode(mode: AgentMode) = _state.update { it.copy(agentMode = mode) }
-    fun setEffort(effort: ReasoningEffort) = _state.update { it.copy(effort = effort) }
+    fun setEffort(effort: ReasoningEffort) = _state.update {
+        if (effort in reasoningEfforts(it.selected)) it.copy(effort = effort) else it
+    }
     fun setAutoAccept(value: Boolean) {
         _state.update { it.copy(autoAccept = value) }
         viewModelScope.launch(Dispatchers.IO) { appSettings.update { it.copy(autoAccept = value) } }
@@ -863,10 +882,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return childError?.let { "subagent error: $it" } ?: out.toString()
     }
 
-    fun send(input: String) {
+    fun send(input: String, images: List<MessagePart.Image> = emptyList()) {
         val text = input.trim()
-        if (text.isEmpty()) return
+        if (text.isEmpty() && images.isEmpty()) return
         if (_state.value.isRunning) {
+            if (images.isNotEmpty()) return fail("Wait for the current turn before sending a photo.")
             // Queue it for the running turn instead of dropping it; the agent picks it up at its next step.
             pendingMessages.add(text)
             _state.update { it.copy(queued = it.queued + text) }
@@ -885,7 +905,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         _state.update {
             it.copy(
-                lines = it.lines + ChatLine.User(text),
+                lines = it.lines + ChatLine.User(text, images),
                 streaming = "",
                 streamingReasoning = "",
                 isRunning = true,
@@ -897,6 +917,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         TurnService.start(getApplication())
 
         val startingHistory = history
+        val userParts = buildList {
+            if (text.isNotEmpty()) add(MessagePart.Text(text))
+            addAll(images)
+        }
         val gen = ++generation
         // Pin this turn's workspace so a mid-stream project move/delete can't redirect the agent's
         // file/git tools into a different directory (data-integrity guard).
@@ -914,7 +938,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // interrupted first turn restored as a blank chat. loop.run() re-appends it from startingHistory,
             // so it is not duplicated; TurnComplete later overwrites history with the full turn.
             if (gen == generation) {
-                history = startingHistory + ChatMessage(Role.USER, listOf(MessagePart.Text(text)))
+                history = startingHistory + ChatMessage(Role.USER, userParts)
                 persist()
             }
             val custom = appSettings.load().customInstructions.trim()
@@ -951,7 +975,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     modeProvider = { _state.value.agentMode }, // live so a plan_exit approval flips PLAN→BUILD mid-run
                 )
                 if (startingHistory.isEmpty()) autoBranchIfEnabled(pinnedWorkspace)
-                loop.run(startingHistory, text).collect { event -> if (gen == generation) reduce(event) }
+                loop.run(startingHistory, userParts).collect { event -> if (gen == generation) reduce(event) }
             } finally {
                 if (gen == generation) {
                     turnWorkspace = null
@@ -978,7 +1002,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (historyCut >= 0) history = history.take(historyCut)
         val lineCut = _state.value.lines.indexOfLast { it is ChatLine.User }
         if (lineCut >= 0) _state.update { it.copy(lines = it.lines.take(lineCut), timelineEpoch = it.timelineEpoch + 1) }
-        send(lastUser.text)
+        send(lastUser.text, lastUser.images)
     }
 
     fun cancel() {
@@ -1091,20 +1115,28 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Rebuild the visible timeline from persisted history, merging each tool result into its tool-call line. */
     private fun List<ChatMessage>.toChatLines(): List<ChatLine> {
         val lines = mutableListOf<ChatLine>()
-        for (message in this) for (part in message.parts) {
-            when (part) {
-                is MessagePart.Text ->
-                    lines += if (message.role == Role.USER) ChatLine.User(part.text) else ChatLine.Assistant(part.text)
-                is MessagePart.Reasoning -> lines += ChatLine.Reasoning(part.text)
-                is MessagePart.ToolCall ->
-                    lines += ChatLine.ToolActivity(part.id, part.name, ToolStatus.DONE, summarizeArgs(part.argsJson))
-                is MessagePart.ToolResult -> {
-                    val index = lines.indexOfLast { it is ChatLine.ToolActivity && it.id == part.callId }
-                    if (index >= 0) {
-                        lines[index] = (lines[index] as ChatLine.ToolActivity).copy(
-                            status = if (part.isError) ToolStatus.ERROR else ToolStatus.DONE,
-                            detail = part.content.take(300),
-                        )
+        for (message in this) {
+            if (message.role == Role.USER) {
+                val text = message.parts.filterIsInstance<MessagePart.Text>().joinToString("\n") { it.text }
+                val images = message.parts.filterIsInstance<MessagePart.Image>()
+                if (text.isNotEmpty() || images.isNotEmpty()) lines += ChatLine.User(text, images)
+            }
+            for (part in message.parts) {
+                when (part) {
+                    is MessagePart.Text ->
+                        if (message.role == Role.ASSISTANT) lines += ChatLine.Assistant(part.text)
+                    is MessagePart.Image -> Unit
+                    is MessagePart.Reasoning -> lines += ChatLine.Reasoning(part.text)
+                    is MessagePart.ToolCall ->
+                        lines += ChatLine.ToolActivity(part.id, part.name, ToolStatus.DONE, summarizeArgs(part.argsJson))
+                    is MessagePart.ToolResult -> {
+                        val index = lines.indexOfLast { it is ChatLine.ToolActivity && it.id == part.callId }
+                        if (index >= 0) {
+                            lines[index] = (lines[index] as ChatLine.ToolActivity).copy(
+                                status = if (part.isError) ToolStatus.ERROR else ToolStatus.DONE,
+                                detail = part.content.take(300),
+                            )
+                        }
                     }
                 }
             }
@@ -1138,6 +1170,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 "The provider rejected your API key - check it in Settings > Providers."
             "429" in lower || "rate limit" in lower ->
                 "Rate limited by the provider - wait a moment and try again."
+            "high-frequency" in lower || "non-compliant requests" in lower ->
+                "The provider temporarily blocked this request - wait a few minutes and try again."
             "overloaded" in lower || "529" in lower ->
                 "The provider is overloaded right now - try again shortly."
             else -> raw
@@ -1228,4 +1262,3 @@ private const val BUNDLED_CATALOG = """
   "opencode":{"id":"opencode","name":"OpenCode Zen","models":{"opencode/nemotron-3-ultra-free":{"id":"opencode/nemotron-3-ultra-free","name":"Nemotron 3 Ultra (Free)"}}}
 }
 """
-

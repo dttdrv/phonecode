@@ -67,12 +67,13 @@ class ContextManager(
      * boundaries is what lets tool-heavy single-user-turn sessions actually compact.
      */
     private fun isValidCutPoint(message: ChatMessage): Boolean =
-        message.role == Role.ASSISTANT || message.parts.any { it is MessagePart.Text }
+        message.role == Role.ASSISTANT || message.parts.any { it is MessagePart.Text || it is MessagePart.Image }
 
     private fun estimateTokens(message: ChatMessage): Int = message.parts.sumOf { partLength(it) } / 4
 
     private fun partLength(part: MessagePart): Int = when (part) {
         is MessagePart.Text -> part.text.length
+        is MessagePart.Image -> 4_000
         is MessagePart.ToolCall -> part.name.length + part.argsJson.length
         is MessagePart.ToolResult -> part.content.length
         is MessagePart.Reasoning -> part.text.length

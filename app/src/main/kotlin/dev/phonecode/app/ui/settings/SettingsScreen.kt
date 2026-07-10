@@ -5,8 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -61,6 +60,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,6 +73,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonecode.app.agent.ChatViewModel
+import dev.phonecode.app.R
 import dev.phonecode.app.data.CustomModel
 import dev.phonecode.app.data.CustomProvider
 import dev.phonecode.app.data.ThemeMode
@@ -85,9 +86,10 @@ import dev.phonecode.app.ui.components.PcIconButton
 import dev.phonecode.app.ui.components.PcRow
 import dev.phonecode.app.ui.components.PcSectionLabel
 import dev.phonecode.app.ui.components.PcToggle
+import dev.phonecode.app.ui.components.elasticOverscroll
 import dev.phonecode.app.ui.theme.PcMono
+import dev.phonecode.app.ui.theme.PhoneEasings
 import dev.phonecode.app.ui.theme.PhoneSprings
-import dev.phonecode.app.ui.theme.PhoneTweens
 import dev.phonecode.app.ui.theme.Spacing
 import dev.phonecode.agent.AgentMode
 import dev.phonecode.tools.mcp.McpServerConfig
@@ -141,61 +143,74 @@ fun SettingsScreen(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () 
     // After the committed pop's enter transition lands, release the held transform.
     LaunchedEffect(page) {
         if (backingOut != null && page == parentOf(backingOut!!)) {
-            kotlinx.coroutines.delay(320)
+            kotlinx.coroutines.delay(440)
             backAnim.snapTo(0f)
             backingOut = null
         }
     }
 
-    AnimatedContent(
-        targetState = page,
-        transitionSpec = {
-            if (depthOf(targetState) < depthOf(initialState)) {
-                (slideInHorizontally(PhoneSprings.standardSpec()) { -it / 4 } + fadeIn(PhoneTweens.popEnter)) togetherWith
-                    (slideOutHorizontally(PhoneSprings.standardSpec()) { it / 3 } + fadeOut(PhoneTweens.popExit))
-            } else {
-                (slideInHorizontally(PhoneSprings.standardSpec()) { it / 3 } + fadeIn(PhoneTweens.popEnter)) togetherWith
-                    (slideOutHorizontally(PhoneSprings.standardSpec()) { -it / 4 } + fadeOut(PhoneTweens.popExit))
-            }
-        },
-        label = "settings",
-    ) { p ->
-        Box(
-            Modifier.graphicsLayer {
-                // Only the page being backed out carries the gesture transform; it stays applied
-                // through the exit transition so the committed slide never jumps.
-                if (p == backingOut) {
-                    val t = backAnim.value
-                    translationX = t * size.width * 0.4f
-                    alpha = 1f - t
-                    val s = 1f - 0.03f * t
-                    scaleX = s
-                    scaleY = s
-                }
-            },
-        ) {
-        when (p) {
-            "general" -> GeneralPage(vm, settingsVm) { page = "home" }
-            "appearance" -> AppearancePage(settingsVm) { page = "home" }
-            "personal" -> PersonalPage(settingsVm) { page = "home" }
-            "providers" -> ProvidersPage(vm, onOpenProvider = { page = "provider:$it" }) { page = "home" }
-            "mcp" -> McpPage(vm) { page = "home" }
-            "skills" -> SkillsPage(vm) { page = "home" }
-            "git" -> GitPage(vm, settingsVm) { page = "home" }
-            "export" -> ExportPage(vm, settingsVm) { page = "home" }
-            "about" -> AboutPage(vm, onOpenDoc = { page = it }) { page = "home" }
-            "doc:terms" -> DocPage("Terms of Service", "terms.md") { page = "about" }
-            "doc:privacy" -> DocPage("Privacy Policy", "privacy.md") { page = "about" }
-            "doc:licenses" -> LicensesPage { page = "about" }
-            "doc:crashlog" -> CrashLogPage { page = "about" }
-            else -> {
-                if (p.startsWith("provider:")) {
-                    ProviderDetailPage(vm, p.removePrefix("provider:")) { page = "providers" }
-                } else {
-                    HomePage(vm, settingsVm, onBack = onBack, onOpen = { page = it })
-                }
+    Box(Modifier.fillMaxSize()) {
+        backingOut?.takeIf { page == it }?.let { outgoing ->
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    translationX = -size.width * 0.25f * (1f - backAnim.value)
+                },
+            ) {
+                SettingsPageContent(parentOf(outgoing), vm, settingsVm, onBack) { page = it }
             }
         }
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                val pop = depthOf(targetState) < depthOf(initialState)
+                (if (pop) {
+                    (slideInHorizontally(tween(380, easing = PhoneEasings.iOSStandard)) { -it / 4 }) togetherWith
+                        slideOutHorizontally(tween(420, easing = PhoneEasings.iOSStandard)) { it }
+                } else {
+                    (slideInHorizontally(tween(420, easing = PhoneEasings.iOSStandard)) { it }) togetherWith
+                        slideOutHorizontally(tween(380, easing = PhoneEasings.iOSStandard)) { -it / 4 }
+                }).apply { targetContentZIndex = if (pop) -1f else 1f }
+            },
+            label = "settings",
+        ) { p ->
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    if (p == backingOut) translationX = backAnim.value * size.width
+                },
+            ) {
+                SettingsPageContent(p, vm, settingsVm, onBack) { page = it }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsPageContent(
+    page: String,
+    vm: ChatViewModel,
+    settingsVm: SettingsViewModel,
+    onBack: () -> Unit,
+    navigate: (String) -> Unit,
+) {
+    when (page) {
+        "general" -> GeneralPage(vm, settingsVm) { navigate("home") }
+        "appearance" -> AppearancePage(settingsVm) { navigate("home") }
+        "personal" -> PersonalPage(settingsVm) { navigate("home") }
+        "providers" -> ProvidersPage(vm, onOpenProvider = { navigate("provider:$it") }) { navigate("home") }
+        "mcp" -> McpPage(vm) { navigate("home") }
+        "skills" -> SkillsPage(vm) { navigate("home") }
+        "git" -> GitPage(vm, settingsVm) { navigate("home") }
+        "export" -> ExportPage(vm, settingsVm) { navigate("home") }
+        "about" -> AboutPage(vm, onOpenDoc = navigate) { navigate("home") }
+        "doc:terms" -> DocPage("Terms of Service", "terms.md") { navigate("about") }
+        "doc:privacy" -> DocPage("Privacy Policy", "privacy.md") { navigate("about") }
+        "doc:licenses" -> LicensesPage { navigate("about") }
+        else -> {
+            if (page.startsWith("provider:")) {
+                ProviderDetailPage(vm, page.removePrefix("provider:")) { navigate("providers") }
+            } else {
+                HomePage(vm, settingsVm, onBack = onBack, onOpen = navigate)
+            }
         }
     }
 }
@@ -210,7 +225,7 @@ private fun Page(title: String, onBack: () -> Unit, content: @Composable () -> U
     // The root pads no vertical insets - the page list scrolls UNDER the transparent navbar
     // (round-3 feedback: the bar must be transparent on EVERY screen); the scroll content's
     // bottom padding (below) keeps the last row reachable above it.
-    Column(Modifier.fillMaxSize().background(colors.background).statusBarsPadding()) {
+    Column(Modifier.elasticOverscroll().fillMaxSize().background(colors.background).statusBarsPadding()) {
         Row(
             Modifier.fillMaxWidth().height(Spacing.navBarHeight).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -227,7 +242,7 @@ private fun Page(title: String, onBack: () -> Unit, content: @Composable () -> U
             Spacer(Modifier.width(Spacing.inputHeight))
         }
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState(), overscrollEffect = null)
                 .padding(horizontal = Spacing.m, vertical = 4.dp)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
         ) {
@@ -245,10 +260,10 @@ private fun Page(title: String, onBack: () -> Unit, content: @Composable () -> U
 private fun NavRow(label: String, value: String? = null, icon: ImageVector? = null, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     PcRow(onClick = onClick) {
-        if (icon != null) Icon(icon, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(22.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, modifier = Modifier.weight(1f))
-        if (value != null) Text(value, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(20.dp))
+        if (icon != null) Icon(icon, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = colors.onBackground, modifier = Modifier.weight(1f))
+        if (value != null) Text(value, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -257,8 +272,8 @@ private fun ToggleRow(label: String, sub: String? = null, checked: Boolean, onCh
     val colors = MaterialTheme.colorScheme
     PcRow {
         Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-            if (sub != null) Text(sub, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 1.dp))
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = colors.onBackground)
+            if (sub != null) Text(sub, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 1.dp))
         }
         PcToggle(checked, onChange)
     }
@@ -268,7 +283,7 @@ private fun ToggleRow(label: String, sub: String? = null, checked: Boolean, onCh
 private fun CheckRow(label: String, selected: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     PcRow(onClick = onClick) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = colors.onBackground, modifier = Modifier.weight(1f))
         if (selected) Icon(Icons.Filled.Check, null, tint = colors.onBackground, modifier = Modifier.size(20.dp))
     }
 }
@@ -705,10 +720,21 @@ private fun AboutPage(vm: ChatViewModel, onOpenDoc: (String) -> Unit, onBack: ()
     }
     Page("About", onBack) {
         Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(72.dp).clip(MaterialTheme.shapes.extraLarge).background(colors.onBackground), contentAlignment = Alignment.Center) {
+                Icon(painterResource(R.drawable.ic_launcher_foreground), null, tint = colors.background, modifier = Modifier.size(58.dp))
+            }
+            Spacer(Modifier.height(14.dp))
             Text("PhoneCode", style = MaterialTheme.typography.headlineMedium, color = colors.onBackground)
             Text("version $version", style = MaterialTheme.typography.labelMedium, color = colors.tertiary, modifier = Modifier.padding(top = 4.dp))
         }
         PcGroup {
+            PcRow(onClick = {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://dttdrv.xyz/phonecode"))) }
+            }) {
+                Text("Website", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, modifier = Modifier.weight(1f))
+                Text("dttdrv.xyz/phonecode", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(20.dp))
+            }
             PcRow {
                 Text("Config directory", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, modifier = Modifier.weight(1f))
                 Text(vm.configDirPath().substringAfterLast("/"), style = MaterialTheme.typography.labelSmall.copy(fontFamily = PcMono), color = colors.tertiary)
@@ -716,7 +742,6 @@ private fun AboutPage(vm: ChatViewModel, onOpenDoc: (String) -> Unit, onBack: ()
             NavRow("Terms of Service") { onOpenDoc("doc:terms") }
             NavRow("Privacy Policy") { onOpenDoc("doc:privacy") }
             NavRow("Open-source licenses") { onOpenDoc("doc:licenses") }
-            NavRow("Crash log") { onOpenDoc("doc:crashlog") }
         }
     }
 }
@@ -741,42 +766,6 @@ private fun DocPage(title: String, assetName: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun CrashLogPage(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val colors = MaterialTheme.colorScheme
-    var log by remember { mutableStateOf(dev.phonecode.app.CrashLog.read(context)) }
-    Page("Crash log", onBack) {
-        if (log == null) {
-            Note("No crashes recorded. If the app ever crashes, the stack trace lands here.")
-        } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                Box(Modifier.weight(1f)) {
-                    PcButton("Share", filled = false) {
-                        val send = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, log)
-                        }
-                        runCatching { context.startActivity(Intent.createChooser(send, "Share crash log")) }
-                    }
-                }
-                Box(Modifier.weight(1f)) {
-                    PcButton("Clear", filled = false) {
-                        dev.phonecode.app.CrashLog.clear(context)
-                        log = null
-                    }
-                }
-            }
-            Spacer(Modifier.height(Spacing.s))
-            Text(
-                log.orEmpty(),
-                style = MaterialTheme.typography.labelSmall.copy(fontFamily = PcMono),
-                color = colors.secondary,
-            )
-        }
-    }
-}
-
-@Composable
 private fun LicensesPage(onBack: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val entries = listOf(
@@ -787,6 +776,7 @@ private fun LicensesPage(onBack: () -> Unit) {
         "OkHttp - Apache License 2.0",
         "Kotlin & kotlinx libraries - Apache License 2.0",
         "AndroidX / Jetpack Compose - Apache License 2.0",
+        "Haze - Apache License 2.0",
         "Mermaid - MIT License",
         "BusyBox - GNU GPL 2.0",
         "PRoot - GNU GPL 2.0; talloc - GNU LGPL 3.0",

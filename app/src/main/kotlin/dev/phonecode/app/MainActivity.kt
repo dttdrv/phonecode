@@ -25,13 +25,6 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
             window.isStatusBarContrastEnforced = false
         }
-        // Ask BEFOREHAND (device feedback): the "PhoneCode is working" foreground notification -
-        // the thing that keeps responses streaming with the screen off - needs this on 13+.
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
         setContent { PhoneCodeApp() }
     }
 }

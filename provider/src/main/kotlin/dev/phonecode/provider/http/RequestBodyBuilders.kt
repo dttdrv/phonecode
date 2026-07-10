@@ -34,7 +34,7 @@ object RequestBodyBuilders {
      * the parts is lossless - the model still sees every block, just in one turn.
      */
     private fun wireMessages(messages: List<ChatMessage>): List<ChatMessage> {
-        val nonEmpty = messages.filter { m -> m.parts.any { it is MessagePart.Text || it is MessagePart.ToolCall || it is MessagePart.ToolResult } }
+        val nonEmpty = messages.filter { m -> m.parts.any { it is MessagePart.Text || it is MessagePart.Image || it is MessagePart.ToolCall || it is MessagePart.ToolResult } }
         val merged = ArrayList<ChatMessage>(nonEmpty.size)
         for (m in nonEmpty) {
             val last = merged.lastOrNull()
@@ -46,7 +46,7 @@ object RequestBodyBuilders {
 
     // ---- OpenAI-compatible ----
 
-    fun toOpenAiBody(req: ChatRequest): String = buildJsonObject {
+    fun toOpenAiBody(req: ChatRequest, nestedReasoning: Boolean = false): String = buildJsonObject {
         put("model", req.model)
         req.sessionId?.let { put("prompt_cache_key", it) } // OpenAI-family automatic prefix caching
         put("messages", openAiMessages(req))
@@ -54,7 +54,11 @@ object RequestBodyBuilders {
         putJsonObject("stream_options") { put("include_usage", true) }
         if (req.tools.isNotEmpty()) put("tools", openAiTools(req.tools))
         if (req.reasoningEffort != ReasoningEffort.DEFAULT) {
-            put("reasoning_effort", req.reasoningEffort.name.lowercase())
+            if (nestedReasoning) {
+                putJsonObject("reasoning") { put("effort", req.reasoningEffort.wireValue) }
+            } else {
+                put("reasoning_effort", req.reasoningEffort.wireValue)
+            }
         }
         req.maxTokens?.let { put("max_completion_tokens", it) }
     }.toString()
@@ -72,9 +76,25 @@ object RequestBodyBuilders {
                         }
                     }
                     val text = msg.parts.filterIsInstance<MessagePart.Text>().joinToString("\n") { it.text }
+                    val images = msg.parts.filterIsInstance<MessagePart.Image>()
                     val hasToolResult = msg.parts.any { it is MessagePart.ToolResult }
-                    if (text.isNotEmpty() || !hasToolResult) {
-                        addJsonObject { put("role", "user"); put("content", text) }
+                    if (text.isNotEmpty() || images.isNotEmpty() || !hasToolResult) {
+                        addJsonObject {
+                            put("role", "user")
+                            if (images.isEmpty()) {
+                                put("content", text)
+                            } else {
+                                putJsonArray("content") {
+                                    if (text.isNotEmpty()) addJsonObject { put("type", "text"); put("text", text) }
+                                    images.forEach { image ->
+                                        addJsonObject {
+                                            put("type", "image_url")
+                                            putJsonObject("image_url") { put("url", image.dataUrl()) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 Role.ASSISTANT -> {
@@ -136,19 +156,37 @@ object RequestBodyBuilders {
         put("stream", true)
         if (req.tools.isNotEmpty()) put("tools", anthropicTools(req.tools))
         thinking?.let { put("thinking", it) }
+        if (req.reasoningEffort != ReasoningEffort.DEFAULT) {
+            putJsonObject("output_config") { put("effort", req.reasoningEffort.wireValue) }
+        }
     }.toString()
 
     private fun anthropicTokensAndThinking(req: ChatRequest): Pair<Int, JsonObject?> {
         if (req.reasoningEffort == ReasoningEffort.DEFAULT) return (req.maxTokens ?: 4096) to null
+        if (usesAdaptiveThinking(req.model)) {
+            return (req.maxTokens ?: 4096) to buildJsonObject { put("type", "adaptive") }
+        }
         val budget = when (req.reasoningEffort) {
+            ReasoningEffort.NONE -> 0
+            ReasoningEffort.MINIMAL -> 1024
             ReasoningEffort.LOW -> 2048
             ReasoningEffort.MEDIUM -> 8192
             ReasoningEffort.HIGH -> 16000
+            ReasoningEffort.XHIGH -> 32000
+            ReasoningEffort.MAX -> 64000
             ReasoningEffort.DEFAULT -> 0
         }
+        if (budget == 0) return (req.maxTokens ?: 4096) to null
         val maxTokens = maxOf(req.maxTokens ?: 0, budget + 8192)
         val thinking = buildJsonObject { put("type", "enabled"); put("budget_tokens", budget) }
         return maxTokens to thinking
+    }
+
+    private fun usesAdaptiveThinking(model: String): Boolean {
+        val version = Regex("claude-[a-z]+-(\\d+)(?:-(\\d+))?").find(model) ?: return false
+        val major = version.groupValues[1].toIntOrNull() ?: return false
+        val minor = version.groupValues[2].toIntOrNull() ?: 0
+        return major > 4 || major == 4 && minor >= 6
     }
 
     private fun anthropicMessages(req: ChatRequest): JsonArray {
@@ -168,6 +206,14 @@ object RequestBodyBuilders {
                             addJsonObject {
                                 when (part) {
                                     is MessagePart.Text -> { put("type", "text"); put("text", part.text) }
+                                    is MessagePart.Image -> {
+                                        put("type", "image")
+                                        putJsonObject("source") {
+                                            put("type", "base64")
+                                            put("media_type", part.mimeType)
+                                            put("data", part.data)
+                                        }
+                                    }
                                     is MessagePart.ToolCall -> {
                                         put("type", "tool_use")
                                         put("id", part.id)
@@ -226,18 +272,31 @@ object RequestBodyBuilders {
         req.system?.let { put("instructions", it) }
         putJsonArray("input") {
             for (msg in req.messages) {
-                for (part in msg.parts) {
-                    when (part) {
-                        is MessagePart.Text -> addJsonObject {
-                            put("type", "message")
-                            put("role", if (msg.role == Role.USER) "user" else "assistant")
-                            putJsonArray("content") {
-                                addJsonObject {
-                                    put("type", if (msg.role == Role.USER) "input_text" else "output_text")
-                                    put("text", part.text)
+                val content = msg.parts.filter { it is MessagePart.Text || it is MessagePart.Image }
+                if (content.isNotEmpty()) addJsonObject {
+                    put("type", "message")
+                    put("role", if (msg.role == Role.USER) "user" else "assistant")
+                    putJsonArray("content") {
+                        content.forEach { part ->
+                            addJsonObject {
+                                when (part) {
+                                    is MessagePart.Text -> {
+                                        put("type", if (msg.role == Role.USER) "input_text" else "output_text")
+                                        put("text", part.text)
+                                    }
+                                    is MessagePart.Image -> {
+                                        put("type", "input_image")
+                                        put("image_url", part.dataUrl())
+                                    }
+                                    else -> Unit
                                 }
                             }
                         }
+                    }
+                }
+                for (part in msg.parts) {
+                    when (part) {
+                        is MessagePart.Text, is MessagePart.Image -> Unit
                         is MessagePart.ToolCall -> addJsonObject {
                             put("type", "function_call")
                             put("call_id", part.id)
@@ -271,11 +330,13 @@ object RequestBodyBuilders {
         put("store", false)
         if (req.reasoningEffort != ReasoningEffort.DEFAULT) {
             putJsonObject("reasoning") {
-                put("effort", req.reasoningEffort.name.lowercase())
+                put("effort", req.reasoningEffort.wireValue)
                 put("summary", "auto")
             }
         }
         // NOTE: no max_output_tokens. The ChatGPT/Codex backend rejects it ("unsupported parameter") -
         // output length is governed by the model's reasoning effort + verbosity, not a token cap.
     }.toString()
+
+    private fun MessagePart.Image.dataUrl(): String = "data:$mimeType;base64,$data"
 }

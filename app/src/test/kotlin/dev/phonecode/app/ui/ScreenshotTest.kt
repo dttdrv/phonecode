@@ -140,16 +140,13 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("screenshots/$name.png")
     }
 
-    /** Whole-screen capture - needed when a ModalBottomSheet (own window) is on screen. */
     private fun shootScreen(name: String) {
         compose.waitForIdle()
         captureScreenRoboImage("screenshots/$name.png")
     }
 
-    /** Dismisses the tools sheet from its MAIN panel: the M3 sheet's window is out of reach of
-     *  the activity back dispatcher, so we select the attach row (SAF intent is inert here). */
-    private fun dismissToolsSheet() {
-        compose.onNodeWithText("Photo or file").performClick()
+    private fun dismissToolsMenu() {
+        compose.onNodeWithText("Upload").performClick()
         compose.waitForIdle()
     }
 
@@ -160,7 +157,7 @@ class ScreenshotTest {
 
         compose.onNodeWithContentDescription("Tools").performClick()
         shootScreen("02-tools-menu")
-        dismissToolsSheet()
+        dismissToolsMenu()
 
         // Model sheet from the composer pill; re-selecting the current model closes it.
         compose.onNodeWithText("Claude Opus 4.8").performClick()
@@ -194,7 +191,7 @@ class ScreenshotTest {
         shoot("11-chat-conversation-dark")
         compose.onNodeWithContentDescription("Tools").performClick()
         shootScreen("14-tools-menu-dark")
-        dismissToolsSheet()
+        dismissToolsMenu()
         compose.onNodeWithContentDescription("Menu").performClick()
         shoot("12-drawer-dark")
     }

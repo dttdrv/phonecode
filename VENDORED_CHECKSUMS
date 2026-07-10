@@ -1,0 +1,5 @@
+d1d1a3fae5f4d6146e9742790a47fcb116199622cfb8439f218a4d5fbe5000da  app/src/main/assets/alpine-aarch64.rootfs
+5a8ec91820bd55afef049068489369910e5d6ce70c8103952f27e29d3e76e8bc  app/src/main/assets/mermaid.min.js
+297abc237247682a84a3fd4283b28f69506502b4b852faf71fd726fb5d955d60  app/src/main/jniLibs/arm64-v8a/libproot.so
+de0ace1adc76ab0555b3dbbfbff0e78c1ac14017b255262707867aea70c49437  app/src/main/jniLibs/arm64-v8a/libproot-loader.so
+e383c8bc25a1137b8ee88718cc6df1f1e84c54521d6045fc837385995dcdf031  app/src/main/jniLibs/arm64-v8a/libbusybox.so

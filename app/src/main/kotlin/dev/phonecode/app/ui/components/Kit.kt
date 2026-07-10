@@ -129,26 +129,15 @@ fun PcToggle(checked: Boolean, onChange: (Boolean) -> Unit) {
     Switch(checked = checked, onCheckedChange = onChange)
 }
 
-/**
- * M3 Expressive connected-card group (round-3: "make it look like the new Material3 Expressive
- * menus", the new Grok settings language). Each row paints its OWN surface with 4dp corners; the
- * group clips the whole stack to 16dp, so outer corners of the first/last row render at 16dp while
- * every gap-facing corner stays 4dp - the connected-card geometry without any position tracking.
- * 2dp transparent gaps (page background showing through) replace the old hairline dividers.
- */
 @Composable
 fun PcGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
         content = content,
     )
 }
 
-/**
- * One segment of a connected-card group: self-backgrounded (4dp inner corners - the group clip
- * rounds the outer ones), M3 list metrics (56dp min height, 16dp side padding), platform ripple.
- */
 @Composable
 fun PcRow(
     modifier: Modifier = Modifier,
@@ -156,26 +145,24 @@ fun PcRow(
     content: @Composable RowScope.() -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    val base = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(colors.surface)
-        .heightIn(min = 56.dp)
-    // List rows ripple like every native Android list row.
+    val base = Modifier.fillMaxWidth().clip(RoundedCornerShape(2.dp)).background(colors.surface)
+        .heightIn(min = 52.dp)
     val clickableBase = if (onClick != null) base.clickable(onClick = onClick) else base
     Row(
-        clickableBase.then(modifier).padding(horizontal = 16.dp, vertical = 10.dp),
+        clickableBase.then(modifier).padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.s),
         content = content,
     )
 }
 
-/** Sentence-case section header OUTSIDE the cards (M3 Expressive dropped the all-caps eyebrow). */
 @Composable
 fun PcSectionLabel(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp),
+        modifier = Modifier.padding(start = 14.dp, top = 16.dp, bottom = 6.dp),
     )
 }
 

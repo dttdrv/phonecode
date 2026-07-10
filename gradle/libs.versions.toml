@@ -1,11 +1,11 @@
 [versions]
-agp = "8.7.3"
-kotlin = "2.0.21"
-coreKtx = "1.13.1"
-lifecycle = "2.8.7"
-activityCompose = "1.9.3"
-composeBom = "2025.08.00"
-navigation = "2.8.4"
+agp = "9.2.0"
+kotlin = "2.3.21"
+coreKtx = "1.19.0"
+lifecycle = "2.11.0"
+activityCompose = "1.12.3"
+composeBom = "2026.06.00"
+navigation = "2.9.8"
 coroutines = "1.9.0"
 serialization = "1.7.3"
 okhttp = "4.12.0"
@@ -58,7 +58,6 @@ androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-co
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

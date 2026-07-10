@@ -42,11 +42,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.phonecode.app.ui.components.PcGroup
 import dev.phonecode.app.ui.components.PcRow
-import dev.phonecode.app.ui.theme.PcMono
+import dev.phonecode.app.R
 import dev.phonecode.app.ui.theme.PhoneEasings
 import dev.phonecode.app.ui.theme.PhoneSprings
 import dev.phonecode.app.ui.theme.PhoneTweens
@@ -110,8 +111,8 @@ private fun Modifier.entrance(delayMs: Int): Modifier {
 @Composable
 private fun Welcome(onNext: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val markScale = remember { Animatable(0.6f) }
-    LaunchedEffect(Unit) { markScale.animateTo(1f, spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow)) }
+    val markScale = remember { Animatable(0.94f) }
+    LaunchedEffect(Unit) { markScale.animateTo(1f, spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow)) }
     Column(
         Modifier.fillMaxSize().padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -124,10 +125,11 @@ private fun Welcome(onNext: () -> Unit) {
                 .background(colors.onBackground, MaterialTheme.shapes.extraLarge),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                "</>",
-                style = MaterialTheme.typography.headlineMedium.copy(fontFamily = PcMono, fontWeight = FontWeight.SemiBold),
-                color = colors.background,
+            Icon(
+                painter = painterResource(R.drawable.ic_launcher_foreground),
+                contentDescription = null,
+                tint = colors.background,
+                modifier = Modifier.size(76.dp),
             )
         }
         Spacer(Modifier.height(28.dp))

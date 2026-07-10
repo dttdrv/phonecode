@@ -1,23 +1,20 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.compiler)
 }
 
 android {
     namespace = "dev.phonecode.app"
-    compileSdk = 36
+    compileSdk = 37
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "dev.phonecode"
         minSdk = 26
         targetSdk = 34
-        versionCode = 15
-        versionName = "0.1.6"
+        versionCode = 20
+        versionName = "2.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
@@ -47,13 +44,6 @@ android {
         }
     }
 
-    lint {
-        // lintVitalRelease crashes inside AGP 8.7's bundled lint (IncompatibleClassChangeError in
-        // NonNullableMutableLiveDataDetector) against the newer Compose stack - a tooling bug, not
-        // app code. Lint still runs on demand via :app:lint.
-        checkReleaseBuilds = false
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -78,12 +68,6 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
-    }
-}
-
-kotlin {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 

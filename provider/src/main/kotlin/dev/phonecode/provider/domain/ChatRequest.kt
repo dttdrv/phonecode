@@ -35,6 +35,8 @@ sealed interface MessagePart {
     /** Plain text - a user turn, or assistant prose. */
     data class Text(val text: String) : MessagePart
 
+    data class Image(val mimeType: String, val data: String) : MessagePart
+
     /**
      * Assistant-issued tool call. [argsJson] is the COMPLETE arguments object
      * as a JSON string (accumulated from stream fragments before it lands here).
@@ -59,4 +61,20 @@ data class ToolDef(
  * DEFAULT = send no reasoning field (provider default). Mapped per-provider:
  * OpenAI → `reasoning_effort` string; Anthropic → `thinking{enabled,budget_tokens}`.
  */
-enum class ReasoningEffort { DEFAULT, LOW, MEDIUM, HIGH }
+enum class ReasoningEffort {
+    DEFAULT,
+    NONE,
+    MINIMAL,
+    LOW,
+    MEDIUM,
+    HIGH,
+    XHIGH,
+    MAX;
+
+    val wireValue: String
+        get() = name.lowercase()
+
+    companion object {
+        fun fromWire(value: String?): ReasoningEffort? = entries.firstOrNull { it.wireValue == value }
+    }
+}

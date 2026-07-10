@@ -42,4 +42,12 @@ class BuiltInPresetsTest {
         assertEquals(null, BuiltInPresets.byId("groq"))
         assertEquals(null, BuiltInPresets.byId("togetherai"))
     }
+
+    @Test fun catalogApiCanUpdateOnlyWithinTheConfiguredHttpsHost() {
+        val preset = BuiltInPresets.opencodeZen
+        assertEquals("https://opencode.ai/zen/v2", preset.withCatalogApi("https://opencode.ai/zen/v2/").baseUrl)
+        assertEquals(preset.baseUrl, preset.withCatalogApi("https://example.com/zen/v2").baseUrl)
+        assertEquals(preset.baseUrl, preset.withCatalogApi("http://opencode.ai/zen/v2").baseUrl)
+        assertEquals(preset.baseUrl, preset.withCatalogApi("not a url").baseUrl)
+    }
 }

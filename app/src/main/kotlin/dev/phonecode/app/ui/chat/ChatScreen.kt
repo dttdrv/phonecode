@@ -1,9 +1,14 @@
 package dev.phonecode.app.ui.chat
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -27,11 +32,14 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -46,6 +54,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
@@ -96,6 +105,7 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -131,16 +141,21 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonecode.agent.AgentMode
+import dev.phonecode.app.R
 import dev.phonecode.app.agent.ChatLine
 import dev.phonecode.app.agent.ChatUiState
 import dev.phonecode.app.agent.ChatViewModel
@@ -152,7 +167,7 @@ import dev.phonecode.app.ui.components.ContextRing
 import dev.phonecode.app.ui.components.PcDivider
 import dev.phonecode.app.ui.components.PcIconButton
 import dev.phonecode.app.ui.components.PcRoundButton
-import dev.phonecode.app.ui.components.PcToggle
+import dev.phonecode.app.ui.components.elasticOverscroll
 import dev.phonecode.app.ui.components.pressFeedback
 import androidx.compose.material3.ripple
 import dev.chrisbanes.haze.HazeState
@@ -174,6 +189,7 @@ import dev.phonecode.app.ui.theme.neuralSweepBrush
 import dev.phonecode.app.ui.theme.rememberNeuralBreath
 import dev.phonecode.app.ui.theme.rememberNeuralPhase
 import dev.phonecode.provider.domain.ReasoningEffort
+import dev.phonecode.provider.domain.MessagePart
 import dev.phonecode.tools.UserAnswer
 import dev.phonecode.tools.todo.TodoItem
 import dev.phonecode.tools.todo.TodoStatus
@@ -182,6 +198,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
+import java.io.ByteArrayOutputStream
 import java.util.Date
 import java.util.Locale
 
@@ -198,6 +215,7 @@ fun ChatScreen(
     val colors = MaterialTheme.colorScheme
     val rootView = LocalView.current
     var input by rememberSaveable { mutableStateOf("") }
+    var photos by remember { mutableStateOf<List<MessagePart.Image>>(emptyList()) }
     // Round-4: the custom morphing popouts are retired for standard M3 modal bottom sheets
     // ("improve the pop-out menus, substantially. Maybe use the default Material3 Expressive
     // for now") - platform motion and scrim, native back/swipe dismissal, zero morph jank.
@@ -210,6 +228,28 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val empty = state.lines.isEmpty() && state.streaming.isEmpty() && state.streamingReasoning.isEmpty()
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val attachContext = LocalContext.current
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) scope.launch {
+            val mime = attachContext.contentResolver.getType(uri).orEmpty()
+            if (mime.startsWith("image/")) {
+                val photo = withContext(Dispatchers.IO) { readPhoto(attachContext, uri) }
+                if (photo == null) vm.surfaceError("Couldn't read that photo.") else photos = listOf(photo)
+            } else {
+                val attached = withContext(Dispatchers.IO) { readAttachment(attachContext, uri) }
+                when (attached) {
+                    null -> vm.surfaceError("Couldn't read that file.")
+                    is Attachment.Binary -> vm.surfaceError("Choose a photo or text file.")
+                    is Attachment.Text -> input = buildString {
+                        append(input)
+                        if (input.isNotBlank()) append("\n\n")
+                        append("File: ").append(attached.name).append("\n```\n").append(attached.content).append("\n```")
+                    }
+                }
+            }
+        }
+    }
 
     LaunchedEffect(state.lines.size, state.streaming.length, state.streamingReasoning.length) {
         // The list appends exactly one combined streaming item, so this is a single flag, not a sum.
@@ -273,7 +313,14 @@ fun ChatScreen(
             ) { isEmpty ->
                 Box(Modifier.fillMaxSize()) {
                 if (isEmpty) {
-                    EmptyState(onSuggestion = { input = it }, modifier = Modifier.align(Alignment.Center))
+                    AnimatedVisibility(
+                        visible = !imeVisible,
+                        enter = fadeIn(tween(150)),
+                        exit = fadeOut(tween(120)),
+                        modifier = Modifier.align(Alignment.Center),
+                    ) {
+                        EmptyState(onSuggestion = { input = it })
+                    }
                 } else {
                     val lastAssistantIndex = state.lines.indexOfLast { it is ChatLine.Assistant }
                     // iMessage-style insert (apple-motion-exact.md §1): only lines appended AFTER this
@@ -286,7 +333,8 @@ fun ChatScreen(
                     // should only ever come from the text field.
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.elasticOverscroll().fillMaxSize(),
+                        overscrollEffect = null,
                         // Padding clears the floating chrome at rest while letting scrolled
                         // content slide beneath the pills (top) and the composer (bottom).
                         contentPadding = PaddingValues(
@@ -317,7 +365,7 @@ fun ChatScreen(
                             val rhythm = if (line is ChatLine.ToolActivity) 3.dp else 8.dp
                             Box(Modifier.messageEnter(shouldAnimate).padding(vertical = rhythm)) {
                                 when (line) {
-                                    is ChatLine.User -> UserBubble(line.text)
+                                    is ChatLine.User -> UserBubble(line.text, line.images)
                                     is ChatLine.Assistant -> AssistantTurn(
                                         text = line.text,
                                         reasoning = reasoningBefore(state.lines, i),
@@ -426,6 +474,16 @@ fun ChatScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 ContextRing(fraction = ctxFrac, modifier = Modifier.size(22.dp), stroke = 2.5f)
+                DropdownMenu(
+                    expanded = contextOpen,
+                    onDismissRequest = { contextOpen = false },
+                    offset = DpOffset(0.dp, 8.dp),
+                    modifier = Modifier.width(280.dp),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    containerColor = colors.surfaceContainerHigh,
+                ) {
+                    ContextPopover(state)
+                }
             }
             Box(Modifier.clip(ShapePill).background(colors.surfaceContainerHigh)) {
                 PcIconButton(Icons.Filled.Add, "New chat") { vm.newChat() }
@@ -463,13 +521,30 @@ fun ChatScreen(
             Composer(
                 state = state,
                 input = input,
+                photos = photos,
                 onInput = { input = it },
+                onRemovePhoto = { photos = emptyList() },
                 hazeState = hazeState,
                 hazeStyle = hazeStyle,
-                onMenuToggle = { menuPanel = "main"; toolsOpen = true },
+                menuExpanded = toolsOpen,
+                onMenuToggle = { menuPanel = "main"; toolsOpen = !toolsOpen },
+                onMenuDismiss = { toolsOpen = false },
+                menuContent = {
+                    WrenchMenu(
+                        state = state,
+                        vm = vm,
+                        panel = menuPanel,
+                        onPanel = { menuPanel = it },
+                        onUpload = {
+                            toolsOpen = false
+                            picker.launch(arrayOf("image/*", "text/*", "application/json", "application/xml"))
+                        },
+                        modifier = Modifier.width(320.dp),
+                    )
+                },
                 onSend = {
                     rootView.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
-                    vm.send(input); input = ""; toolsOpen = false
+                    vm.send(input, photos); input = ""; photos = emptyList(); toolsOpen = false
                 },
                 onStop = vm::cancel,
                 sendOnEnter = sendOnEnter,
@@ -480,41 +555,8 @@ fun ChatScreen(
         // The file picker is registered at SCREEN level: registering it inside the sheet's
         // conditional composition dropped results whenever the sheet/activity got recreated while
         // picking (device feedback: "attaching images/files doesn't work").
-        val attachContext = LocalContext.current
-        val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-            // Read off the main thread: a SAF/cloud content URI can block on disk or network, and this
-            // callback runs on the UI thread. The when() resumes back on Main to touch input/surfaceError.
-            if (uri != null) scope.launch {
-                val attached = withContext(Dispatchers.IO) { readAttachment(attachContext, uri) }
-                when (attached) {
-                    null -> vm.surfaceError("Couldn't read that file.")
-                    is Attachment.Binary -> vm.surfaceError("Only text files can be attached for now - image support is coming.")
-                    is Attachment.Text -> input = buildString {
-                        append(input)
-                        if (input.isNotBlank()) append("\n\n")
-                        append("File: ").append(attached.name).append("\n```\n").append(attached.content).append("\n```")
-                    }
-                }
-            }
-        }
-
-        // Native Material bottom sheets (the Android-standard picker, like Claude's app): the
-        // platform owns the slide-up / scrim / drag-to-dismiss motion. `close` hides with that same
-        // animation before the trigger flag flips, so taps that pick-and-close slide instead of snap.
-        if (toolsOpen) PcSheet(onDismiss = { toolsOpen = false }) { close ->
-            WrenchMenu(
-                state = state,
-                vm = vm,
-                panel = menuPanel,
-                onPanel = { menuPanel = it },
-                onPickFile = { picker.launch(arrayOf("*/*")); close() },
-            )
-        }
         if (modelOpen) PcSheet(onDismiss = { modelOpen = false }) { close ->
             ModelSheet(state = state, vm = vm, onDone = close)
-        }
-        if (contextOpen) PcSheet(onDismiss = { contextOpen = false }) {
-            ContextPopover(state)
         }
 
         state.pendingPermission?.let { r ->
@@ -598,11 +640,7 @@ private fun EmptyState(onSuggestion: (String) -> Unit, modifier: Modifier = Modi
             Modifier.size(56.dp).clip(ShapePill).background(colors.surfaceContainer),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                ">_",
-                style = MaterialTheme.typography.titleLarge.copy(fontFamily = PcMono, fontWeight = FontWeight.Bold),
-                color = colors.onBackground,
-            )
+            Icon(painter = painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, tint = colors.onBackground, modifier = Modifier.size(44.dp))
         }
         Spacer(Modifier.height(14.dp))
         Text("What should we build?", style = MaterialTheme.typography.titleLarge, color = colors.onBackground)
@@ -662,7 +700,7 @@ private fun QueuedMessages(queued: List<String>) {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun UserBubble(text: String) {
+private fun UserBubble(text: String, images: List<MessagePart.Image>) {
     val colors = MaterialTheme.colorScheme
     val clipboard = LocalClipboardManager.current
     val view = LocalView.current
@@ -681,8 +719,20 @@ private fun UserBubble(text: String) {
                         clipboard.setText(AnnotatedString(text))
                     },
                 )
-                .padding(horizontal = 15.dp, vertical = 11.dp),
-        ) { Text(text, style = MaterialTheme.typography.bodyMedium, color = colors.onBackground) }
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                images.forEach { PhotoThumbnail(it, Modifier.fillMaxWidth().height(180.dp)) }
+                if (text.isNotEmpty()) {
+                    Text(
+                        text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onBackground,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -949,42 +999,92 @@ private fun ToolActivityView(line: ChatLine.ToolActivity) {
     val colors = MaterialTheme.colorScheme
     val error = line.status == ToolStatus.ERROR
     val running = line.status == ToolStatus.RUNNING
-    // Live tools pulse their icon; finished ones sit quiet. (Compact chip per revamp-diagnosis #2 -
-    // the old full-width card slabs dominated the conversation.)
+    var expanded by remember(line.id) { mutableStateOf(false) }
     val iconAlpha = if (running) {
         val pulse by rememberInfiniteTransition(label = "tool").animateFloat(
-            initialValue = 0.35f, targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse), label = "toolPulse",
+            initialValue = 0.45f, targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "toolPulse",
         )
         pulse
     } else 1f
-    Row(
-        Modifier.clip(ShapePill)
-            .background(if (error) colors.errorContainer else colors.surfaceContainer)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    Column(
+        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
+            .background(if (error) colors.errorContainer else colors.surfaceContainerLow)
+            .clickable { expanded = !expanded }
+            .animateContentSize(PhoneSprings.standardSpec()),
     ) {
-        Icon(
-            toolIcon(line.name), null,
-            tint = (if (error) colors.onErrorContainer else colors.secondary).copy(alpha = iconAlpha),
-            modifier = Modifier.size(13.dp),
-        )
-        Text(
-            line.name,
-            style = MaterialTheme.typography.labelSmall.copy(fontFamily = PcMono, fontWeight = FontWeight.Medium),
-            color = if (error) colors.onErrorContainer else colors.onSurface,
-        )
-        if (line.detail.isNotBlank()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                Modifier.size(30.dp).clip(MaterialTheme.shapes.small)
+                    .background(if (error) colors.error.copy(alpha = 0.12f) else colors.surfaceContainerHigh),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    toolIcon(line.name), null,
+                    tint = (if (error) colors.onErrorContainer else colors.secondary).copy(alpha = iconAlpha),
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    toolAction(line.name, line.status),
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+                    color = if (error) colors.onErrorContainer else colors.onSurface,
+                )
+                if (line.detail.isNotBlank()) {
+                    Text(
+                        line.detail.lineSequence().firstOrNull().orEmpty(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (error) colors.onErrorContainer.copy(alpha = 0.7f) else colors.tertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
             Text(
-                line.detail.lineSequence().firstOrNull().orEmpty(),
+                when (line.status) {
+                    ToolStatus.RUNNING -> "Running"
+                    ToolStatus.DONE -> "Done"
+                    ToolStatus.ERROR -> "Failed"
+                },
                 style = MaterialTheme.typography.labelSmall,
-                color = if (error) colors.onErrorContainer.copy(alpha = 0.7f) else colors.tertiary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 200.dp),
+                color = if (error) colors.onErrorContainer else colors.tertiary,
             )
         }
+        AnimatedVisibility(visible = expanded && line.detail.isNotBlank(), enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            Text(
+                line.detail,
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = PcMono),
+                color = if (error) colors.onErrorContainer else colors.secondary,
+                modifier = Modifier.fillMaxWidth().padding(start = 50.dp, end = 12.dp, bottom = 10.dp),
+                maxLines = 12,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private fun toolAction(name: String, status: ToolStatus): String {
+    val active = status == ToolStatus.RUNNING
+    return when {
+        name == "read" -> if (active) "Reading file" else "Read file"
+        name == "write" -> if (active) "Writing file" else "Wrote file"
+        name == "edit" || name == "apply_patch" -> if (active) "Editing code" else "Edited code"
+        name == "ls" || name == "glob" -> if (active) "Browsing files" else "Browsed files"
+        name == "grep" -> if (active) "Searching code" else "Searched code"
+        name == "bash" -> if (active) "Running command" else "Ran command"
+        name == "websearch" -> if (active) "Searching the web" else "Searched the web"
+        name == "webfetch" -> if (active) "Opening webpage" else "Opened webpage"
+        name.startsWith("git_") -> if (active) "Running Git" else "Git · ${name.removePrefix("git_").replace('_', ' ')}"
+        name == "question" -> "Asked a question"
+        name == "task" -> if (active) "Delegating task" else "Completed delegated task"
+        name == "skill" -> if (active) "Loading skill" else "Loaded skill"
+        name.startsWith("todo") -> if (active) "Updating tasks" else "Updated tasks"
+        else -> name.replace('_', ' ').replaceFirstChar { it.uppercase() }
     }
 }
 
@@ -1069,7 +1169,7 @@ internal fun TodoPanel(todos: List<TodoItem>) {
         }
         if (expanded) {
             Column(
-                Modifier.fillMaxWidth().heightIn(max = 180.dp).verticalScroll(rememberScrollState())
+                Modifier.elasticOverscroll().fillMaxWidth().heightIn(max = 180.dp).verticalScroll(rememberScrollState(), overscrollEffect = null)
                     .padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
@@ -1092,10 +1192,15 @@ internal fun TodoPanel(todos: List<TodoItem>) {
 private fun Composer(
     state: ChatUiState,
     input: String,
+    photos: List<MessagePart.Image>,
     onInput: (String) -> Unit,
+    onRemovePhoto: () -> Unit,
     hazeState: HazeState,
     hazeStyle: HazeStyle,
+    menuExpanded: Boolean,
     onMenuToggle: () -> Unit,
+    onMenuDismiss: () -> Unit,
+    menuContent: @Composable ColumnScope.() -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
     sendOnEnter: Boolean,
@@ -1108,18 +1213,46 @@ private fun Composer(
             // replaced by the animated gradient ring (energy = generation in progress).
             // v2 composer: a floating blurred capsule - the conversation stays visible through it
             // (signed prototype). The ethereal ring still takes over while the model runs.
-            Row(
+            Column(
                 Modifier.fillMaxWidth()
                     .neuralRing(active = state.isRunning, shape = ShapeComposer)
                     .clip(ShapeComposer)
                     .background(colors.surfaceContainerHigh)
                     .animateContentSize(spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow))
                     .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                if (photos.isNotEmpty()) {
+                    Box(Modifier.padding(start = 44.dp, end = 4.dp, top = 2.dp, bottom = 6.dp)) {
+                        PhotoThumbnail(photos.first(), Modifier.size(72.dp).clip(MaterialTheme.shapes.medium))
+                        Box(
+                            Modifier.align(Alignment.TopEnd).offset(x = 7.dp, y = (-7).dp)
+                                .size(24.dp).clip(ShapePill).background(colors.inverseSurface)
+                                .clickable(onClick = onRemovePhoto),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Filled.Close, "Remove photo", tint = colors.inverseOnSurface, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                 // ChatGPT-style: a bare + opens tools/attach; the capsule itself is the only container.
-                PcIconButton(Icons.Filled.Add, "Tools", tint = colors.secondary, onClick = onMenuToggle)
+                Box {
+                    PcIconButton(Icons.Filled.Add, "Tools", tint = colors.secondary, onClick = onMenuToggle)
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = onMenuDismiss,
+                        offset = DpOffset(0.dp, (-8).dp),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        containerColor = colors.surfaceContainerHigh,
+                        tonalElevation = 6.dp,
+                        shadowElevation = 12.dp,
+                        content = menuContent,
+                    )
+                }
                 Box(Modifier.weight(1f).padding(horizontal = 4.dp)) {
                     if (input.isEmpty()) Text("Message...", style = MaterialTheme.typography.bodySmall, color = colors.secondary)
                     BasicTextField(
@@ -1133,7 +1266,7 @@ private fun Composer(
                         } else {
                             KeyboardOptions.Default
                         },
-                        keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank()) onSend() }),
+                        keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank() || photos.isNotEmpty()) onSend() }),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -1141,7 +1274,7 @@ private fun Composer(
                 // spring and swaps send<->stop via plain crossfade. While a turn runs, typing shows Send
                 // (which queues the message) and an empty box shows Stop - so you can queue or stop.
                 AnimatedVisibility(
-                    visible = input.isNotBlank() || state.isRunning,
+                    visible = input.isNotBlank() || photos.isNotEmpty() || state.isRunning,
                     enter = scaleIn(initialScale = 0.6f, animationSpec = PhoneSprings.quickSpec()) + fadeIn(PhoneTweens.popEnter),
                     exit = scaleOut(targetScale = 0.6f, animationSpec = PhoneSprings.quickSpec()) + fadeOut(PhoneTweens.popExit),
                 ) {
@@ -1157,6 +1290,7 @@ private fun Composer(
                         }
                     }
                 }
+                }
             }
         }
     }
@@ -1167,6 +1301,47 @@ private sealed interface Attachment {
     data class Text(val name: String, val content: String) : Attachment
     data object Binary : Attachment
 }
+
+@Composable
+private fun PhotoThumbnail(image: MessagePart.Image, modifier: Modifier = Modifier) {
+    val bitmap = remember(image.data) {
+        runCatching {
+            val bytes = Base64.decode(image.data, Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        }.getOrNull()
+    }
+    if (bitmap != null) {
+        Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier.clip(MaterialTheme.shapes.medium))
+    }
+}
+
+private fun readPhoto(context: android.content.Context, uri: Uri): MessagePart.Image? = runCatching {
+    val decoded = if (Build.VERSION.SDK_INT >= 28) {
+        ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            val width = info.size.width
+            val height = info.size.height
+            val scale = minOf(1f, 1600f / maxOf(width, height))
+            if (scale < 1f) decoder.setTargetSize((width * scale).toInt(), (height * scale).toInt())
+        }
+    } else {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 2400) sample *= 2
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+    } ?: return@runCatching null
+    val maxSide = maxOf(decoded.width, decoded.height)
+    val bitmap = if (maxSide > 1600) {
+        val scale = 1600f / maxSide
+        Bitmap.createScaledBitmap(decoded, (decoded.width * scale).toInt(), (decoded.height * scale).toInt(), true)
+    } else decoded
+    val alpha = bitmap.hasAlpha()
+    val output = ByteArrayOutputStream()
+    bitmap.compress(if (alpha) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 88, output)
+    MessagePart.Image(if (alpha) "image/png" else "image/jpeg", Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP))
+}.getOrNull()
 
 /** Bounded 64KB read with UTF-8-safe trim; binary content (NUL bytes) is detected, not mangled. */
 private fun readAttachment(context: android.content.Context, uri: Uri): Attachment? = runCatching {
@@ -1204,46 +1379,57 @@ private fun WrenchMenu(
     vm: ChatViewModel,
     panel: String,
     onPanel: (String) -> Unit,
-    onPickFile: () -> Unit,
+    onUpload: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    // Sheet content: the M3 ModalBottomSheet supplies surface, scrim, and back handling.
-    // Critically damped (dampingRatio = 1f) so the sheet height settles flat - the emphasized spring's
-    // overshoot read as the sheet "bouncing" before landing. Matches the composer capsule's spec.
+    val reasoningEfforts = vm.reasoningEfforts(state.selected)
     Column(
-        modifier.fillMaxWidth().animateContentSize(spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow)),
+        modifier.animateContentSize(spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow)),
     ) {
         AnimatedContent(
             targetState = panel,
-            transitionSpec = { (fadeIn(PhoneTweens.popEnter) togetherWith fadeOut(PhoneTweens.popExit)) },
+            transitionSpec = {
+                if (targetState == "thinking") {
+                    (slideInHorizontally(PhoneSprings.quickSpec()) { it / 5 } + fadeIn(PhoneTweens.popEnter)) togetherWith
+                        (slideOutHorizontally(PhoneSprings.quickSpec()) { -it / 6 } + fadeOut(PhoneTweens.popExit))
+                } else {
+                    (slideInHorizontally(PhoneSprings.quickSpec()) { -it / 5 } + fadeIn(PhoneTweens.popEnter)) togetherWith
+                        (slideOutHorizontally(PhoneSprings.quickSpec()) { it / 6 } + fadeOut(PhoneTweens.popExit))
+                }
+            },
             label = "panel",
         ) { p ->
             when (p) {
                 "thinking" -> PickList(title = "Thinking", onBack = { onPanel("main") }) {
-                    ReasoningEffort.entries.forEach { e ->
+                    reasoningEfforts.forEach { e ->
                         PickRow(label = e.display(), selected = state.effort == e) { vm.setEffort(e); onPanel("main") }
                     }
                 }
-                else -> Column(Modifier.padding(horizontal = 8.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                else -> Column(Modifier.padding(6.dp)) {
                     Text(
-                        "Tools",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.tertiary,
-                        modifier = Modifier.padding(start = 14.dp, top = 2.dp, bottom = 6.dp),
+                        "Add to chat",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.onBackground,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
                     )
-                    ToolRow(icon = Icons.Outlined.AttachFile, label = "Photo or file", onClick = onPickFile)
-                    ToolRow(
-                        icon = Icons.Outlined.AutoAwesome,
-                        label = "Thinking",
-                        value = if (vm.supportsReasoning(state.selected)) state.effort.display() else "Off",
-                        onClick = { onPanel("thinking") },
+                    PopoverActionRow(Icons.Outlined.AttachFile, "Upload", "Photo or text file", onClick = onUpload)
+                    PopoverActionRow(
+                        Icons.Outlined.AutoAwesome,
+                        "Thinking",
+                        when {
+                            reasoningEfforts.isEmpty() -> "Unavailable for this model"
+                            reasoningEfforts.size == 1 -> "Automatic"
+                            else -> state.effort.display()
+                        },
+                        showsNext = reasoningEfforts.size > 1,
+                        onClick = if (reasoningEfforts.size > 1) ({ onPanel("thinking") }) else null,
                     )
-                    ToolRow(
-                        icon = Icons.Outlined.Checklist,
-                        label = "Plan mode",
-                        toggle = state.agentMode == AgentMode.PLAN,
-                        onToggle = { on -> vm.setAgentMode(if (on) AgentMode.PLAN else AgentMode.BUILD) },
+                    PopoverActionRow(
+                        Icons.Outlined.Checklist,
+                        "Mode",
+                        if (state.agentMode == AgentMode.PLAN) "Plan" else "Build",
+                        onClick = { vm.setAgentMode(if (state.agentMode == AgentMode.PLAN) AgentMode.BUILD else AgentMode.PLAN) },
                     )
                 }
             }
@@ -1280,7 +1466,7 @@ private fun ModelSheet(state: ChatUiState, vm: ChatViewModel, onDone: () -> Unit
                 )
             }
         }
-        Column(Modifier.heightIn(max = 480.dp).padding(horizontal = 6.dp, vertical = 4.dp).verticalScroll(rememberScrollState())) {
+        Column(Modifier.elasticOverscroll().heightIn(max = 480.dp).padding(horizontal = 6.dp, vertical = 4.dp).verticalScroll(rememberScrollState(), overscrollEffect = null)) {
             fun key(o: ModelOption) = "${o.providerId}/${o.modelId}"
             // Respect provider management: disabled providers and hidden models stay out of the picker.
             val visible = state.models.filter {
@@ -1336,7 +1522,7 @@ private fun PickList(title: String, onBack: () -> Unit, content: @Composable () 
             }
             Text(title, style = MaterialTheme.typography.titleSmall, color = colors.onBackground)
         }
-        Column(Modifier.heightIn(max = 392.dp).padding(horizontal = 6.dp, vertical = 4.dp).verticalScroll(rememberScrollState())) {
+        Column(Modifier.elasticOverscroll().heightIn(max = 392.dp).padding(horizontal = 6.dp, vertical = 4.dp).verticalScroll(rememberScrollState(), overscrollEffect = null)) {
             content()
         }
     }
@@ -1346,7 +1532,9 @@ private fun PickList(title: String, onBack: () -> Unit, content: @Composable () 
 private fun ModelRow(option: ModelOption, selected: Boolean, isFav: Boolean, onSelect: () -> Unit, onToggleFav: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable(onClick = onSelect).heightIn(min = 48.dp).padding(start = 14.dp),
+        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
+            .background(if (selected) colors.surfaceContainerHigh else Color.Transparent)
+            .clickable(onClick = onSelect).heightIn(min = 52.dp).padding(start = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -1390,44 +1578,30 @@ private fun PickRow(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-// Popout rows share ONE list language with the redesigned settings (round-3: "not formatted,
-// don't follow any design language"): 48dp menu rows, 14dp side padding, bodyLarge labels,
-// onSurfaceVariant secondaries, real chevron glyphs.
-
-/**
- * One tools-menu row, stripped to essentials: a thin line icon, the label, then a value+chevron OR
- * a toggle. No tonal tile, no subtitle - the row IS the button, with a spring press-pop on touch.
- */
 @Composable
-private fun ToolRow(
+private fun PopoverActionRow(
     icon: ImageVector,
     label: String,
-    value: String? = null,
-    toggle: Boolean? = null,
-    onToggle: ((Boolean) -> Unit)? = null,
-    onClick: (() -> Unit)? = null,
+    detail: String,
+    showsNext: Boolean = false,
+    onClick: (() -> Unit)?,
 ) {
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     Row(
-        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
-            .then(
-                if (onClick != null)
-                    Modifier.pressFeedback(interaction, pressedScale = 0.97f)
-                        .clickable(interactionSource = interaction, indication = ripple(), onClick = onClick)
-                else Modifier,
-            )
-            .heightIn(min = 50.dp).padding(start = 14.dp, end = 12.dp),
+        Modifier.fillMaxWidth().then(if (onClick != null) Modifier.pressFeedback(interaction, pressedScale = 0.98f) else Modifier)
+            .clip(MaterialTheme.shapes.medium)
+            .then(if (onClick != null) Modifier.clickable(interactionSource = interaction, indication = ripple(), onClick = onClick) else Modifier)
+            .heightIn(min = 56.dp).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
-        Icon(icon, null, tint = colors.secondary, modifier = Modifier.size(20.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (value != null) {
-            Text(value, style = MaterialTheme.typography.bodyMedium, color = colors.tertiary, maxLines = 1)
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(18.dp))
+        Icon(icon, null, tint = if (onClick == null) colors.tertiary else colors.secondary, modifier = Modifier.size(20.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = colors.onBackground)
+            Text(detail, style = MaterialTheme.typography.labelMedium, color = colors.tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (toggle != null && onToggle != null) PcToggle(checked = toggle, onChange = onToggle)
+        if (showsNext) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(19.dp))
     }
 }
 
@@ -1533,9 +1707,12 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
 
 @Composable
 private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>) -> Unit, onDismiss: () -> Unit) {
+    if (request.questions.isEmpty()) {
+        LaunchedEffect(request) { onSubmit(emptyList()) }
+        return
+    }
     val colors = MaterialTheme.colorScheme
-    // rememberSaveable so in-progress selections and custom text survive rotation / process death while the
-    // dialog is open (the pending question itself lives in the ViewModel; only this partial input was fragile).
+    var page by rememberSaveable(request) { mutableStateOf(0) }
     val selections = rememberSaveable(
         request,
         saver = listSaver<List<SnapshotStateList<String>>, ArrayList<String>>(
@@ -1550,47 +1727,85 @@ private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>
             restore = { saved -> saved.map { mutableStateOf(it) } },
         ),
     ) { request.questions.map { mutableStateOf("") } }
+    val question = request.questions[page]
     PcDialog(onDismiss) {
-        Text("The agent has a question", style = MaterialTheme.typography.titleMedium, color = colors.onBackground, modifier = Modifier.padding(bottom = 8.dp))
-        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            request.questions.forEachIndexed { qi, question ->
-                Column(Modifier.padding(top = if (qi == 0) 0.dp else Spacing.s)) {
-                    if (question.header.isNotBlank()) Text(question.header.uppercase(), style = MaterialTheme.typography.labelSmall, color = colors.tertiary)
-                    Text(question.question, style = MaterialTheme.typography.bodySmall, color = colors.onBackground)
-                }
-                question.options.forEach { option ->
-                    val selected = selections[qi].contains(option.label)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (question.header.isBlank()) "Question" else question.header,
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.secondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text("${page + 1} of ${request.questions.size}", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
+        }
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                val direction = if (targetState > initialState) 1 else -1
+                (slideInHorizontally(tween(220)) { direction * it / 4 } + fadeIn(tween(160))) togetherWith
+                    (slideOutHorizontally(tween(180)) { -direction * it / 4 } + fadeOut(tween(120)))
+            },
+            label = "questionPage",
+        ) { index ->
+            val item = request.questions[index]
+            Column(
+                Modifier.elasticOverscroll().padding(top = 12.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState(), overscrollEffect = null),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(item.question, style = MaterialTheme.typography.titleMedium, color = colors.onBackground)
+                Text(
+                    if (item.multiSelect) "Choose any that apply, or write your own." else "Choose one, or write your own.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                    modifier = Modifier.padding(bottom = 2.dp),
+                )
+                item.options.forEach { option ->
+                    val selected = selections[index].contains(option.label)
                     Row(
-                        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
-                            .background(if (selected) colors.surfaceContainerHighest else colors.surface)
+                        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
+                            .background(if (selected) colors.surfaceContainerHighest else colors.surfaceContainer)
                             .clickable {
-                                val chosen = selections[qi]
-                                if (question.multiSelect) { if (selected) chosen.remove(option.label) else chosen.add(option.label) }
-                                else { chosen.clear(); if (!selected) chosen.add(option.label) }
+                                val chosen = selections[index]
+                                if (item.multiSelect) {
+                                    if (selected) chosen.remove(option.label) else chosen.add(option.label)
+                                } else {
+                                    chosen.clear()
+                                    if (!selected) chosen.add(option.label)
+                                }
                             }
-                            .heightIn(min = Spacing.touchTarget).padding(Spacing.s),
+                            .heightIn(min = 56.dp).padding(horizontal = Spacing.s, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(option.label, style = MaterialTheme.typography.bodySmall, color = colors.onBackground)
-                            if (option.description.isNotBlank()) Text(option.description, style = MaterialTheme.typography.labelMedium, color = colors.secondary, modifier = Modifier.padding(top = 2.dp))
+                            Text(option.label, style = MaterialTheme.typography.bodyMedium, color = colors.onBackground)
+                            if (option.description.isNotBlank()) {
+                                Text(option.description, style = MaterialTheme.typography.bodySmall, color = colors.secondary, modifier = Modifier.padding(top = 2.dp))
+                            }
                         }
-                        if (selected) Icon(Icons.Filled.Check, null, tint = colors.onBackground, modifier = Modifier.size(16.dp))
+                        if (selected) Icon(Icons.Filled.Check, null, tint = colors.primary, modifier = Modifier.size(18.dp))
                     }
                 }
-                dev.phonecode.app.ui.components.PcField(customAnswers[qi].value, { customAnswers[qi].value = it }, "Other / custom...")
+                dev.phonecode.app.ui.components.PcField(customAnswers[index].value, { customAnswers[index].value = it }, "Something else")
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-            DialogAction("Skip", emphasized = false, onClick = onDismiss)
-            Spacer(Modifier.width(8.dp))
-            DialogAction("Submit", emphasized = true) {
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            DialogAction("Skip all", emphasized = false, onClick = onDismiss)
+            Spacer(Modifier.weight(1f))
+            if (page > 0) DialogAction("Back", emphasized = false) { page-- }
+            Spacer(Modifier.width(4.dp))
+            if (page < request.questions.lastIndex) {
+                DialogAction("Next", emphasized = true) { page++ }
+            } else {
+                DialogAction("Submit", emphasized = true) {
                 onSubmit(request.questions.mapIndexed { qi, question ->
                     val chosen = selections[qi].toMutableList()
                     val custom = customAnswers[qi].value.trim()
                     if (custom.isNotEmpty()) chosen.add(custom)
                     UserAnswer(question.question, chosen)
                 })
+                }
             }
         }
     }

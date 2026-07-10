@@ -19,6 +19,7 @@ import dev.phonecode.tools.todo.TodoPriority
 import dev.phonecode.tools.todo.TodoStatus
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -29,7 +30,10 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w412dp-h915dp-xhdpi")
 class TodoPanelRenderTest {
 
-    @get:Rule val compose = createComposeRule()
+    private val compose = createComposeRule()
+
+    @get:Rule
+    val rules: RuleChain = RuleChain.outerRule(debugManifestOnlyRule()).around(compose)
 
     private val todos = listOf(
         TodoItem("1", "Read the existing provider layer", TodoStatus.COMPLETED, TodoPriority.MEDIUM),

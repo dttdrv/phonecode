@@ -21,6 +21,7 @@ class RequestBodyBuildersTest {
 
     private val json = Json
     private fun openAi(req: ChatRequest) = json.parseToJsonElement(RequestBodyBuilders.toOpenAiBody(req)).jsonObject
+    private fun openRouter(req: ChatRequest) = json.parseToJsonElement(RequestBodyBuilders.toOpenAiBody(req, true)).jsonObject
     private fun anthropic(req: ChatRequest) = json.parseToJsonElement(RequestBodyBuilders.toAnthropicBody(req)).jsonObject
     private fun responses(req: ChatRequest) = json.parseToJsonElement(RequestBodyBuilders.toResponsesBody(req)).jsonObject
 
@@ -99,6 +100,14 @@ class RequestBodyBuildersTest {
         assertNull(openAi(ChatRequest(model = "gpt", messages = listOf(user("hi"))))["reasoning_effort"])
         val high = openAi(ChatRequest(model = "gpt", messages = listOf(user("hi")), reasoningEffort = ReasoningEffort.HIGH))
         assertEquals("high", high["reasoning_effort"]!!.jsonPrimitive.content)
+        val xhigh = openAi(ChatRequest(model = "gpt", messages = listOf(user("hi")), reasoningEffort = ReasoningEffort.XHIGH))
+        assertEquals("xhigh", xhigh["reasoning_effort"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun openRouterUsesNestedReasoning() {
+        val body = openRouter(ChatRequest(model = "model", messages = listOf(user("hi")), reasoningEffort = ReasoningEffort.MINIMAL))
+        assertEquals("minimal", body["reasoning"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
+        assertNull(body["reasoning_effort"])
     }
 
     @Test fun openAiUsesMaxCompletionTokens() {
@@ -116,6 +125,28 @@ class RequestBodyBuildersTest {
         val content = body["messages"]!!.jsonArray[0].jsonObject["content"]!!.jsonArray[0].jsonObject
         assertEquals("text", content["type"]!!.jsonPrimitive.content)
         assertEquals("hi", content["text"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun imagesMapToEveryWireFormat() {
+        val image = MessagePart.Image("image/jpeg", "AQID")
+        val request = ChatRequest(
+            model = "vision",
+            messages = listOf(ChatMessage(Role.USER, listOf(MessagePart.Text("What is this?"), image))),
+        )
+
+        val openAiContent = openAi(request)["messages"]!!.jsonArray[0].jsonObject["content"]!!.jsonArray
+        assertEquals("text", openAiContent[0].jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("image_url", openAiContent[1].jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("data:image/jpeg;base64,AQID", openAiContent[1].jsonObject["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content)
+
+        val anthropicImage = anthropic(request)["messages"]!!.jsonArray[0].jsonObject["content"]!!.jsonArray[1].jsonObject
+        assertEquals("image", anthropicImage["type"]!!.jsonPrimitive.content)
+        assertEquals("image/jpeg", anthropicImage["source"]!!.jsonObject["media_type"]!!.jsonPrimitive.content)
+        assertEquals("AQID", anthropicImage["source"]!!.jsonObject["data"]!!.jsonPrimitive.content)
+
+        val responseImage = responses(request)["input"]!!.jsonArray[0].jsonObject["content"]!!.jsonArray[1].jsonObject
+        assertEquals("input_image", responseImage["type"]!!.jsonPrimitive.content)
+        assertEquals("data:image/jpeg;base64,AQID", responseImage["image_url"]!!.jsonPrimitive.content)
     }
 
     @Test fun anthropicToolUseAndResultBlocks() {
@@ -143,6 +174,17 @@ class RequestBodyBuildersTest {
         assertEquals("enabled", thinking["type"]!!.jsonPrimitive.content)
         assertEquals(16000, thinking["budget_tokens"]!!.jsonPrimitive.int)
         assertEquals(16000 + 8192, body["max_tokens"]!!.jsonPrimitive.int)
+        assertEquals("high", body["output_config"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun modernAnthropicModelsUseAdaptiveThinking() {
+        listOf("claude-opus-4-8", "claude-sonnet-5").forEach { model ->
+            val body = anthropic(ChatRequest(model = model, messages = listOf(user("hi")), reasoningEffort = ReasoningEffort.XHIGH))
+            val thinking = body["thinking"]!!.jsonObject
+            assertEquals("adaptive", thinking["type"]!!.jsonPrimitive.content)
+            assertNull(thinking["budget_tokens"])
+            assertEquals("xhigh", body["output_config"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
+        }
     }
 
     @Test fun anthropicBodyMarksCacheBreakpoints() {

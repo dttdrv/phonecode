@@ -18,7 +18,7 @@ class OpenAiCompatProvider(
     override fun stream(request: ChatRequest): Flow<StreamEvent> {
         val httpRequest = Request.Builder()
             .url("${preset.baseUrl.trimEnd('/')}/chat/completions")
-            .post(RequestBodyBuilders.toOpenAiBody(request).toRequestBody(JSON_MEDIA))
+            .post(RequestBodyBuilders.toOpenAiBody(request, preset.id == "openrouter").toRequestBody(JSON_MEDIA))
             .applyAuth(preset, apiKey)
             .build()
         return streamSse(client, httpRequest, OpenAiStreamMapper())

@@ -27,7 +27,7 @@ class SessionStoreTest {
     }
 
     private val sample = listOf(
-        ChatMessage(Role.USER, listOf(MessagePart.Text("hello"))),
+        ChatMessage(Role.USER, listOf(MessagePart.Text("hello"), MessagePart.Image("image/jpeg", "AQID"))),
         ChatMessage(
             Role.ASSISTANT,
             listOf(

@@ -13,6 +13,7 @@ import dev.phonecode.app.ui.chat.MarkdownBlocks
 import dev.phonecode.app.ui.theme.PhoneCodeTheme
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -24,7 +25,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 @Config(sdk = [34], qualifiers = "w412dp-h915dp-xhdpi")
 class MarkdownRenderTest {
 
-    @get:Rule val compose = createComposeRule()
+    private val compose = createComposeRule()
+
+    @get:Rule
+    val rules: RuleChain = RuleChain.outerRule(debugManifestOnlyRule()).around(compose)
 
     @Test fun rendersTableStrikethroughAndTasks() {
         val md = """

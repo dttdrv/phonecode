@@ -48,9 +48,12 @@ class AgentLoop(
 ) {
     private val argsJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    fun run(history: List<ChatMessage>, userInput: String): Flow<AgentEvent> = flow {
+    fun run(history: List<ChatMessage>, userInput: String): Flow<AgentEvent> =
+        run(history, listOf(MessagePart.Text(userInput)))
+
+    fun run(history: List<ChatMessage>, userParts: List<MessagePart>): Flow<AgentEvent> = flow {
         val messages = history.toMutableList()
-        messages += ChatMessage(Role.USER, listOf(MessagePart.Text(userInput)))
+        messages += ChatMessage(Role.USER, userParts)
 
         val recentSignatures = ArrayDeque<String>()
         var pending: List<ChatMessage> = emptyList()

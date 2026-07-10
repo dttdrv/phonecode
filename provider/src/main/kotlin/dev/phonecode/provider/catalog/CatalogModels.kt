@@ -22,10 +22,19 @@ data class ModelInfo(
     val id: String,
     val name: String,
     val reasoning: Boolean = false,
+    @SerialName("reasoning_options") val reasoningOptions: List<ReasoningOption> = emptyList(),
     @SerialName("tool_call") val toolCall: Boolean = false,
     val attachment: Boolean = false,
     val cost: Cost? = null,
     val limit: Limit? = null,
+)
+
+@Serializable
+data class ReasoningOption(
+    val type: String,
+    val values: List<String?> = emptyList(),
+    val min: Int? = null,
+    val max: Int? = null,
 )
 
 @Serializable

@@ -1,12 +1,47 @@
-# PhoneCode
+<p align="center">
+  <img src=".github/assets/phonecode-icon.svg" width="112" height="112" alt="PhoneCode icon">
+</p>
 
-A native Android AI coding agent that runs entirely on the phone. It is an independent project,
-inspired by OpenCode and interoperable with it, not a build of OpenCode itself.
+<h1 align="center">PhoneCode</h1>
+
+<p align="center"><strong>A native Android coding agent that runs entirely on your phone.</strong></p>
+
+<p align="center">
+  <a href="https://dttdrv.xyz/phonecode">Website</a> ·
+  <a href="https://github.com/dttdrv/phonecode/releases/latest">Latest release</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/dttdrv/phonecode/actions/workflows/checks.yml"><img src="https://github.com/dttdrv/phonecode/actions/workflows/checks.yml/badge.svg" alt="Checks"></a>
+</p>
 
 PhoneCode runs the agent loop on your device. It reads, writes, and edits files in per-project
 workspaces, runs git natively, searches the web, and talks to whichever model provider you choose.
 There is no backend, no telemetry, and no account. Your API keys live in the Android Keystore, and
 your prompts go only to the provider you pick.
+
+## App
+
+<p align="center">
+  <img src=".github/assets/screens/conversation.png" width="30%" alt="PhoneCode conversation">
+  &nbsp;
+  <img src=".github/assets/screens/add-menu.png" width="30%" alt="PhoneCode add menu">
+  &nbsp;
+  <img src=".github/assets/screens/drawer.png" width="30%" alt="PhoneCode projects drawer">
+</p>
+
+<p align="center"><sub>Conversation · Anchored controls · Projects</sub></p>
+
+<p align="center">
+  <img src=".github/assets/screens/onboarding.png" width="30%" alt="PhoneCode onboarding">
+  &nbsp;
+  <img src=".github/assets/screens/settings.png" width="30%" alt="PhoneCode settings">
+</p>
+
+<p align="center"><sub>Onboarding · Settings</sub></p>
+
+PhoneCode is an independent project inspired by OpenCode and interoperable with it. It is not a
+build of OpenCode.
 
 > **Not affiliated with OpenCode.** PhoneCode is not built by, endorsed by, or affiliated with the
 > OpenCode team (Anomaly). The name "OpenCode" appears here only to describe interoperability and
@@ -31,13 +66,12 @@ your prompts go only to the provider you pick.
   chat's git button.
 - **Streaming chat** with reasoning traces, a tool-activity timeline, monochrome syntax
   highlighting, a context-window gauge, and per-model token limits that drive compaction.
-- **Privacy by construction**: keys are encrypted on-device, crash logs stay local, export and
-  import use a file you choose through the Storage Access Framework, and Auto Backup excludes
-  secrets.
+- **Privacy by construction**: keys are encrypted on-device, export and import use a file you
+  choose through the Storage Access Framework, and Auto Backup excludes secrets.
 
 ## Building
 
-Requirements: JDK 21 and the Android SDK (platform 34 and 36, build-tools 36). Android Studio is not
+Requirements: JDK 21 and the Android SDK (platform 37.0, build-tools 36). Android Studio is not
 needed.
 
 ```powershell
@@ -71,3 +105,6 @@ and in-app under Settings > About > Open-source licenses. In particular:
   with the OpenCode team.
 - **Mermaid** (MIT) - inline diagram rendering. **PRoot** (GPL-2.0) and **talloc** (LGPL-3.0) - the
   Linux sandbox. **BusyBox** (GPL-2.0) - the on-device shell toolkit.
+
+Vendored artifacts are pinned in [`VENDORED_CHECKSUMS`](VENDORED_CHECKSUMS) and verified by the
+repository checks.

@@ -34,10 +34,23 @@ PhoneCode is an independent project and is not built by, endorsed by, or affilia
 team (Anomaly). "OpenCode", "OpenCode Zen", and "OpenCode Go" are used nominatively to describe
 interoperability and origins.
 
+# Runtime libraries and visual assets
+
+| Component | Use | License |
+| --- | --- | --- |
+| AndroidX and Jetpack Compose | Android UI, lifecycle, navigation, and platform integration | Apache License 2.0 |
+| Kotlin and kotlinx | Language runtime, coroutines, and serialization | Apache License 2.0 |
+| OkHttp | HTTP, streaming, and server-sent events | Apache License 2.0 |
+| Eclipse JGit | Git repository operations | Eclipse Distribution License 1.0 |
+| Haze | Translucent Compose materials | Apache License 2.0 |
+| Inter | Interface typography | SIL Open Font License 1.1 |
+| JetBrains Mono | Code typography | SIL Open Font License 1.1 |
+
 # Vendored binary artifacts
 
 Prebuilt third-party files committed into the app, with pinned sources so each is auditable: re-fetch
-from the pinned version and compare the SHA-256.
+from the pinned version and compare the SHA-256. The repository verifies the committed files against
+`VENDORED_CHECKSUMS` on every check run.
 
 ## Alpine Linux rootfs (bundled, for the proot Linux tier)
 

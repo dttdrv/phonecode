@@ -31,4 +31,15 @@ class SharedFolderStoreTest {
             dir.deleteRecursively()
         }
     }
+
+    @Test fun projectKeepsFolderLink() {
+        val dir = Files.createTempDirectory("project-folder").toFile()
+        try {
+            val file = File(dir, "projects.json")
+            ProjectStore(file).add("project-one", "Documents", "folder-one")
+            assertEquals("folder-one", ProjectStore(file).list().single().folderId)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
 }

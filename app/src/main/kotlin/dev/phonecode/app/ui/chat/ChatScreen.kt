@@ -80,8 +80,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
@@ -95,7 +93,6 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.AttachFile
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Description
@@ -232,8 +229,6 @@ fun ChatScreen(
     var toolsOpen by remember { mutableStateOf(false) }
     var modelOpen by remember { mutableStateOf(false) }
     var contextOpen by remember { mutableStateOf(false) }
-    // Hoisted so the tools sheet can open straight onto a specific sub-panel (e.g. Thinking).
-    var menuPanel by remember { mutableStateOf("main") }
     var composerHeight by remember { mutableStateOf(0) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -536,14 +531,12 @@ fun ChatScreen(
                 hazeState = hazeState,
                 hazeStyle = hazeStyle,
                 menuExpanded = toolsOpen,
-                onMenuToggle = { menuPanel = "main"; toolsOpen = !toolsOpen },
+                onMenuToggle = { toolsOpen = !toolsOpen },
                 onMenuDismiss = { toolsOpen = false },
                 menuContent = {
                     WrenchMenu(
                         state = state,
                         vm = vm,
-                        panel = menuPanel,
-                        onPanel = { menuPanel = it },
                         onUpload = {
                             toolsOpen = false
                             picker.launch(arrayOf("image/*", "text/*", "application/json", "application/xml"))
@@ -1378,79 +1371,78 @@ private fun readAttachment(context: android.content.Context, uri: Uri): Attachme
 private fun WrenchMenu(
     state: ChatUiState,
     vm: ChatViewModel,
-    panel: String,
-    onPanel: (String) -> Unit,
     onUpload: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    val reasoningEfforts = vm.reasoningEfforts(state.selected)
-    Column(
-        modifier.animateContentSize(spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow)),
-    ) {
-        AnimatedContent(
-            targetState = panel,
-            transitionSpec = {
-                if (targetState == "thinking") {
-                    (slideInHorizontally(PhoneSprings.quickSpec()) { it / 5 } + fadeIn(PhoneTweens.popEnter)) togetherWith
-                        (slideOutHorizontally(PhoneSprings.quickSpec()) { -it / 6 } + fadeOut(PhoneTweens.popExit))
-                } else {
-                    (slideInHorizontally(PhoneSprings.quickSpec()) { -it / 5 } + fadeIn(PhoneTweens.popEnter)) togetherWith
-                        (slideOutHorizontally(PhoneSprings.quickSpec()) { it / 6 } + fadeOut(PhoneTweens.popExit))
-                }
-            },
-            label = "panel",
-        ) { p ->
-            when (p) {
-                "thinking" -> PickList(title = "Thinking", onBack = { onPanel("main") }) {
-                    reasoningEfforts.forEach { e ->
-                        PickRow(label = e.display(), selected = state.effort == e) { vm.setEffort(e); onPanel("main") }
-                    }
-                }
-                else -> Column(Modifier.padding(6.dp)) {
-                    Text(
-                        "Add to chat",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = colors.onBackground,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-                    )
-                    PopoverActionRow(Icons.Outlined.AttachFile, "Upload", "Photo or text file", onClick = onUpload)
-                    PopoverActionRow(
-                        Icons.Outlined.AutoAwesome,
-                        "Thinking",
-                        when {
-                            reasoningEfforts.isEmpty() -> "Unavailable for this model"
-                            reasoningEfforts.size == 1 -> "Automatic"
-                            else -> state.effort.display()
-                        },
-                        showsNext = reasoningEfforts.size > 1,
-                        onClick = if (reasoningEfforts.size > 1) ({ onPanel("thinking") }) else null,
-                    )
-                    PopoverActionRow(
-                        Icons.Outlined.Checklist,
-                        "Mode",
-                        if (state.agentMode == AgentMode.PLAN) "Plan" else "Build",
-                        onClick = { vm.setAgentMode(if (state.agentMode == AgentMode.PLAN) AgentMode.BUILD else AgentMode.PLAN) },
-                    )
-                }
-            }
-        }
+    Column(modifier.padding(6.dp)) {
+        Text(
+            "Add to chat",
+            style = MaterialTheme.typography.labelLarge,
+            color = colors.onBackground,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+        )
+        PopoverActionRow(Icons.Outlined.AttachFile, "Upload", "Photo or text file", onClick = onUpload)
+        PopoverActionRow(
+            Icons.Outlined.Checklist,
+            "Mode",
+            if (state.agentMode == AgentMode.PLAN) "Plan" else "Build",
+            onClick = { vm.setAgentMode(if (state.agentMode == AgentMode.PLAN) AgentMode.BUILD else AgentMode.PLAN) },
+        )
     }
 }
 
-/** Dedicated model sheet - searchable, provider-grouped, favourites first; selection closes it. */
 @Composable
 private fun ModelSheet(state: ChatUiState, vm: ChatViewModel, onDone: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     var query by remember { mutableStateOf("") }
+    val reasoningEfforts = vm.reasoningEfforts(state.selected)
     Column(Modifier.fillMaxWidth()) {
-        Text(
-            "Model",
-            style = MaterialTheme.typography.titleSmall,
-            color = colors.onBackground,
-            modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 4.dp),
-        )
-        // Search across every visible model (device feedback).
+        Row(
+            Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 2.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Model & reasoning", style = MaterialTheme.typography.titleSmall, color = colors.onBackground, modifier = Modifier.weight(1f))
+            Text(
+                "Done",
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.onBackground,
+                modifier = Modifier.clip(ShapePill).clickable(onClick = onDone).padding(horizontal = 14.dp, vertical = 9.dp),
+            )
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Reasoning", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text(
+                    if (reasoningEfforts.isEmpty()) "Not available" else state.effort.display(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.tertiary,
+                )
+            }
+            if (reasoningEfforts.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    reasoningEfforts.forEach { effort ->
+                        val selected = state.effort == effort
+                        Box(
+                            Modifier.height(40.dp).clip(ShapePill)
+                                .background(if (selected) colors.primary else colors.surfaceContainerHigh)
+                                .clickable { vm.setEffort(effort) }
+                                .padding(horizontal = 14.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                effort.display(),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (selected) colors.onPrimary else colors.onBackground,
+                            )
+                        }
+                    }
+                }
+            }
+        }
         Row(
             Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().height(40.dp)
                 .clip(ShapePill).background(colors.surfaceContainerHigh),
@@ -1472,6 +1464,7 @@ private fun ModelSheet(state: ChatUiState, vm: ChatViewModel, onDone: () -> Unit
             // Respect provider management: disabled providers and hidden models stay out of the picker.
             val visible = state.models.filter {
                 it.providerId !in state.disabledProviders && key(it) !in state.hiddenModels &&
+                    (it.providerId != "codex" || state.codexConnected) &&
                     (query.isBlank() || it.label.contains(query, ignoreCase = true) || it.modelId.contains(query, ignoreCase = true))
             }
             val grouped = visible.groupBy { it.providerId }
@@ -1486,7 +1479,7 @@ private fun ModelSheet(state: ChatUiState, vm: ChatViewModel, onDone: () -> Unit
                 )
                 favourites.forEach { option ->
                     ModelRow(option, option == state.selected, isFav = true,
-                        onSelect = { vm.selectModel(option); onDone() },
+                        onSelect = { vm.selectModel(option) },
                         onToggleFav = { vm.toggleFavourite(option) })
                 }
             }
@@ -1499,7 +1492,7 @@ private fun ModelSheet(state: ChatUiState, vm: ChatViewModel, onDone: () -> Unit
                 )
                 options.forEach { option ->
                     ModelRow(option, option == state.selected, isFav = key(option) in state.favourites,
-                        onSelect = { vm.selectModel(option); onDone() },
+                        onSelect = { vm.selectModel(option) },
                         onToggleFav = { vm.toggleFavourite(option) })
                 }
             }
@@ -1510,24 +1503,11 @@ private fun ModelSheet(state: ChatUiState, vm: ChatViewModel, onDone: () -> Unit
 // DEFAULT reads as "Auto": thinking adapts to the selected model (catalog reasoning capability)
 // instead of one global effort silently applied to everything (round-3 feedback).
 private fun ReasoningEffort.display(): String =
-    if (this == ReasoningEffort.DEFAULT) "Auto" else name.lowercase().replaceFirstChar { it.uppercase() }
-private fun AgentMode.display(): String = name.lowercase().replaceFirstChar { it.uppercase() }
-
-@Composable
-private fun PickList(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Column {
-        Row(Modifier.padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.size(28.dp).clip(MaterialTheme.shapes.extraSmall).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colors.secondary, modifier = Modifier.size(18.dp))
-            }
-            Text(title, style = MaterialTheme.typography.titleSmall, color = colors.onBackground)
-        }
-        Column(Modifier.elasticOverscroll().heightIn(max = 392.dp).padding(horizontal = 6.dp, vertical = 4.dp).verticalScroll(rememberScrollState(), overscrollEffect = null)) {
-            content()
-        }
+    when (this) {
+        ReasoningEffort.DEFAULT -> "Auto"
+        ReasoningEffort.XHIGH -> "Extra high"
+        else -> name.lowercase().replaceFirstChar { it.uppercase() }
     }
-}
 
 @Composable
 private fun ModelRow(option: ModelOption, selected: Boolean, isFav: Boolean, onSelect: () -> Unit, onToggleFav: () -> Unit) {
@@ -1562,29 +1542,10 @@ private fun ModelRow(option: ModelOption, selected: Boolean, isFav: Boolean, onS
 }
 
 @Composable
-private fun PickRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable(onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = colors.onBackground,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            modifier = Modifier.weight(1f),
-        )
-        if (selected) Icon(Icons.Filled.Check, null, tint = colors.onBackground, modifier = Modifier.size(20.dp))
-    }
-}
-
-@Composable
 private fun PopoverActionRow(
     icon: ImageVector,
     label: String,
     detail: String,
-    showsNext: Boolean = false,
     onClick: (() -> Unit)?,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -1602,7 +1563,6 @@ private fun PopoverActionRow(
             Text(label, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = colors.onBackground)
             Text(detail, style = MaterialTheme.typography.labelMedium, color = colors.tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (showsNext) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(19.dp))
     }
 }
 

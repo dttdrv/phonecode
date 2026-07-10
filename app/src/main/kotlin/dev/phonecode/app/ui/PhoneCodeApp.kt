@@ -1,6 +1,8 @@
 package dev.phonecode.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -47,6 +49,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
@@ -71,6 +74,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
@@ -78,6 +82,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +91,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
 import dev.phonecode.app.agent.ChatViewModel
+import dev.phonecode.app.R
 import dev.phonecode.app.data.Project
 import dev.phonecode.app.data.SessionMeta
 import dev.phonecode.app.data.ThemeMode
@@ -101,6 +107,7 @@ import dev.phonecode.app.ui.settings.SettingsScreen
 import dev.phonecode.app.ui.theme.PhoneCodeTheme
 import dev.phonecode.app.ui.theme.PhoneEasings
 import dev.phonecode.app.ui.theme.PhoneSprings
+import dev.phonecode.app.ui.theme.ShapePill
 import dev.phonecode.app.ui.theme.Spacing
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -203,6 +210,14 @@ fun PhoneCodeApp() {
             drawerScope.launch { drawerState.animateTo(DrawerValue.CLOSED, PhoneSprings.drawer) }
             Unit
         }
+        var projectPickFromOnboarding by remember { mutableStateOf(false) }
+        val projectPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            if (uri != null) {
+                vm.createProject(uri)
+                if (projectPickFromOnboarding) settingsVm.update { it.copy(onboarded = true) }
+            }
+            projectPickFromOnboarding = false
+        }
         LaunchedEffect(drawerState.targetValue) {
             if (drawerState.targetValue == DrawerValue.OPEN) focusManager.clearFocus()
         }
@@ -290,6 +305,10 @@ fun PhoneCodeApp() {
                                 collapsedProjects = if (id in collapsedProjects) collapsedProjects - id else collapsedProjects + id
                             },
                             onOpenChat = { closeDrawer(); route = "chat" },
+                            onNewProject = {
+                                closeDrawer()
+                                projectPicker.launch(null)
+                            },
                             onOpenSettings = { closeDrawer(); settingsInitial = "home"; route = "settings" },
                         )
                     }
@@ -311,6 +330,10 @@ fun PhoneCodeApp() {
                         settingsVm.update { it.copy(onboarded = true) }
                         settingsInitial = "git"; route = "settings"
                     },
+                    onCreateProject = {
+                        projectPickFromOnboarding = true
+                        projectPicker.launch(null)
+                    },
                     onDone = { settingsVm.update { it.copy(onboarded = true) } },
                 )
             }
@@ -326,24 +349,30 @@ private fun Sidebar(
     collapsed: Set<String>,
     onToggleCollapse: (String) -> Unit,
     onOpenChat: () -> Unit,
+    onNewProject: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val state by vm.state.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
-    var newProject by remember { mutableStateOf(false) }
     var chatMenu by remember { mutableStateOf<SessionMeta?>(null) }
     var projectMenu by remember { mutableStateOf<Project?>(null) }
     var renameChat by remember { mutableStateOf<SessionMeta?>(null) }
     var renameProject by remember { mutableStateOf<Project?>(null) }
     var archivedOpen by remember { mutableStateOf(false) }
 
-    // Pinned floats to the top; archived drops out of the main list into its own section; the
-    // rest groups by project then recency.
-    val filtered = state.sessions.filter { query.isBlank() || it.title.contains(query, ignoreCase = true) }
-    val pinned = filtered.filter { it.pinned && !it.archived }
+    val matchingProjects = state.projects.filter { project ->
+        query.isBlank() || project.name.contains(query, ignoreCase = true) ||
+            state.sessions.any { it.projectId == project.id && it.title.contains(query, ignoreCase = true) }
+    }
+    val filtered = state.sessions.filter { session ->
+        query.isBlank() || session.title.contains(query, ignoreCase = true) ||
+            state.projects.any { it.id == session.projectId && it.name.contains(query, ignoreCase = true) }
+    }
+    val pinned = filtered.filter { it.pinned && !it.archived && it.projectId == null }
     val archived = filtered.filter { it.archived }
-    val byProject = filtered.filter { !it.pinned && !it.archived }.groupBy { it.projectId }
+    val byProject = filtered.filter { !it.archived && it.projectId != null }.groupBy { it.projectId }
+    val loose = filtered.filter { !it.pinned && !it.archived && it.projectId == null }
 
     @Composable
     fun SessionItem(meta: SessionMeta, indent: androidx.compose.ui.unit.Dp) {
@@ -371,36 +400,29 @@ private fun Sidebar(
 
     Column(
         // One tone above the (scrimmed) canvas behind it - the drawer separates by material.
-        Modifier.elasticOverscroll().width(width).fillMaxSize().background(colors.surfaceContainerLow).windowInsetsPadding(WindowInsets.systemBars),
+        Modifier.width(width).fillMaxSize().background(colors.surfaceContainerLow).windowInsetsPadding(WindowInsets.systemBars),
     ) {
-        // Header: wordmark + a prominent New chat button.
         Row(
-            Modifier.fillMaxWidth().padding(start = 18.dp, end = 10.dp, top = 6.dp, bottom = 2.dp),
+            Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("PhoneCode", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.onBackground, modifier = Modifier.weight(1f))
-            val newChatInteraction = remember { MutableInteractionSource() }
-            Row(
-                Modifier.clip(MaterialTheme.shapes.small).pressFeedback(newChatInteraction, pressedScale = 0.94f)
-                    .background(colors.surfaceContainerHigh)
-                    .clickable(interactionSource = newChatInteraction, indication = ripple()) { vm.newChat(null); onOpenChat() }
-                    .padding(start = 10.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                Icon(Icons.Filled.Add, null, tint = colors.onBackground, modifier = Modifier.size(16.dp))
-                Text("New chat", style = MaterialTheme.typography.labelMedium, color = colors.onBackground)
-            }
+            Icon(
+                painter = painterResource(R.drawable.ic_phonecode_mark),
+                contentDescription = null,
+                tint = colors.onBackground,
+                modifier = Modifier.size(24.dp),
+            )
+            Text("PhoneCode", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.onBackground)
         }
-        // search
         Row(
             Modifier.fillMaxWidth().padding(horizontal = Spacing.m, vertical = Spacing.xs).height(42.dp)
-                .clip(MaterialTheme.shapes.small).background(colors.surfaceContainerHigh),
+                .clip(ShapePill).background(colors.surfaceContainerHigh),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Outlined.Search, null, tint = colors.secondary, modifier = Modifier.padding(start = 13.dp).size(18.dp))
             Box(Modifier.weight(1f).padding(horizontal = 9.dp)) {
-                if (query.isEmpty()) Text("Search chats", style = MaterialTheme.typography.bodySmall, color = colors.secondary)
+                if (query.isEmpty()) Text("Search", style = MaterialTheme.typography.bodySmall, color = colors.secondary)
                 BasicTextField(
                     value = query, onValueChange = { query = it },
                     textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onBackground),
@@ -409,24 +431,26 @@ private fun Sidebar(
             }
         }
 
-        LazyColumn(Modifier.weight(1f).padding(horizontal = 10.dp), overscrollEffect = null) {
-            if (pinned.isNotEmpty()) {
-                item(key = "h_pinned") { SectionHeader("Pinned") }
-                pinned.forEach { meta ->
-                    item(key = "pin_${meta.id}") {
-                        SessionItem(meta, 12.dp)
-                    }
-                }
-            }
+        Box(Modifier.weight(1f).clipToBounds()) {
+            Column(Modifier.fillMaxSize().elasticOverscroll()) {
+                LazyColumn(Modifier.weight(1f).padding(horizontal = 10.dp), overscrollEffect = null) {
             item {
-                Row(Modifier.fillMaxWidth().padding(start = 12.dp, top = 14.dp, bottom = 6.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Projects", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    Box(Modifier.size(28.dp).clip(MaterialTheme.shapes.extraSmall).clickable { newProject = true }, contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Add, "New project", tint = colors.secondary, modifier = Modifier.size(17.dp))
+                Text("Projects", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 6.dp))
+            }
+            if (state.projects.isEmpty() && query.isBlank()) {
+                item(key = "projects_empty") {
+                    Row(
+                        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onNewProject)
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(Icons.Outlined.Folder, null, tint = colors.secondary, modifier = Modifier.size(19.dp))
+                        Text("Link a folder", style = MaterialTheme.typography.bodyMedium, color = colors.onBackground)
                     }
                 }
             }
-            state.projects.forEach { project ->
+            matchingProjects.forEach { project ->
                 val open = project.id !in collapsed
                 item(key = "p_${project.id}") {
                     Row(
@@ -447,7 +471,6 @@ private fun Sidebar(
                         Icon(Icons.Outlined.Folder, null, tint = colors.secondary, modifier = Modifier.size(19.dp))
                         Text(project.name, style = MaterialTheme.typography.titleSmall, color = colors.onBackground, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${byProject[project.id]?.size ?: 0}", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
-                        // New chat IN this project (mockup parity).
                         Box(
                             Modifier.size(34.dp).clip(MaterialTheme.shapes.extraSmall)
                                 .clickable { vm.newChat(project.id); onOpenChat() },
@@ -495,8 +518,15 @@ private fun Sidebar(
                     }
                 }
             }
-            // Loose chats grouped by recency - Today / Yesterday / Previous 7 days / Earlier.
-            timeBuckets(byProject[null].orEmpty()).forEach { (label, chats) ->
+            if (pinned.isNotEmpty()) {
+                item(key = "h_pinned") { SectionHeader("Pinned") }
+                pinned.forEach { meta ->
+                    item(key = "pin_${meta.id}") {
+                        SessionItem(meta, 12.dp)
+                    }
+                }
+            }
+            timeBuckets(loose).forEach { (label, chats) ->
                 item(key = "h_$label") {
                     Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 4.dp))
                 }
@@ -506,7 +536,6 @@ private fun Sidebar(
                     }
                 }
             }
-            // Archived chats: collapsed by default, recoverable from the same overflow menu.
             if (archived.isNotEmpty()) {
                 item(key = "h_archived") {
                     Row(
@@ -529,23 +558,45 @@ private fun Sidebar(
             }
         }
 
-        val settingsInteraction = remember { MutableInteractionSource() }
-        Box(
-            Modifier.padding(start = 14.dp, top = 8.dp, bottom = 10.dp).size(48.dp)
-                .clip(CircleShape).background(colors.surfaceContainerHigh)
-                .pressFeedback(settingsInteraction, pressedScale = 0.92f)
-                .clickable(interactionSource = settingsInteraction, indication = ripple(), onClick = onOpenSettings),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Outlined.Settings, "Settings", tint = colors.onBackground, modifier = Modifier.size(21.dp))
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 10.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+            val settingsInteraction = remember { MutableInteractionSource() }
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).background(colors.surfaceContainerHigh)
+                    .pressFeedback(settingsInteraction, pressedScale = 0.92f)
+                    .clickable(interactionSource = settingsInteraction, indication = ripple(), onClick = onOpenSettings),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.Settings, "Settings", tint = colors.onBackground, modifier = Modifier.size(21.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val newProjectInteraction = remember { MutableInteractionSource() }
+                Box(
+                    Modifier.size(48.dp).clip(CircleShape).background(colors.surfaceContainerHigh)
+                        .pressFeedback(newProjectInteraction, pressedScale = 0.92f)
+                        .clickable(interactionSource = newProjectInteraction, indication = ripple(), onClick = onNewProject),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.CreateNewFolder, "New project", tint = colors.onBackground, modifier = Modifier.size(21.dp))
+                }
+                val newChatInteraction = remember { MutableInteractionSource() }
+                Box(
+                    Modifier.size(60.dp).clip(CircleShape).background(colors.primary)
+                        .pressFeedback(newChatInteraction, pressedScale = 0.92f)
+                        .clickable(interactionSource = newChatInteraction, indication = ripple()) { vm.newChat(null); onOpenChat() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.Edit, "New chat", tint = colors.onPrimary, modifier = Modifier.size(25.dp))
+                }
+            }
+                }
+            }
         }
     }
 
-    if (newProject) {
-        TextPromptDialog(title = "New project", placeholder = "Project name", initial = "", onDismiss = { newProject = false }) {
-            vm.createProject(it); newProject = false
-        }
-    }
     renameChat?.let { meta ->
         TextPromptDialog("Rename chat", "Chat title", meta.title, { renameChat = null }) {
             vm.renameSession(meta.id, it); renameChat = null

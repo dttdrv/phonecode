@@ -108,7 +108,7 @@ class ScreenshotTest {
     private fun dismissOnboardingIfPresent() {
         if (compose.onAllNodesWithText("Get started").fetchSemanticsNodes().isEmpty()) return
         compose.onNodeWithText("Get started").performClick()
-        compose.onNodeWithText("Skip for now").performClick()
+        compose.onNodeWithText("Continue without a project").performClick()
         compose.waitForIdle()
     }
 
@@ -159,10 +159,10 @@ class ScreenshotTest {
         shootScreen("02-tools-menu")
         dismissToolsMenu()
 
-        // Model sheet from the composer pill; re-selecting the current model closes it.
         compose.onNodeWithText("Claude Opus 4.8").performClick()
         shootScreen("03-model-picker")
         compose.onAllNodesWithText("Claude Opus 4.8").onLast().performClick()
+        compose.onAllNodesWithText("Done").onFirst().performClick()
         compose.waitForIdle()
 
         compose.onNodeWithContentDescription("New chat").performClick()

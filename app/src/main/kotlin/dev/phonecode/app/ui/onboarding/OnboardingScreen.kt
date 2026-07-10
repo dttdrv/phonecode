@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,7 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -65,6 +66,7 @@ import kotlinx.coroutines.launch
 fun OnboardingScreen(
     onConnectModels: () -> Unit,
     onConnectGitHub: () -> Unit,
+    onCreateProject: () -> Unit,
     onDone: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -85,6 +87,7 @@ fun OnboardingScreen(
                 else -> Connect(
                     onConnectModels = onConnectModels,
                     onConnectGitHub = onConnectGitHub,
+                    onCreateProject = onCreateProject,
                     onSkip = onDone,
                 )
             }
@@ -116,26 +119,30 @@ private fun Welcome(onNext: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.weight(1f))
-        Icon(
-            painter = painterResource(R.drawable.ic_phonecode_mark),
-            contentDescription = null,
-            tint = colors.onBackground,
-            modifier = Modifier.size(58.dp).entrance(0),
-        )
-        Spacer(Modifier.height(28.dp))
-        Text(
-            "PhoneCode",
-            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = colors.onBackground,
-            modifier = Modifier.entrance(90),
-        )
-        Spacer(Modifier.height(10.dp))
+        Row(
+            Modifier.entrance(0),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_phonecode_mark),
+                contentDescription = null,
+                tint = colors.onBackground,
+                modifier = Modifier.size(44.dp),
+            )
+            Text(
+                "PhoneCode",
+                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.onBackground,
+            )
+        }
+        Spacer(Modifier.height(18.dp))
         Text(
             "An AI coding agent that lives on your phone. Your keys, your repos, your device.",
             style = MaterialTheme.typography.bodyLarge,
             color = colors.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.entrance(180),
+            modifier = Modifier.entrance(100),
         )
         Spacer(Modifier.weight(1f))
         BigButton("Get started", filled = true, modifier = Modifier.entrance(280)) { onNext() }
@@ -144,19 +151,19 @@ private fun Welcome(onNext: () -> Unit) {
 }
 
 @Composable
-private fun Connect(onConnectModels: () -> Unit, onConnectGitHub: () -> Unit, onSkip: () -> Unit) {
+private fun Connect(onConnectModels: () -> Unit, onConnectGitHub: () -> Unit, onCreateProject: () -> Unit, onSkip: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(72.dp))
         Text(
-            "Connect a model",
+            "Start with a project",
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
             color = colors.onBackground,
             modifier = Modifier.entrance(0).padding(horizontal = 12.dp),
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "PhoneCode talks directly to the provider you choose. Keys are encrypted on-device and sent nowhere else.",
+            "A project links a folder on your phone with its chats, tools and working context. You stay in control of folder access.",
             style = MaterialTheme.typography.bodyLarge,
             color = colors.onSurfaceVariant,
             modifier = Modifier.entrance(70).padding(horizontal = 12.dp),
@@ -164,18 +171,16 @@ private fun Connect(onConnectModels: () -> Unit, onConnectGitHub: () -> Unit, on
         Spacer(Modifier.height(24.dp))
         Box(Modifier.entrance(150)) {
             PcGroup {
-                // Both model options land on the Providers page on purpose: it hosts BOTH the API-key entry
-                // and the "Sign in with ChatGPT (Codex)" button, so the user finishes setup in one place.
                 OptionRow(
-                    icon = Icons.Outlined.Forum,
-                    title = "Sign in with ChatGPT",
-                    sub = "Use your Codex subscription - no key needed",
-                    onClick = onConnectModels,
+                    icon = Icons.Outlined.Folder,
+                    title = "Choose a project folder",
+                    sub = "Give the agent access only to the folder you select",
+                    onClick = onCreateProject,
                 )
                 OptionRow(
                     icon = Icons.Outlined.Cloud,
-                    title = "Add an API key",
-                    sub = "Anthropic, OpenAI, OpenRouter, Gemini and more",
+                    title = "Connect a model",
+                    sub = "Sign in with ChatGPT or add a provider key",
                     onClick = onConnectModels,
                 )
                 OptionRow(
@@ -189,7 +194,7 @@ private fun Connect(onConnectModels: () -> Unit, onConnectGitHub: () -> Unit, on
         Spacer(Modifier.weight(1f))
         Box(Modifier.entrance(240).fillMaxWidth()) {
             Text(
-                "Skip for now",
+                "Continue without a project",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
                 modifier = Modifier

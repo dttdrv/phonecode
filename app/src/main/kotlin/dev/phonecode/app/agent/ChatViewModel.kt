@@ -323,8 +323,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     ?.filter { codexEligible(it.id) }
                     ?.sortedByDescending { it.id }
                     ?.map { ModelOption("codex", it.id, "${preset.displayName} · ${it.name}") }
-                    ?.takeIf { it.isNotEmpty() }
-                out += live ?: builtInModels().filter { it.providerId == "codex" }
+                    .orEmpty()
+                out += (live + builtInModels().filter { it.providerId == "codex" }).distinctBy { it.modelId }
                 return@forEach
             }
             val key = when {
@@ -346,7 +346,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // OpenCode's codex allow/deny rule (packages/opencode/src/plugin/openai/codex.ts): these ids plus any
     // OpenAI model newer than 5.4, minus the pro tier the Codex backend won't serve.
     private fun codexEligible(id: String): Boolean = when (id) {
-        in setOf("gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini") -> true
+        in setOf("gpt-5.5", "gpt-5.2", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini") -> true
         in setOf("gpt-5.5-pro") -> false
         else -> Regex("^gpt-(\\d+\\.\\d+)").find(id)?.groupValues?.get(1)?.toDoubleOrNull()?.let { it > 5.4 } ?: false
     }
@@ -505,7 +505,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun unlinkSharedFolder(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val folders = sharedFileAccess.unlink(id)
-            _state.update { it.copy(sharedFolders = folders, notice = "Folder access removed") }
+            val projectIds = projectStore.list().filter { it.folderId == id }.map { it.id }.toSet()
+            if (projectIds.isNotEmpty()) {
+                sessionStore.list().filter { it.projectId in projectIds }.forEach { sessionStore.setProject(it.id, null) }
+                projectIds.forEach(projectStore::delete)
+            }
+            val activeRemoved = currentProjectId in projectIds
+            if (activeRemoved) setActiveProject(null)
+            _state.update {
+                it.copy(
+                    sharedFolders = folders,
+                    projects = projectStore.list(),
+                    sessions = sessionStore.list(),
+                    currentProjectId = if (activeRemoved) null else it.currentProjectId,
+                    notice = "Folder access removed",
+                )
+            }
         }
     }
 
@@ -576,12 +591,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) { _state.update { it.copy(sessions = sessionStore.list(), projects = projectStore.list()) } }
     }
 
-    fun createProject(name: String) {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) return
+    fun createProject(uri: android.net.Uri) {
         viewModelScope.launch(Dispatchers.IO) {
-            projectStore.add("project-" + System.currentTimeMillis(), trimmed)
-            _state.update { it.copy(projects = projectStore.list()) }
+            runCatching {
+                val folders = sharedFileAccess.link(uri)
+                val folder = folders.first { it.handle == uri.toString() }
+                val project = projectStore.list().firstOrNull { it.folderId == folder.id }
+                    ?: projectStore.add("project-" + System.currentTimeMillis(), folder.name, folder.id)
+                Triple(folders, projectStore.list(), project)
+            }.onSuccess { (folders, projects, project) ->
+                withContext(Dispatchers.Main.immediate) {
+                    _state.update { it.copy(sharedFolders = folders, projects = projects, notice = "Project linked") }
+                    newChat(project.id)
+                }
+            }.onFailure { error ->
+                _state.update { it.copy(error = "Could not create project: ${error.message}") }
+            }
         }
     }
 
@@ -597,13 +622,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Delete a project; its chats are detached to "unsorted" rather than removed. */
     fun deleteProject(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            val folderId = projectStore.list().firstOrNull { it.id == id }?.folderId
             sessionStore.list().filter { it.projectId == id }.forEach { sessionStore.setProject(it.id, null) }
             projectStore.delete(id)
+            val folders = folderId?.let(sharedFileAccess::unlink) ?: sharedFolderStore.list()
             if (currentProjectId == id) {
                 setActiveProject(null)
-                _state.update { it.copy(projects = projectStore.list(), sessions = sessionStore.list(), currentProjectId = null) }
+                _state.update { it.copy(projects = projectStore.list(), sharedFolders = folders, sessions = sessionStore.list(), currentProjectId = null) }
             } else {
-                _state.update { it.copy(projects = projectStore.list(), sessions = sessionStore.list()) }
+                _state.update { it.copy(projects = projectStore.list(), sharedFolders = folders, sessions = sessionStore.list()) }
             }
         }
     }
@@ -748,7 +775,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun signOutCodex() {
         codexAuth.signOut() // CodexAuth owns its key names - don't duplicate them here (matches signOutGitHub)
-        _state.update { it.copy(codexConnected = false) }
+        _state.update { state ->
+            val selected = if (state.selected?.providerId == "codex") {
+                state.models.firstOrNull {
+                    it.providerId != "codex" && it.providerId !in state.disabledProviders && modelKey(it) !in state.hiddenModels
+                }
+            } else {
+                state.selected
+            }
+            state.copy(codexConnected = false, selected = selected, contextLimit = limitFor(selected)?.context)
+        }
     }
 
     // ----- GitHub (device-flow sign-in: code on screen, no tokens to paste) -----
@@ -1222,6 +1258,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 "tools - do not settle for a busybox workaround when the proper tool can be installed."
             else -> ""
         }
+        val projectFolder = _state.value.projects.firstOrNull { it.id == currentProjectId }?.folderId?.let { folderId ->
+            _state.value.sharedFolders.firstOrNull { it.id == folderId }
+        }
+        val projectDetail = projectFolder?.let {
+            ". The active Project is linked to the phone folder '${it.name}' through shared_files root='${it.id}'."
+        }.orEmpty()
         return AgentEnvironment(
             platform = "Android",
             deviceModel = Build.MODEL ?: "unknown",
@@ -1230,7 +1272,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // so the path the prompt reports is the path tools actually write to.
             workspacePath = (turnWorkspace ?: workspace).absolutePath,
             shellAvailable = true,
-            shellDetail = base + linux,
+            shellDetail = base + linux + projectDetail,
             configPath = File(getApplication<Application>().filesDir, "config").absolutePath,
         )
     }
@@ -1273,9 +1315,11 @@ fun builtInModels(): List<ModelOption> = listOf(
     // ChatGPT plan via "Sign in with ChatGPT" (Codex). Offline fallback matching OpenCode's codex allow-list;
     // the live list is catalog-driven via codexEligible(). Update if OpenCode's allow-list changes.
     ModelOption("codex", "gpt-5.5", "ChatGPT · GPT-5.5"),
+    ModelOption("codex", "gpt-5.3-codex", "ChatGPT · GPT-5.3 Codex"),
     ModelOption("codex", "gpt-5.4", "ChatGPT · GPT-5.4"),
     ModelOption("codex", "gpt-5.4-mini", "ChatGPT · GPT-5.4 Mini"),
     ModelOption("codex", "gpt-5.3-codex-spark", "ChatGPT · GPT-5.3 Codex Spark"),
+    ModelOption("codex", "gpt-5.2", "ChatGPT · GPT-5.2"),
 )
 
 private const val BUNDLED_CATALOG = """

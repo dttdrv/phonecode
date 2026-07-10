@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 import java.io.File
 
 @Serializable
-data class Project(val id: String, val name: String)
+data class Project(val id: String, val name: String, val folderId: String? = null)
 
 /** Persists the user's chat projects in a single JSON file. Sessions reference a project by id. */
 class ProjectStore(private val file: File) {
@@ -26,8 +26,8 @@ class ProjectStore(private val file: File) {
         file.writeText(json.encodeToString(serializer, projects))
     }
 
-    fun add(id: String, name: String): Project = locked {
-        val project = Project(id, name)
+    fun add(id: String, name: String, folderId: String? = null): Project = locked {
+        val project = Project(id, name, folderId)
         save(list() + project)
         project
     }

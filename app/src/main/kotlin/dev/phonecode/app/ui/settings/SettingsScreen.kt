@@ -69,6 +69,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.launch
@@ -187,7 +188,7 @@ private fun Page(title: String, onBack: () -> Unit, content: @Composable () -> U
     // The root pads no vertical insets - the page list scrolls UNDER the transparent navbar
     // (round-3 feedback: the bar must be transparent on EVERY screen); the scroll content's
     // bottom padding (below) keeps the last row reachable above it.
-    Column(Modifier.elasticOverscroll().fillMaxSize().background(colors.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(colors.background).statusBarsPadding()) {
         Row(
             Modifier.fillMaxWidth().height(Spacing.navBarHeight).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -203,13 +204,15 @@ private fun Page(title: String, onBack: () -> Unit, content: @Composable () -> U
             )
             Spacer(Modifier.width(Spacing.inputHeight))
         }
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState(), overscrollEffect = null)
-                .padding(horizontal = Spacing.m, vertical = 4.dp)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
-        ) {
-            content()
-            Spacer(Modifier.height(Spacing.xxl))
+        Box(Modifier.fillMaxSize().clipToBounds()) {
+            Column(
+                Modifier.elasticOverscroll().fillMaxSize().verticalScroll(rememberScrollState(), overscrollEffect = null)
+                    .padding(horizontal = Spacing.m, vertical = 4.dp)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+            ) {
+                content()
+                Spacer(Modifier.height(Spacing.xxl))
+            }
         }
     }
 }
@@ -441,23 +444,8 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
     val colors = MaterialTheme.colorScheme
     var addingCustom by remember { mutableStateOf(false) }
     Page("Providers", onBack) {
-        PcSectionLabel("Sign in")
-        if (state.codexConnected) {
-            PcGroup {
-                PcRow {
-                    Column(Modifier.weight(1f)) {
-                        Text("ChatGPT (Codex)", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                        Text("Signed in - pick a ChatGPT model from the model menu", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                    }
-                    Text(
-                        "Sign out",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = colors.error,
-                        modifier = Modifier.clip(MaterialTheme.shapes.extraSmall).clickable { vm.signOutCodex() }.padding(8.dp),
-                    )
-                }
-            }
-        } else {
+        if (!state.codexConnected) {
+            PcSectionLabel("ChatGPT")
             PcButton("Sign in with ChatGPT (Codex)") {
                 vm.startCodexSignIn()?.let { url ->
                     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
@@ -478,17 +466,20 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
         // EncryptedSharedPreferences, so doing it per row per frame ran crypto on every toggle/recompose.
         // Keyed on state.models (changes when custom providers reload); a fresh entry after editing a key
         // on the detail page resets this remember because the page leaves the AnimatedContent composition.
-        val providers = remember(state.models) { vm.allProviders().filter { it.id != "codex" } }
+        val providers = remember(state.models, state.codexConnected) {
+            vm.allProviders().filter { it.id != "codex" || state.codexConnected }
+        }
         val keyedIds = remember(state.models) { providers.filter { vm.keyFor(it.id).isNotBlank() }.map { it.id }.toSet() }
         PcGroup {
             providers.forEach { preset ->
                 val enabled = preset.id !in state.disabledProviders
-                val hasKey = preset.id in keyedIds
+                val connected = preset.id == "codex" && state.codexConnected
+                val hasKey = connected || preset.id in keyedIds
                 PcRow(onClick = { onOpenProvider(preset.id) }) {
                     Column(Modifier.weight(1f)) {
                         Text(preset.displayName, style = MaterialTheme.typography.bodyLarge, color = if (enabled) colors.onBackground else colors.tertiary)
                         Text(
-                            if (hasKey) "Key set" else "No key",
+                            if (connected) "Signed in with ChatGPT" else if (hasKey) "Key set" else "No key",
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (hasKey) colors.onSurfaceVariant else colors.tertiary,
                         )
@@ -520,8 +511,21 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
     val preset = vm.allProviders().firstOrNull { it.id == providerId }
     var key by remember(providerId) { mutableStateOf(vm.keyFor(providerId)) }
     Page(preset?.displayName ?: providerId, onBack) {
-        PcSectionLabel("API key")
-        PcField(key, { key = it; vm.setKey(providerId, it) }, "API key", password = true)
+        if (providerId == "codex") {
+            PcSectionLabel("Account")
+            PcGroup {
+                PcRow(onClick = { vm.signOutCodex(); onBack() }) {
+                    Column(Modifier.weight(1f)) {
+                        Text("ChatGPT", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
+                        Text("Signed in", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                    }
+                    Text("Disconnect", style = MaterialTheme.typography.labelLarge, color = colors.error)
+                }
+            }
+        } else {
+            PcSectionLabel("API key")
+            PcField(key, { key = it; vm.setKey(providerId, it) }, "API key", password = true)
+        }
         val models = state.models.filter { it.providerId == providerId }
         PcSectionLabel("Models · ${models.size}")
         if (models.isEmpty()) {

@@ -35,7 +35,7 @@ class OnboardingScreenshotTest {
     fun onboardingPages() {
         compose.setContent {
             PhoneCodeTheme(darkTheme = true) {
-                OnboardingScreen(onConnectModels = {}, onConnectGitHub = {}, onDone = {})
+                OnboardingScreen(onConnectModels = {}, onConnectGitHub = {}, onCreateProject = {}, onDone = {})
             }
         }
         compose.waitForIdle()

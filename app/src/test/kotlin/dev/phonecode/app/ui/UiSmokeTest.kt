@@ -46,7 +46,7 @@ class UiSmokeTest {
     private fun dismissOnboardingIfPresent() {
         if (compose.onAllNodesWithText("Get started").fetchSemanticsNodes().isEmpty()) return
         compose.onNodeWithText("Get started").performClick()
-        compose.onNodeWithText("Skip for now").performClick()
+        compose.onNodeWithText("Continue without a project").performClick()
         compose.waitForIdle()
     }
 
@@ -55,18 +55,17 @@ class UiSmokeTest {
         dismissOnboardingIfPresent()
         compose.onNodeWithContentDescription("Tools").performClick()
         compose.onNodeWithText("Upload").assertIsDisplayed()
-        compose.onAllNodesWithText("Thinking").onLast().performClick()
-        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("Mode").assertIsDisplayed()
         compose.onNodeWithText("Upload").performClick()
         compose.waitForIdle()
 
         // Model sheet opens from the composer's model pill (header is always visible; specific
         // model rows may sit below the sheet's scroll fold).
         compose.onNodeWithText("Claude Opus 4.8").performClick()
-        compose.onNodeWithText("Model").assertIsDisplayed()
-        // Re-selecting the current model closes the sheet (the last node is the sheet row; the
-        // first is the composer pill underneath the scrim).
+        compose.onNodeWithText("Model & reasoning").assertIsDisplayed()
         compose.onAllNodesWithText("Claude Opus 4.8").onLast().performClick()
+        val done = compose.onAllNodesWithText("Done")
+        if (done.fetchSemanticsNodes().isNotEmpty()) done.onFirst().performClick()
         compose.waitForIdle()
 
         // New chat.

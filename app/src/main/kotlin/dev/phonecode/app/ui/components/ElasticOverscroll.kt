@@ -17,9 +17,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Velocity
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -27,29 +25,36 @@ import kotlin.math.abs
 @Composable
 fun Modifier.elasticOverscroll(): Modifier {
     val scope = rememberCoroutineScope()
-    val limit = with(LocalDensity.current) { 72.dp.toPx() }
-    var offset by remember { mutableFloatStateOf(0f) }
+    var pull by remember { mutableFloatStateOf(0f) }
     var settle by remember { mutableStateOf<Job?>(null) }
     val reset = remember(scope) {
         {
             settle?.cancel()
             settle = scope.launch {
                 animate(
-                    initialValue = offset,
+                    initialValue = pull,
                     targetValue = 0f,
-                    animationSpec = spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow),
-                ) { value, _ -> offset = value }
+                    animationSpec = spring(dampingRatio = 0.86f, stiffness = Spring.StiffnessMediumLow),
+                ) { value, _ -> pull = value }
             }
         }
     }
-    val connection = remember(limit, reset) {
+    val connection = remember(reset) {
         object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.UserInput || pull == 0f || available.y * pull >= 0f) return Offset.Zero
+                settle?.cancel()
+                val consumed = if (abs(available.y) < abs(pull)) available.y else -pull
+                pull += consumed
+                return Offset(0f, consumed)
+            }
+
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                 if (source != NestedScrollSource.UserInput) return Offset.Zero
                 if (available.y != 0f) {
                     settle?.cancel()
-                    offset = (offset + available.y * 0.18f).coerceIn(-limit, limit)
-                } else if (consumed.y != 0f && offset != 0f) {
+                    pull += available.y
+                } else if (consumed.y != 0f && pull != 0f) {
                     reset()
                 }
                 return Offset.Zero
@@ -63,9 +68,10 @@ fun Modifier.elasticOverscroll(): Modifier {
     }
     return nestedScroll(connection).graphicsLayer {
         if (size.height > 0f) {
-            transformOrigin = TransformOrigin(0.5f, if (offset >= 0f) 0f else 1f)
-            translationY = offset * 0.34f
-            scaleY = 1f + abs(offset) / size.height * 0.32f
+            val distance = (1f - 1f / (abs(pull) * 0.55f / size.height + 1f)) * size.height * if (pull < 0f) -1f else 1f
+            transformOrigin = TransformOrigin(0.5f, if (distance >= 0f) 0f else 1f)
+            translationY = distance * 0.55f
+            scaleY = 1f + abs(distance) / size.height * 0.25f
         }
     }
 }

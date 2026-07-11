@@ -174,6 +174,7 @@ object RequestBodyBuilders {
             ReasoningEffort.HIGH -> 16000
             ReasoningEffort.XHIGH -> 32000
             ReasoningEffort.MAX -> 64000
+            ReasoningEffort.ULTRA -> 128000
             ReasoningEffort.DEFAULT -> 0
         }
         if (budget == 0) return (req.maxTokens ?: 4096) to null

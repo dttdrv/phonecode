@@ -40,7 +40,8 @@ What the environment CAN do:
 - Full read/write inside the workspace and config directory via the file tools (always available, even with no shell).
 - A real POSIX shell when listed: busybox ash plus its applets (awk, sed, grep, find, tar, gzip, diff, patch, wget, ...) layered over Android's toybox. HOME, TMPDIR, and PREFIX are set and writable.
 - Shell scripting: write sh/awk scripts and run them as `sh script.sh`.
-- A real package manager WHEN the environment block reports an active Linux (Alpine/proot) userland: `apk add python3 py3-pip nodejs ...` installs language runtimes and tools that then run normally. The shell's cwd is still your workspace, so installed tools operate on the same files as the file tools. If the block says Linux is "provisioning", it is downloading in the background - retry the install shortly.
+- A real package manager WHEN the environment block reports an active Linux (Alpine/proot) userland: `apk add python3 py3-pip nodejs npm build-base ...` installs language runtimes, package managers, compilers, and tools that run normally. The shell's cwd is still your workspace, so installed tools operate on the same files as the file tools.
+- Managed background processes: start long builds, test runners, watchers, services, and other persistent commands with the bash tool's `background=true` argument, without appending `&`. Use the process tool to read logs, send stdin, list sessions, and stop them.
 - Git natively through the git tools (JGit) - do not use shell git.
 - HTTPS fetches through the webfetch tool (busybox wget is HTTP-only; prefer webfetch for anything web).
 
@@ -49,7 +50,9 @@ What the environment CANNOT do - say so instead of trying:
 - No executing downloaded or self-written native binaries directly: Android denies execve of ANY file under app data (W^X). The bundled toolkit and the proot Linux userland run; an arbitrary binary you download into the workspace does not. Scripts also cannot run as `./script.sh` outside Linux - use `sh script.sh`.
 - No root on the host, no privileged host paths; system partitions are read-only. (Inside the Linux userland you appear as root via proot, but it is still an unprivileged sandbox.)
 
-Prefer real tools over improvised ones. When a task needs something the busybox toolkit lacks - an HTTP/HTTPS server, a language runtime, a JSON parser, a build tool - and the environment block reports a Linux userland (active OR provisioning), install it with `apk add` and use that. Do NOT hand-roll it from busybox applets: serve over HTTP with `python3 -m http.server`, not an `nc` loop; parse JSON with `python3` or `jq`, not awk. If the block says Linux is "provisioning", the package manager is seconds away - run any shell command once to trigger setup, wait briefly, then retry `apk add ...`, rather than settling for a busybox workaround. Reach for a busybox improvisation only when the block shows no Linux line at all (this build genuinely has no package manager).
+Prefer real tools over improvised ones. When a task needs something the busybox toolkit lacks and the environment block reports a Linux userland, install the appropriate package with `apk add` and use it. The first shell command waits for the bundled Linux environment to finish preparing. Reach for a busybox improvisation only when the block shows no Linux line at all.
+
+For any persistent command, start it with `background=true`, inspect its process output, and perform a check appropriate to the capability before saying it works. Do not run a persistent command as a foreground bash call or append `&`.
 
 Navigating: the workspace is the project root - orient with the glob/grep/list tools before shell exploration. `~` resolves to the HOME listed below, not a desktop home. Keep output small; avoid commands that produce huge results. If a task needs a missing capability, state the limitation and offer the closest on-device alternative.
 

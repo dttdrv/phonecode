@@ -13,7 +13,9 @@ class BuiltInPresetsTest {
         assertEquals("https://chatgpt.com/backend-api/codex", codex.baseUrl)
         assertEquals(WireFormat.OPENAI_RESPONSES, codex.wireFormat)
         assertEquals(AuthScheme.BEARER, codex.authScheme)
-        assertEquals("opencode", codex.extraHeaders["originator"])
+        assertEquals(CodexCompatibility.ORIGINATOR, codex.extraHeaders["originator"])
+        assertEquals(CodexCompatibility.CLIENT_VERSION, codex.extraHeaders["version"])
+        assertEquals(CodexCompatibility.USER_AGENT, codex.extraHeaders["User-Agent"])
         assertEquals(null, codex.extraHeaders["OpenAI-Beta"])
 
         val zen = BuiltInPresets.byId("opencode-zen")!!

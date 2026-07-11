@@ -41,16 +41,6 @@ live in the Android Keystore, and prompts go only to the selected provider.
 
 <p align="center"><sub>Onboarding · Settings</sub></p>
 
-## 0.2.3
-
-- Turns continue while PhoneCode is backgrounded or the phone is locked.
-- Chat and tool checkpoints are written atomically. If Android kills the process, PhoneCode restores
-  the turn, marks unresolved tools as interrupted, and never replays a file-changing action silently.
-- ChatGPT sign-in now supports IPv4 and IPv6 loopback callbacks, rotating-token refresh, immediate
-  authorization errors, and Codex-powered delegated tasks.
-- Provider failures carry structured status, retry, and reset information. OpenCode Go distinguishes
-  rate limits from exhausted usage and includes MiMo V2.5.
-
 PhoneCode is an independent project inspired by OpenCode and interoperable with it. It is not a
 build of OpenCode.
 
@@ -66,9 +56,12 @@ build of OpenCode.
   (task tool), webfetch with free web search, MCP servers (Streamable HTTP and SSE), and
   progressive-disclosure skills (SKILL.md).
 - **Local Linux environment** built from BusyBox and Alpine under PRoot. The agent can install
-  Python, Node.js, npm packages, compilers, and other tools with `apk` inside its private workspace.
+  Python, Node.js, npm packages, compilers, and other tools with `apk`, run long builds, and manage
+  background commands with persistent logs, stdin, and explicit shutdown inside its private
+  workspace.
 - **Providers**: OpenCode Zen and Go, Anthropic, OpenAI, OpenRouter, Google, xAI, DeepSeek,
-  Mistral, and custom endpoints, with the catalog sourced from models.dev. You can enable or disable
+  Mistral, and custom endpoints. Models and reasoning levels refresh automatically from models.dev;
+  ChatGPT sign-in uses the account's authenticated Codex catalog. You can enable or disable
   providers, hide models, and mark favourites. The agent can add providers and models itself by
   editing `providers.json`, which is hot-reloaded.
 - **Sign-in flows**: GitHub uses the OAuth device flow (you type a code, with no tokens to paste)

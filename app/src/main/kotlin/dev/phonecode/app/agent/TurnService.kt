@@ -38,7 +38,7 @@ class TurnService : Service() {
         val notification = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("PhoneCode is working")
-            .setContentText("Streaming continues in the background.")
+            .setContentText("Agent turns and development processes stay active.")
             .setOngoing(true)
             .build()
         if (Build.VERSION.SDK_INT >= 29) {

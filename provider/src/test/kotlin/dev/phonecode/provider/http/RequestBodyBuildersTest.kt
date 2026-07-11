@@ -110,6 +110,13 @@ class RequestBodyBuildersTest {
         assertNull(body["reasoning_effort"])
     }
 
+    @Test fun responsesSupportUltraReasoning() {
+        val body = responses(
+            ChatRequest(model = "gpt-5.6-sol", messages = listOf(user("hi")), reasoningEffort = ReasoningEffort.ULTRA),
+        )
+        assertEquals("ultra", body["reasoning"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
+    }
+
     @Test fun openAiUsesMaxCompletionTokens() {
         val body = openAi(ChatRequest(model = "gpt", messages = listOf(user("hi")), maxTokens = 100))
         assertEquals(100, body["max_completion_tokens"]!!.jsonPrimitive.int)

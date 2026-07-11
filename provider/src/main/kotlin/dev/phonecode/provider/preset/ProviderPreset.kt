@@ -31,6 +31,12 @@ data class ProviderPreset(
     }
 }
 
+object CodexCompatibility {
+    const val CLIENT_VERSION = "0.144.1"
+    const val ORIGINATOR = "codex_cli_rs"
+    const val USER_AGENT = "$ORIGINATOR/$CLIENT_VERSION (PhoneCode Android)"
+}
+
 /** The four MVP providers. OpenCode Go is modeled as a Zen-style OPENAI_COMPAT preset if needed. */
 object BuiltInPresets {
     val openai = ProviderPreset(
@@ -121,7 +127,11 @@ object BuiltInPresets {
         baseUrl = "https://chatgpt.com/backend-api/codex",
         wireFormat = WireFormat.OPENAI_RESPONSES,
         authScheme = AuthScheme.BEARER,
-        extraHeaders = mapOf("originator" to "opencode"),
+        extraHeaders = mapOf(
+            "originator" to CodexCompatibility.ORIGINATOR,
+            "version" to CodexCompatibility.CLIENT_VERSION,
+            "User-Agent" to CodexCompatibility.USER_AGENT,
+        ),
     )
 
     // Together + Groq removed per user direction (round-3 feedback); OpenCode Go added.

@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -28,41 +29,51 @@ import java.io.File
  * first use, off the main thread - and injectable so JVM tests can substitute the host's shell.
  */
 class ShellTool(
-    private val shellProvider: () -> List<String> = { listOf("/system/bin/sh", "-c") },
+    private val shellProvider: (String) -> List<String> = { listOf("/system/bin/sh", "-c") },
     private val environment: () -> Map<String, String> = { emptyMap() },
+    private val processManager: ProcessManager? = null,
 ) : Tool {
     override val name = "bash"
     override val description =
-        "Run a shell command in the workspace (POSIX sh with busybox + Android toybox coreutils). " +
-            "App-sandbox only - no root, no privileged paths. stdout+stderr are merged."
+        "Run a shell command in the workspace using the active POSIX or Alpine environment. " +
+            "Set background=true for any long-running command that must outlive the tool call."
     override val mutating = true
 
     override val parameters: JsonObject = buildJsonObject {
         put("type", "object")
         putJsonObject("properties") {
             putJsonObject("command") { put("type", "string"); put("description", "The shell command line to execute") }
-            putJsonObject("timeout_s") { put("type", "integer"); put("description", "Wall-clock limit in seconds (default 60, max 300)") }
+            putJsonObject("timeout_s") { put("type", "integer"); put("description", "Wall-clock limit in seconds (default 60, max 1800)") }
+            putJsonObject("background") { put("type", "boolean"); put("description", "Keep the command running and return a process session") }
         }
         put("required", kotlinx.serialization.json.buildJsonArray { add(JsonPrimitive("command")) })
     }
 
-    override val promptSnippet = "bash - run shell commands in the workspace (busybox + toybox; no root)"
+    override val promptSnippet = "bash - run commands or start managed background processes in the workspace"
     override val promptGuidelines = listOf(
         "bash runs inside the app sandbox: the workspace and app files are writable, system paths are read-only.",
         "Run scripts as `sh script.sh` - Android denies direct execution (./script.sh) of any file under app data.",
-        "Long operations: pass timeout_s (max 300); the process is killed at the limit.",
+        "Long operations: pass timeout_s (max 1800); the process is killed at the limit.",
+        "Long-running commands: set background=true and do not append '&'; use the process tool for logs, stdin, and shutdown.",
+        "Verify background work with its logs and a capability-specific check before reporting success.",
     )
 
     override suspend fun execute(args: JsonObject, context: ToolContext): ToolResult = withContext(Dispatchers.IO) {
         val command = (args["command"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
             ?: return@withContext ToolResult("bash: missing 'command'", isError = true)
-        val timeoutS = ((args["timeout_s"] as? JsonPrimitive)?.intOrNull ?: 60).coerceIn(1, 300)
+        val background = (args["background"] as? JsonPrimitive)?.booleanOrNull == true
+        if (background) {
+            return@withContext processManager?.start(command, context.workspacePath)
+                ?: ToolResult("bash: background processes are unavailable", isError = true)
+        }
+        val timeoutS = ((args["timeout_s"] as? JsonPrimitive)?.intOrNull ?: 60).coerceIn(1, 1800)
 
         runCatching {
-            val process = ProcessBuilder(shellProvider() + command)
-                .directory(File(context.workspacePath))
+            val commandEnvironment = environment()
+            val process = ProcessBuilder(shellProvider(context.workspacePath) + command)
+                .directory(if ("PROOT_LOADER" in commandEnvironment) File("/") else File(context.workspacePath))
                 .redirectErrorStream(true)
-                .apply { environment().putAll(this@ShellTool.environment()) }
+                .apply { environment().putAll(commandEnvironment) }
                 .start()
             coroutineScope {
                 var timedOut = false

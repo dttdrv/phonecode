@@ -8,6 +8,7 @@ import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -30,6 +31,11 @@ class ShellToolTest {
     private fun args(command: String, timeoutS: Int? = null) = buildJsonObject {
         put("command", command)
         timeoutS?.let { put("timeout_s", it) }
+    }
+
+    private fun backgroundArgs(command: String) = buildJsonObject {
+        put("command", command)
+        put("background", true)
     }
 
     @Test fun runsACommandInTheWorkspace() = runBlocking {
@@ -64,7 +70,47 @@ class ShellToolTest {
     @Test fun schemaRequiresCommand() {
         val schema = ShellTool().parameters.toString()
         assertTrue(schema, schema.contains("\"required\":[\"command\"]"))
+        assertTrue(schema, schema.contains("\"background\""))
         assertEquals("bash", ShellTool().name)
         assertTrue(ShellTool().mutating)
+    }
+
+    @Test fun managesBackgroundCommands() = runBlocking {
+        assumeFalse(System.getProperty("os.name").lowercase().contains("win"))
+        val manager = ProcessManager({ hostShell() })
+        val tool = ShellTool({ hostShell() }, processManager = manager)
+        val started = tool.execute(backgroundArgs("printf ready; exec sleep 30"), context)
+
+        assertFalse(started.output, started.isError)
+        val id = Regex("proc-\\d+").find(started.output)!!.value
+        assertTrue(manager.output(id).output.contains("ready"))
+        assertTrue(manager.list().output.contains(id))
+        assertFalse(manager.stop(id).isError)
+        assertTrue(manager.output(id).output.contains("exited"))
+    }
+
+    @Test fun reportsBackgroundStartupFailure() = runBlocking {
+        assumeFalse(System.getProperty("os.name").lowercase().contains("win"))
+        val manager = ProcessManager({ hostShell() })
+        val result = ShellTool({ hostShell() }, processManager = manager)
+            .execute(backgroundArgs("exit 7"), context)
+
+        assertTrue(result.output, result.isError)
+        assertTrue(result.output, result.output.contains("exited (7)"))
+    }
+
+    @Test fun sendsInputToManagedCommands() = runBlocking {
+        assumeFalse(System.getProperty("os.name").lowercase().contains("win"))
+        val manager = ProcessManager({ hostShell() })
+        val started = manager.start("read value; printf 'received:%s\\n' \"\$value\"; exec sleep 30", context.workspacePath)
+        val id = Regex("proc-\\d+").find(started.output)!!.value
+
+        assertFalse(manager.input(id, "hello").isError)
+        repeat(20) {
+            if (manager.output(id).output.contains("received:hello")) return@repeat
+            kotlinx.coroutines.delay(25)
+        }
+        assertTrue(manager.output(id).output, manager.output(id).output.contains("received:hello"))
+        assertFalse(manager.stop(id).isError)
     }
 }

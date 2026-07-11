@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.concurrent.TimeUnit
 
 enum class Source { NETWORK, CACHE, BUNDLED }
 
@@ -62,7 +63,7 @@ class CatalogLoader(
 
     private fun fetch(): String {
         val request = Request.Builder().url(catalogUrl).get().build()
-        httpClient.newCall(request).execute().use { response ->
+        httpClient.newCall(request).apply { timeout().timeout(15, TimeUnit.SECONDS) }.execute().use { response ->
             if (!response.isSuccessful) error("models.dev returned HTTP ${response.code}")
             return response.body?.string() ?: error("models.dev returned an empty body")
         }

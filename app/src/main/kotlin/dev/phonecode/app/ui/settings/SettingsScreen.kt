@@ -529,7 +529,7 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
         val models = state.models.filter { it.providerId == providerId }
         PcSectionLabel("Models · ${models.size}")
         if (models.isEmpty()) {
-            Note("No models loaded for this provider yet - the catalog refreshes on launch.")
+            Note("No models loaded for this provider yet. Models refresh automatically when PhoneCode opens.")
         } else {
             // Search + bulk visibility (device feedback): long provider lists need both.
             var modelQuery by remember(providerId) { mutableStateOf("") }

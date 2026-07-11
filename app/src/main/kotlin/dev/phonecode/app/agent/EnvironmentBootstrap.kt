@@ -55,9 +55,9 @@ object EnvironmentBootstrap {
          * busybox shell. Calling it also kicks off the one-time rootfs extract in the background, so the
          * first command runs on busybox and later commands transparently upgrade to Linux.
          */
-        fun shell(): List<String> {
+        fun shell(workspacePath: String): List<String> {
             linux?.kickoffSetup()
-            return linux?.takeIf { it.ready() }?.shellArgv() ?: busyboxShell
+            return linux?.takeIf { it.ready() }?.shellArgv(workspacePath) ?: busyboxShell
         }
 
         /** Environment matching [shell]: proot needs PROOT_* + the guest PATH/HOME; busybox keeps the host env. */
@@ -139,7 +139,6 @@ object EnvironmentBootstrap {
             loader = loader,
             rootfs = File(context.filesDir, "linux/aarch64"),
             tmpDir = File(context.cacheDir, "proot-tmp"),
-            workspacesRoot = File(context.filesDir, "workspaces"),
             assets = context.assets,
         )
     }
@@ -154,7 +153,6 @@ object EnvironmentBootstrap {
         private val loader: File,
         private val rootfs: File,
         private val tmpDir: File,
-        private val workspacesRoot: File,
         private val assets: AssetManager,
     ) {
         // Marker is version-keyed so a newer bundled rootfs (after an app update) re-extracts instead of
@@ -275,24 +273,25 @@ object EnvironmentBootstrap {
             cString(b, off, len).trim().takeIf { it.isNotEmpty() }?.toLongOrNull(8) ?: 0L
 
         /** proot argv ending in `/bin/sh -c`; ShellTool appends the command string. */
-        fun shellArgv(): List<String> = listOf(
-            proot.absolutePath,
-            "-r", rootfs.absolutePath,
-            "-0", // present as uid 0 so apk can write the rootfs
-            "-b", "/dev",
-            "-b", "/proc",
-            "-b", "/sys",
-            "-b", "${tmpDir.absolutePath}:/tmp",
-            // Bind the workspaces root at its REAL path so ShellTool's cwd (a workspace under it) resolves
-            // inside the guest and Linux tools edit the same files as the native file tools.
-            "-b", "${workspacesRoot.absolutePath}:${workspacesRoot.absolutePath}",
-            "/bin/sh", "-c",
-        )
+        fun shellArgv(workspacePath: String): List<String> {
+            val workspace = File(workspacePath).absolutePath
+            return listOf(
+                proot.absolutePath,
+                "-r", rootfs.absolutePath,
+                "-0",
+                "-b", "/dev",
+                "-b", "/proc",
+                "-b", "/sys",
+                "-b", "/data",
+                "-b", "${tmpDir.absolutePath}:/tmp",
+                "-w", workspace,
+                "/bin/sh", "-c",
+            )
+        }
 
         fun env(): Map<String, String> = mapOf(
             "PROOT_LOADER" to loader.absolutePath, // the trusted, exec-permitted loader in jniLibs
             "PROOT_TMP_DIR" to tmpDir.absolutePath,
-            "PROOT_NO_SECCOMP" to "1", // Android's seccomp filter breaks proot's seccomp fast-path
             "HOME" to "/root",
             "PATH" to "/usr/bin:/bin:/usr/sbin:/sbin",
             "TERM" to "dumb",

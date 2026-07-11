@@ -10,6 +10,11 @@ import androidx.activity.enableEdgeToEdge
 import dev.phonecode.app.ui.PhoneCodeApp
 
 class MainActivity : ComponentActivity() {
+    override fun onStart() {
+        super.onStart()
+        (application as PhoneCodeApplication).chatViewModel.refreshModels()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // True edge-to-edge: both bars fully transparent, content drawn behind them. Icon
         // appearance (light/dark) is driven by the app theme inside PhoneCodeApp, since the

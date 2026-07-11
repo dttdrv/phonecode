@@ -1,5 +1,6 @@
 package dev.phonecode.app.auth
 
+import dev.phonecode.provider.preset.CodexCompatibility
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -78,7 +79,7 @@ class CodexAuth(
             .addQueryParameter("code_challenge_method", "S256")
             .addQueryParameter("id_token_add_organizations", "true")
             .addQueryParameter("codex_cli_simplified_flow", "true")
-            .addQueryParameter("originator", ORIGINATOR)
+            .addQueryParameter("originator", CodexCompatibility.ORIGINATOR)
             .build()
             .toString()
     }
@@ -281,11 +282,8 @@ class CodexAuth(
 
         /** The only confirmed-working redirect URI for this client_id. */
         const val REDIRECT_URI = "http://localhost:1455/auth/callback"
-        const val SCOPE = "openid profile email offline_access"
+        const val SCOPE = "openid profile email offline_access api.connectors.read api.connectors.invoke"
         const val LOOPBACK_PORT = 1455
-
-        /** Reverse-engineered value confirmed to render the simplified ChatGPT login page. */
-        private const val ORIGINATOR = "opencode"
 
         private const val KEY_ACCESS = "codex.access"
         private const val KEY_REFRESH = "codex.refresh"

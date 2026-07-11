@@ -1,5 +1,6 @@
 package dev.phonecode.app.auth
 
+import dev.phonecode.provider.preset.CodexCompatibility
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -45,7 +46,8 @@ class CodexAuthTest {
         assertEquals("code", url.queryParameter("response_type"))
         assertEquals("app_EMoamEEZ73f0CkXaXp7hrann", url.queryParameter("client_id"))
         assertEquals("http://localhost:1455/auth/callback", url.queryParameter("redirect_uri"))
-        assertEquals("openid profile email offline_access", url.queryParameter("scope"))
+        assertEquals("openid profile email offline_access api.connectors.read api.connectors.invoke", url.queryParameter("scope"))
+        assertEquals(CodexCompatibility.ORIGINATOR, url.queryParameter("originator"))
         assertEquals("S256", url.queryParameter("code_challenge_method"))
         assertEquals("true", url.queryParameter("id_token_add_organizations"))
         assertEquals("true", url.queryParameter("codex_cli_simplified_flow"))

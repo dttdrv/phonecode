@@ -9,6 +9,7 @@ import dev.phonecode.provider.domain.Role
 import dev.phonecode.provider.domain.StopReason
 import dev.phonecode.provider.domain.StreamEvent
 import dev.phonecode.provider.preset.AuthScheme
+import dev.phonecode.provider.preset.CodexCompatibility
 import dev.phonecode.provider.preset.ProviderPreset
 import dev.phonecode.provider.preset.WireFormat
 import kotlinx.coroutines.flow.toList
@@ -66,13 +67,19 @@ class ProviderStreamingTest {
         val preset = ProviderPreset(
             "codex", "ChatGPT", server.url("/").toString().trimEnd('/'),
             WireFormat.OPENAI_RESPONSES, AuthScheme.BEARER,
-            extraHeaders = mapOf("originator" to "opencode"),
+            extraHeaders = mapOf(
+                "originator" to CodexCompatibility.ORIGINATOR,
+                "version" to CodexCompatibility.CLIENT_VERSION,
+                "User-Agent" to CodexCompatibility.USER_AGENT,
+            ),
         )
         CodexProvider(preset, "token", OkHttpClient()).stream(userReq().copy(sessionId = "session-7")).toList()
         val request = server.takeRequest()
         assertEquals("/responses", request.path)
         assertEquals("session-7", request.getHeader("session-id"))
-        assertEquals("opencode", request.getHeader("originator"))
+        assertEquals(CodexCompatibility.ORIGINATOR, request.getHeader("originator"))
+        assertEquals(CodexCompatibility.CLIENT_VERSION, request.getHeader("version"))
+        assertEquals(CodexCompatibility.USER_AGENT, request.getHeader("User-Agent"))
         assertEquals(null, request.getHeader("OpenAI-Beta"))
         server.shutdown()
     }

@@ -69,7 +69,8 @@ enum class ReasoningEffort {
     MEDIUM,
     HIGH,
     XHIGH,
-    MAX;
+    MAX,
+    ULTRA;
 
     val wireValue: String
         get() = name.lowercase()

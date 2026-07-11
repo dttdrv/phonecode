@@ -42,8 +42,11 @@ import dev.phonecode.provider.domain.LlmProvider
 import dev.phonecode.provider.domain.MessagePart
 import dev.phonecode.provider.domain.ReasoningEffort
 import dev.phonecode.provider.domain.Role
+import dev.phonecode.provider.http.CodexModelInfo
+import dev.phonecode.provider.http.CodexModelsClient
 import dev.phonecode.provider.http.ProviderFactory
 import dev.phonecode.provider.preset.BuiltInPresets
+import dev.phonecode.provider.preset.CodexCompatibility
 import dev.phonecode.provider.preset.ProviderPreset
 import dev.phonecode.provider.preset.WireFormat
 import dev.phonecode.tools.Tool
@@ -62,6 +65,9 @@ import dev.phonecode.tools.skills.SkillManifest
 import dev.phonecode.tools.skills.SkillTool
 import dev.phonecode.tools.shared.SharedReadTool
 import dev.phonecode.tools.shared.SharedWriteTool
+import dev.phonecode.tools.shell.ProcessManager
+import dev.phonecode.tools.shell.ProcessTool
+import dev.phonecode.tools.shell.ShellTool
 import dev.phonecode.tools.todo.TodoItem
 import dev.phonecode.tools.todo.TodoStore
 import dev.phonecode.tools.todo.todoTools
@@ -177,6 +183,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val customProviders = CustomProviderRepository(configDir)
     private val sharedFolderStore = SharedFolderStore(File(app.filesDir, "shared_folders.json"))
     private val sharedFileAccess = AndroidSharedFileAccess(app, sharedFolderStore)
+    private val shellProvider: (String) -> List<String> = { workspacePath ->
+        userland.ensureLinux()
+        userland.shell(workspacePath)
+    }
+    private val shellEnvironment: () -> Map<String, String> = { userland.shellEnv() }
+    private val processManager = ProcessManager(
+        shellProvider = shellProvider,
+        environmentProvider = shellEnvironment,
+        onStarted = { foregroundLeases.acquire("process-$it") },
+        onStopped = { foregroundLeases.release("process-$it") },
+    )
     private val baseTools: List<Tool> =
         defaultFileTools() + ApplyPatchTool() + ExternalDirectoryTool() + QuestionTool() +
             SharedReadTool(sharedFileAccess) + SharedWriteTool(sharedFileAccess) +
@@ -186,7 +203,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // full Alpine Linux (proot) once its rootfs is set up - sandbox-scoped, permission-gated like
             // every mutating tool. Providers are dynamic: shell()/shellEnv() re-resolve each call so the
             // shell flips from busybox to Linux the moment the background rootfs setup finishes.
-            dev.phonecode.tools.shell.ShellTool({ userland.shell() }, { userland.shellEnv() })
+            ShellTool(shellProvider, shellEnvironment, processManager) + ProcessTool(processManager)
     @Volatile private var mcpTools: List<Tool> = emptyList()
     @Volatile private var discoveredSkills: List<SkillManifest> = emptyList()
     // Registry is replaced wholesale (not mutated) so send()/runSubagent always read a consistent snapshot.
@@ -195,8 +212,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // rebuildTools() and can run before a later-declared field's initializer executes (NPE at launch).
     private val toolsLock = Any()
     private val toolContext = AndroidToolContext({ (turnWorkspace ?: workspace).absolutePath }, ::askPermission, ::askUser)
-    private val catalogLoader = CatalogLoader(http, FileCatalogCache(app.cacheDir), bundledFallback = { BUNDLED_CATALOG })
+    private val catalogLoader = CatalogLoader(
+        http,
+        FileCatalogCache(app.cacheDir),
+        ttlMillis = CATALOG_REFRESH_TTL_MS,
+        bundledFallback = { BUNDLED_CATALOG },
+    )
+    private val codexModelsClient = CodexModelsClient(http)
+    private val codexAuth by lazy { CodexAuth(http, store = keyStore::put, read = keyStore::get) }
     @Volatile private var catalog: dev.phonecode.provider.catalog.Catalog = emptyMap()
+    @Volatile private var codexModelMetadata: Map<String, CodexModelInfo> = emptyMap()
     @Volatile private var customPresets: Map<String, ProviderPreset> = emptyMap()
     @Volatile private var customLimits: Map<String, Long> = emptyMap()
 
@@ -211,11 +236,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The selected model's token limits from the models.dev catalog, then the custom config, if known. */
     private fun limitFor(option: ModelOption?): dev.phonecode.provider.catalog.Limit? = option?.let {
-        catalog[catalogProviderId(it.providerId)]?.models?.get(it.modelId)?.limit
+        (if (it.providerId == "codex") codexModelMetadata[it.modelId]?.let { model ->
+            dev.phonecode.provider.catalog.Limit(
+                context = model.contextWindow ?: model.maxContextWindow,
+                output = 128_000,
+            )
+        } else null)
+            ?: catalog[catalogProviderId(it.providerId)]?.models?.get(it.modelId)?.limit
             ?: customLimits["${it.providerId}/${it.modelId}"]?.let { c -> dev.phonecode.provider.catalog.Limit(context = c) }
-            // The Codex backend serves a 272k context window for all its models (per the codex catalog),
-            // smaller than the same models' API limits, so compaction fires before it rejects the request.
-            ?: if (it.providerId == "codex") dev.phonecode.provider.catalog.Limit(context = 272_000, output = 128_000) else null
+            ?: if (it.providerId == "codex") dev.phonecode.provider.catalog.Limit(context = 372_000, output = 128_000) else null
     }
 
     private val _state = MutableStateFlow(ChatUiState())
@@ -230,6 +259,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     @Volatile private var history: List<ChatMessage> = emptyList()
     @Volatile private var generation = 0
     private var job: Job? = null
+    private var modelRefreshJob: Job? = null
+    @Volatile private var lastCatalogRefreshAt = 0L
+    @Volatile private var lastCodexRefreshAt = 0L
     private var pendingDecision: CompletableDeferred<Boolean>? = null
     private var pendingQuestionDecision: CompletableDeferred<List<UserAnswer>>? = null
 
@@ -307,31 +339,63 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
         }
-        viewModelScope.launch(Dispatchers.IO) {
-            val result = runCatching { catalogLoader.load() }.getOrNull() ?: return@launch
-            catalog = result.catalog
-            val options = catalogToOptions(result.catalog)
-            if (options.isNotEmpty()) {
-                _state.update { s ->
-                    // The catalog only covers built-in presets, so preserve any custom-provider models
-                    // reloadProviders() already folded in - otherwise this reducer clobbers them (and can
-                    // silently re-select a built-in if a custom model was active). Order-independent: if the
-                    // catalog wins the race, reloadProviders re-appends later; if it loses, we keep them here.
-                    val builtinKeys = options.map { "${it.providerId}/${it.modelId}" }.toSet()
-                    val custom = s.models.filter {
-                        it.providerId in customPresets && "${it.providerId}/${it.modelId}" !in builtinKeys
-                    }
-                    val merged = options + custom
-                    val current = s.selected
-                    // Remember the user's model across restarts: prefer the last-picked model (persisted in
-                    // recents) over the hardcoded default, then any selection already made this session.
-                    val recentKey = modelPrefs.recents().firstOrNull()
-                    val resolved = merged.firstOrNull { modelKey(it) == recentKey }
-                        ?: merged.firstOrNull { it.providerId == current?.providerId && it.modelId == current.modelId }
-                        ?: merged.first()
-                    s.copy(models = merged, selected = resolved, contextLimit = limitFor(resolved)?.context)
+        refreshModels()
+    }
+
+    fun refreshModels(forceRefresh: Boolean = false) {
+        val now = System.currentTimeMillis()
+        val refreshCatalog = forceRefresh || now - lastCatalogRefreshAt >= CATALOG_REFRESH_TTL_MS
+        val refreshCodex = !keyStore.get("codex.access").isNullOrBlank() &&
+            (forceRefresh || now - lastCodexRefreshAt >= CODEX_REFRESH_TTL_MS)
+        if (!refreshCatalog && !refreshCodex) return
+        if (modelRefreshJob?.isActive == true) return
+        modelRefreshJob = viewModelScope.launch(Dispatchers.IO) {
+            if (refreshCatalog) {
+                runCatching { catalogLoader.load(forceRefresh) }.getOrNull()?.let {
+                    catalog = it.catalog
+                    applyModelOptions(catalogToOptions(it.catalog))
+                    lastCatalogRefreshAt = System.currentTimeMillis()
                 }
             }
+            if (refreshCodex) {
+                val accessToken = codexAuth.accessToken()
+                if (!accessToken.isNullOrBlank()) {
+                    val accountId = codexAuth.accountId()
+                    val preset = accountId?.let {
+                        BuiltInPresets.codex.copy(
+                            extraHeaders = BuiltInPresets.codex.extraHeaders + ("chatgpt-account-id" to it),
+                        )
+                    } ?: BuiltInPresets.codex
+                    runCatching {
+                        codexModelsClient.fetch(preset, accessToken, CodexCompatibility.CLIENT_VERSION)
+                    }.getOrNull()
+                        ?.filter { it.visibility == "list" && it.supportedInApi }
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let {
+                            codexModelMetadata = it.associateBy(CodexModelInfo::slug)
+                            applyModelOptions(catalogToOptions(catalog))
+                            lastCodexRefreshAt = System.currentTimeMillis()
+                        }
+                }
+            }
+        }
+    }
+
+    private fun applyModelOptions(options: List<ModelOption>) {
+        if (options.isEmpty()) return
+        _state.update { state ->
+            val builtinKeys = options.map { "${it.providerId}/${it.modelId}" }.toSet()
+            val custom = state.models.filter {
+                it.providerId in customPresets && "${it.providerId}/${it.modelId}" !in builtinKeys
+            }
+            val merged = options + custom
+            val current = state.selected
+            val recentKey = modelPrefs.recents().firstOrNull()
+            val resolved = merged.firstOrNull { modelKey(it) == recentKey }
+                ?: merged.firstOrNull { it.providerId == current?.providerId && it.modelId == current.modelId }
+                ?: current?.providerId?.let { id -> merged.firstOrNull { it.providerId == id } }
+                ?: merged.first()
+            state.copy(models = merged, selected = resolved, contextLimit = limitFor(resolved)?.context)
         }
     }
 
@@ -340,9 +404,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val out = mutableListOf<ModelOption>()
         BuiltInPresets.all.forEach { preset ->
             if (preset.id == "codex") {
-                // Match OpenCode's codex integration exactly: the ChatGPT/Codex backend serves OpenAI's
-                // allow-listed models plus anything newer than 5.4 (minus the pro tier). Catalog-driven so
-                // it tracks new releases; falls back to the bundled list when the catalog hasn't loaded.
+                val authenticated = codexModelMetadata.values
+                    .sortedWith(compareBy<CodexModelInfo> { it.priority }.thenBy { it.displayName })
+                    .map { ModelOption("codex", it.slug, "${preset.displayName} · ${it.displayName}") }
+                if (authenticated.isNotEmpty()) {
+                    out += authenticated
+                    return@forEach
+                }
                 val live = catalog["openai"]?.models?.values
                     ?.filter { codexEligible(it.id) }
                     ?.sortedByDescending { it.id }
@@ -353,9 +421,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             val info = catalog[catalogProviderId(preset.id)]
             if (info != null && info.models.isNotEmpty()) {
-                info.models.values.sortedBy { it.name }.forEach { model ->
-                    out += ModelOption(preset.id, model.id, "${preset.displayName} · ${model.name}")
+                val live = info.models.values.sortedBy { it.name }.map { model ->
+                    ModelOption(preset.id, model.id, "${preset.displayName} · ${model.name}")
                 }
+                out += (live + builtInModels().filter { it.providerId == preset.id }).distinctBy { it.modelId }
             } else {
                 out += builtInModels().filter { it.providerId == preset.id }
             }
@@ -363,10 +432,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return out
     }
 
-    // OpenCode's codex allow/deny rule (packages/opencode/src/plugin/openai/codex.ts): these ids plus any
-    // OpenAI model newer than 5.4, minus the pro tier the Codex backend won't serve.
     private fun codexEligible(id: String): Boolean = when (id) {
-        in setOf("gpt-5.5", "gpt-5.2", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini") -> true
+        in setOf("gpt-5.5", "gpt-5.2", "gpt-5.4", "gpt-5.4-mini") -> true
         in setOf("gpt-5.5-pro") -> false
         else -> Regex("^gpt-(\\d+\\.\\d+)").find(id)?.groupValues?.get(1)?.toDoubleOrNull()?.let { it > 5.4 } ?: false
     }
@@ -420,6 +487,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun reasoningEfforts(option: ModelOption?): List<ReasoningEffort> {
+        if (option?.providerId == "codex") {
+            codexModelMetadata[option.modelId]?.let { model ->
+                val efforts = model.supportedReasoningLevels.mapNotNull { ReasoningEffort.fromWire(it.effort) }
+                return if (efforts.isEmpty()) emptyList() else (listOf(ReasoningEffort.DEFAULT) + efforts).distinct()
+            }
+        }
         val model = catalogModel(option) ?: return if (option == null) emptyList() else listOf(ReasoningEffort.DEFAULT)
         if (!model.reasoning) return emptyList()
         val efforts = model.reasoningOptions
@@ -769,8 +842,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // ----- Codex (Sign in with ChatGPT) -----
 
-    private val codexAuth by lazy { CodexAuth(http, store = keyStore::put, read = keyStore::get) }
-
     private fun beginLease(slot: AtomicReference<String?>, prefix: String): String {
         val id = "$prefix-${UUID.randomUUID()}"
         foregroundLeases.acquire(id)
@@ -806,7 +877,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             ) { code ->
                 viewModelScope.launch(Dispatchers.IO) {
                     runCatching { codexAuth.exchangeCode(code, verifier) }
-                        .onSuccess { _state.update { it.copy(codexConnected = true, notice = "Signed in with ChatGPT - pick a ChatGPT model from the model menu") } }
+                        .onSuccess {
+                            _state.update { it.copy(codexConnected = true, notice = "Signed in with ChatGPT - pick a ChatGPT model from the model menu") }
+                            refreshModels(forceRefresh = true)
+                        }
                         .onFailure { e ->
                             codexAuth.stopLoopback()
                             _state.update { it.copy(error = "Codex sign-in failed: ${e.message}") }
@@ -1398,9 +1472,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 "`apk add python3 py3-pip nodejs ...` and use it (cwd is your workspace, so installed tools " +
                 "edit the same files as the file tools). Prefer installing the real tool over improvising one " +
                 "from busybox (e.g. `python3 -m http.server`, not an `nc` loop)."
-            u.linuxAvailable -> ". A full Alpine Linux (proot) is provisioning in the background. Run any shell " +
-                "command once to trigger setup, then retry `apk add python3 py3-pip nodejs ...` to install real " +
-                "tools - do not settle for a busybox workaround when the proper tool can be installed."
+            u.linuxAvailable -> ". The bundled Alpine Linux environment is being prepared. The first shell command " +
+                "waits for setup, then `apk add python3 py3-pip nodejs npm build-base ...` can install real tools."
             else -> ""
         }
         val projectFolder = _state.value.projects.firstOrNull { it.id == currentProjectId }?.folderId?.let { folderId ->
@@ -1491,10 +1564,12 @@ fun builtInModels(): List<ModelOption> = listOf(
     ModelOption("anthropic", "claude-opus-4-8", "Claude Opus 4.8"),
     ModelOption("anthropic", "claude-sonnet-4-6", "Claude Sonnet 4.6"),
     ModelOption("anthropic", "claude-haiku-4-5", "Claude Haiku 4.5"),
+    ModelOption("openai", "gpt-5.6", "GPT-5.6"),
     ModelOption("openai", "gpt-5.5", "GPT-5.5"),
     ModelOption("openai", "o3", "o3"),
     ModelOption("openrouter", "anthropic/claude-opus-4-8", "OpenRouter · Claude Opus 4.8"),
     ModelOption("opencode-zen", "nemotron-3-ultra-free", "Zen · Nemotron 3 Ultra (Free)"),
+    ModelOption("opencode-go", "deepseek-v4-flash", "Go · DeepSeek V4 Flash"),
     ModelOption("opencode-go", "mimo-v2.5", "Go · MiMo V2.5"),
     ModelOption("google", "gemini-2.5-pro", "Gemini 2.5 Pro"),
     ModelOption("google", "gemini-2.0-flash", "Gemini 2.0 Flash"),
@@ -1502,22 +1577,23 @@ fun builtInModels(): List<ModelOption> = listOf(
     ModelOption("deepseek", "deepseek-chat", "DeepSeek Chat"),
     ModelOption("deepseek", "deepseek-reasoner", "DeepSeek Reasoner"),
     ModelOption("mistral", "mistral-large-latest", "Mistral Large"),
-    // ChatGPT plan via "Sign in with ChatGPT" (Codex). Offline fallback matching OpenCode's codex allow-list;
-    // the live list is catalog-driven via codexEligible(). Update if OpenCode's allow-list changes.
+    ModelOption("codex", "gpt-5.6-sol", "ChatGPT · GPT-5.6 Sol"),
+    ModelOption("codex", "gpt-5.6-terra", "ChatGPT · GPT-5.6 Terra"),
+    ModelOption("codex", "gpt-5.6-luna", "ChatGPT · GPT-5.6 Luna"),
     ModelOption("codex", "gpt-5.5", "ChatGPT · GPT-5.5"),
-    ModelOption("codex", "gpt-5.3-codex", "ChatGPT · GPT-5.3 Codex"),
     ModelOption("codex", "gpt-5.4", "ChatGPT · GPT-5.4"),
     ModelOption("codex", "gpt-5.4-mini", "ChatGPT · GPT-5.4 Mini"),
-    ModelOption("codex", "gpt-5.3-codex-spark", "ChatGPT · GPT-5.3 Codex Spark"),
     ModelOption("codex", "gpt-5.2", "ChatGPT · GPT-5.2"),
 )
 
+private const val CATALOG_REFRESH_TTL_MS = 6L * 60 * 60 * 1000
+private const val CODEX_REFRESH_TTL_MS = 5L * 60 * 1000
 private const val BUNDLED_CATALOG = """
 {
-  "openai":{"id":"openai","name":"OpenAI","models":{"gpt-5.5":{"id":"gpt-5.5","name":"GPT-5.5"},"o3":{"id":"o3","name":"o3"}}},
+  "openai":{"id":"openai","name":"OpenAI","models":{"gpt-5.6":{"id":"gpt-5.6","name":"GPT-5.6","reasoning":true,"reasoning_options":[{"type":"effort","values":["none","low","medium","high","xhigh","max"]}],"tool_call":true,"attachment":true,"limit":{"context":1050000,"output":128000}},"gpt-5.6-sol":{"id":"gpt-5.6-sol","name":"GPT-5.6 Sol","reasoning":true,"reasoning_options":[{"type":"effort","values":["none","low","medium","high","xhigh","max"]}],"tool_call":true,"attachment":true,"limit":{"context":1050000,"output":128000}},"gpt-5.6-terra":{"id":"gpt-5.6-terra","name":"GPT-5.6 Terra","reasoning":true,"reasoning_options":[{"type":"effort","values":["none","low","medium","high","xhigh","max"]}],"tool_call":true,"attachment":true,"limit":{"context":1050000,"output":128000}},"gpt-5.6-luna":{"id":"gpt-5.6-luna","name":"GPT-5.6 Luna","reasoning":true,"reasoning_options":[{"type":"effort","values":["none","low","medium","high","xhigh","max"]}],"tool_call":true,"attachment":true,"limit":{"context":1050000,"output":128000}},"gpt-5.5":{"id":"gpt-5.5","name":"GPT-5.5"},"o3":{"id":"o3","name":"o3"}}},
   "anthropic":{"id":"anthropic","name":"Anthropic","models":{"claude-opus-4-8":{"id":"claude-opus-4-8","name":"Claude Opus 4.8"},"claude-sonnet-4-6":{"id":"claude-sonnet-4-6","name":"Claude Sonnet 4.6"},"claude-haiku-4-5":{"id":"claude-haiku-4-5","name":"Claude Haiku 4.5"}}},
   "openrouter":{"id":"openrouter","name":"OpenRouter","models":{"anthropic/claude-opus-4-8":{"id":"anthropic/claude-opus-4-8","name":"Claude Opus 4.8"}}},
   "opencode":{"id":"opencode","name":"OpenCode Zen","models":{"nemotron-3-ultra-free":{"id":"nemotron-3-ultra-free","name":"Nemotron 3 Ultra Free"}}},
-  "opencode-go":{"id":"opencode-go","name":"OpenCode Go","api":"https://opencode.ai/zen/go/v1","models":{"mimo-v2.5":{"id":"mimo-v2.5","name":"MiMo V2.5","reasoning":true,"tool_call":true,"attachment":true,"limit":{"context":1000000,"output":128000}}}}
+  "opencode-go":{"id":"opencode-go","name":"OpenCode Go","api":"https://opencode.ai/zen/go/v1","models":{"deepseek-v4-flash":{"id":"deepseek-v4-flash","name":"DeepSeek V4 Flash","reasoning":true,"reasoning_options":[{"type":"effort","values":["high","max"]}],"tool_call":true,"attachment":false,"limit":{"context":1000000,"output":384000}},"mimo-v2.5":{"id":"mimo-v2.5","name":"MiMo V2.5","reasoning":true,"tool_call":true,"attachment":true,"limit":{"context":1000000,"output":128000}}}}
 }
 """

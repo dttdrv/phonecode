@@ -65,7 +65,7 @@ class EnvironmentBootstrapTest {
         Files.createSymbolicLink(shell.toPath(), Path.of("/bin/busybox"))
         val marker = File(tmp.root, "linux.ready").apply { writeText("ok") }
 
-        assertFalse(shell.isFile)
+        assertEquals(Path.of("/bin/busybox"), Files.readSymbolicLink(shell.toPath()))
         assertTrue(linuxTreeReady(marker, rootfs))
     }
 

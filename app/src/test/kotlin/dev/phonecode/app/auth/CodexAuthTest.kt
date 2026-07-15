@@ -9,6 +9,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.net.InetAddress
+import java.net.ServerSocket
 import java.net.Socket
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
@@ -176,11 +178,14 @@ class CodexAuthTest {
         }
     }
 
-    @Test fun loopbackBindsLoopbackInterfaceOnly() {
+    @Test fun loopbackBindsSupportedLoopbackInterfaces() {
         auth.startLoopback("s") { }
         try {
             Socket("127.0.0.1", 1455).use { assertTrue(it.isConnected) }
-            Socket("::1", 1455).use { assertTrue(it.isConnected) }
+            val ipv6 = InetAddress.getByName("::1")
+            if (runCatching { ServerSocket(0, 1, ipv6).use { } }.isSuccess) {
+                Socket(ipv6, 1455).use { assertTrue(it.isConnected) }
+            }
         } finally {
             auth.stopLoopback()
         }

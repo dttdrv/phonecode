@@ -10,12 +10,17 @@ import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.agent.ChatUiState
 import dev.phonecode.app.agent.PermissionRequest
+import dev.phonecode.app.agent.QuestionRequest
 import dev.phonecode.app.data.PersistedMessage
 import dev.phonecode.app.data.PersistedPart
 import dev.phonecode.app.data.PersistedRole
@@ -34,6 +39,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
+import dev.phonecode.tools.UserOption
+import dev.phonecode.tools.UserQuestion
 
 /**
  * The design feedback loop: renders the REAL app (same composition as UiSmokeTest) to PNGs in
@@ -157,6 +164,12 @@ class ScreenshotTest {
         captureScreenRoboImage("screenshots/$name.png")
     }
 
+    /** Dialog windows can keep Espresso's global-idle probe busy even after Compose has settled. */
+    private fun shootDialog(name: String) {
+        compose.mainClock.advanceTimeBy(500)
+        captureScreenRoboImage("screenshots/$name.png")
+    }
+
     @Test
     fun chatScreens() {
         awaitConversation()
@@ -274,9 +287,96 @@ class ScreenshotTest {
     }
 
     @Test
+    fun agentInterruptionAndDrawerManagementStates() {
+        awaitConversation()
+        val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            pendingQuestion = QuestionRequest(
+                listOf(
+                    UserQuestion(
+                        question = "Which release channel should receive this build?",
+                        header = "Release channel",
+                        options = listOf(
+                            UserOption("Internal testing", "Fastest review path for the team"),
+                            UserOption("Production", "Submit the build for public review"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        shootDialog("25-agent-question")
+        state.value = state.value.copy(pendingQuestion = null)
+
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Chat options").performClick()
+        shootScreen("26-chat-management-menu")
+        compose.onNodeWithText("Delete").performClick()
+        shootScreen("27-delete-chat-confirmation")
+    }
+
+    @Test
+    fun providerAndToolManagementStates() {
+        awaitConversation()
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+
+        compose.onNodeWithText("Providers").performClick()
+        compose.onNodeWithText("Add custom provider").performClick()
+        shootDialog("28-custom-provider")
+    }
+
+    @Test
+    @Config(qualifiers = "w640dp-h360dp-xhdpi")
+    fun compactQuestionDialogKeepsActionsReachable() {
+        awaitConversation()
+        val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            pendingQuestion = QuestionRequest(
+                listOf(
+                    UserQuestion(
+                        question = "Which release channel should receive this build?",
+                        header = "Release channel",
+                        options = listOf(
+                            UserOption("Internal testing", "Fastest review path for the team"),
+                            UserOption("Production", "Submit the build for public review"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        shootDialog("30-agent-question-compact")
+    }
+
+    @Test
+    @Config(qualifiers = "w840dp-h900dp-xhdpi")
+    fun expandedSettingsLayout() {
+        awaitConversation()
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+        shoot("29-settings-expanded")
+    }
+
+    @Test
     @Config(qualifiers = "w360dp-h640dp-xxxhdpi")
     fun playListingPhoneScreenshots() {
         awaitConversation()
+        compose.onNode(
+            hasScrollAction() and hasAnyDescendant(
+                hasText("Does it follow the system setting by default?"),
+            ),
+        ).performScrollToIndex(0)
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_000)
         compose.onRoot().captureRoboImage(
             "../play/0.5.0/graphics/phone/01-agent-conversation.png",
         )

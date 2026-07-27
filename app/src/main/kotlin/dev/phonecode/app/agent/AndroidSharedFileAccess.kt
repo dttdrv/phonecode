@@ -25,36 +25,55 @@ class AndroidSharedFileAccess(
 
     override fun roots(): List<SharedRoot> = store.list().map { SharedRoot(it.id, it.name, it.writable) }
 
+    fun linkedFolder(uri: Uri): SharedFolder? = store.list().firstOrNull { it.handle == uri.toString() }
+
     fun link(uri: Uri): List<SharedFolder> {
+        val existing = linkedFolder(uri)
         val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
         val write = Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        val writable = runCatching {
-            resolver.takePersistableUriPermission(uri, read or write)
-            true
-        }.getOrElse {
-            resolver.takePersistableUriPermission(uri, read)
-            false
+        var grantedFlags = 0
+        try {
+            val writable = runCatching {
+                resolver.takePersistableUriPermission(uri, read or write)
+                grantedFlags = read or write
+                true
+            }.getOrElse {
+                resolver.takePersistableUriPermission(uri, read)
+                grantedFlags = read
+                false
+            }
+            val folder = SharedFolder(
+                id = existing?.id ?: "folder-${UUID.randomUUID()}",
+                name = displayName(uri),
+                kind = "android-tree",
+                handle = uri.toString(),
+                writable = writable,
+            )
+            return store.add(folder)
+        } catch (error: Throwable) {
+            // A new persisted URI grant must never outlive a failed metadata write. Existing
+            // links keep their grant; releasing it here could revoke access that predated this try.
+            if (existing == null && grantedFlags != 0) {
+                try {
+                    resolver.releasePersistableUriPermission(uri, grantedFlags)
+                } catch (cleanupFailure: Throwable) {
+                    error.addSuppressed(cleanupFailure)
+                }
+            }
+            throw error
         }
-        val existing = store.list().firstOrNull { it.handle == uri.toString() }
-        val folder = SharedFolder(
-            id = existing?.id ?: "folder-${UUID.randomUUID()}",
-            name = displayName(uri),
-            kind = "android-tree",
-            handle = uri.toString(),
-            writable = writable,
-        )
-        return store.add(folder)
     }
 
     fun unlink(id: String): List<SharedFolder> {
         val folder = store.list().firstOrNull { it.id == id }
-        val folders = store.remove(id)
         folder?.let {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 if (it.writable) Intent.FLAG_GRANT_WRITE_URI_PERMISSION else 0
-            runCatching { resolver.releasePersistableUriPermission(Uri.parse(it.handle), flags) }
+            val uri = Uri.parse(it.handle)
+            val persisted = resolver.persistedUriPermissions.any { permission -> permission.uri == uri }
+            if (persisted) resolver.releasePersistableUriPermission(uri, flags)
         }
-        return folders
+        return store.remove(id)
     }
 
     override suspend fun list(rootId: String, path: String): List<SharedEntry> = withContext(Dispatchers.IO) {

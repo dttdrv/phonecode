@@ -38,7 +38,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -131,6 +131,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -139,13 +141,13 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -350,6 +352,9 @@ fun ChatScreen(
         // FEEDS the blur; every piece of chrome floats above it as an individually blurred pill
         // (signed prototype: design/v2.html).
         val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        // The centered title is two rows (chat title + model selector), taller than the side
+        // buttons. Resting content must clear both rows; only user-driven scrolling goes beneath.
+        val topChromeHeight = Spacing.navBarHeight + 34.dp
         val hazeState = remember { HazeState() }
         val hazeStyle = phoneHaze()
         val bandStyle = phoneHazeBand()
@@ -371,7 +376,7 @@ fun ChatScreen(
                         .then(
                             if (isEmpty) {
                                 Modifier.padding(
-                                    top = statusInset + Spacing.navBarHeight + 8.dp,
+                                    top = statusInset + topChromeHeight,
                                     bottom = with(chromeDensity) { bottomOverlayHeight.toDp() } + 18.dp,
                                 )
                             } else {
@@ -416,7 +421,7 @@ fun ChatScreen(
                         // content slide beneath the pills (top) and the composer (bottom).
                         contentPadding = PaddingValues(
                             start = 18.dp, end = 18.dp,
-                            top = statusInset + Spacing.navBarHeight + 10.dp,
+                            top = statusInset + topChromeHeight,
                             bottom = with(chromeDensity) { bottomOverlayHeight.toDp() } + 18.dp,
                         ),
                     ) {
@@ -488,7 +493,7 @@ fun ChatScreen(
         }
 
         Box(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusInset + Spacing.navBarHeight + 8.dp)
+            Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusInset + topChromeHeight)
                 .shadow(if (!empty && listState.canScrollBackward) 2.dp else 0.dp, RectangleShape, clip = false)
                 .then(if (blurChrome) Modifier.phoneHazeEffect(hazeState, hazeStyle) else Modifier)
                 .background(if (blurChrome) colors.background.copy(alpha = 0.16f) else colors.background),
@@ -842,46 +847,53 @@ private fun QueuedMessages(queued: List<String>) {
     }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun UserBubble(text: String, images: List<MessagePart.Image>) {
     val colors = MaterialTheme.colorScheme
     val clipboard = LocalClipboardManager.current
-    val view = LocalView.current
+    var copied by remember(text) { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            kotlinx.coroutines.delay(1800)
+            copied = false
+        }
+    }
     fun copyMessage() {
         clipboard.setText(AnnotatedString(text))
+        copied = true
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        Box(
-            Modifier.widthIn(max = 300.dp)
-                // Uniform large radius (Grok rounded-4xl) - short messages read as full pills.
-                .clip(RoundedCornerShape(24.dp))
-                .background(colors.surfaceContainerHigh)
-                .combinedClickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null,
-                    onClick = ::copyMessage,
-                    onLongClick = {
-                        view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                        copyMessage()
-                    },
-                )
-                .semantics {
-                    onClick("Copy message") {
-                        copyMessage()
-                        true
+        Column(horizontalAlignment = Alignment.End) {
+            Box(
+                Modifier.widthIn(max = 300.dp)
+                    // Uniform large radius (Grok rounded-4xl) - short messages read as full pills.
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(colors.surfaceContainerHigh)
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    images.forEach { PhotoThumbnail(it, Modifier.fillMaxWidth().height(180.dp)) }
+                    if (text.isNotEmpty()) {
+                        Text(
+                            text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.onBackground,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        )
                     }
                 }
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                images.forEach { PhotoThumbnail(it, Modifier.fillMaxWidth().height(180.dp)) }
-                if (text.isNotEmpty()) {
-                    Text(
-                        text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onBackground,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            }
+            if (text.isNotEmpty()) {
+                Box(
+                    Modifier.semantics(mergeDescendants = true) {
+                        liveRegion = LiveRegionMode.Polite
+                        stateDescription = if (copied) "Copied" else "Ready to copy"
+                    },
+                ) {
+                    ActionIcon(
+                        if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+                        if (copied) "Copied" else "Copy message",
+                        ::copyMessage,
                     )
                 }
             }
@@ -1033,6 +1045,7 @@ private fun AiReportFlow(
     var sent by remember { mutableStateOf(false) }
     var reference by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    val reportSuccessFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val backMotion = rememberPredictiveBackMotion(onBack = onDismiss)
     Dialog(
@@ -1044,6 +1057,7 @@ private fun AiReportFlow(
             color = MaterialTheme.colorScheme.background,
         ) {
             if (sent) {
+                LaunchedEffect(Unit) { reportSuccessFocus.requestFocus() }
                 Column(
                     Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -1051,7 +1065,15 @@ private fun AiReportFlow(
                 ) {
                     Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(36.dp))
                     Spacer(Modifier.height(14.dp))
-                    Text("Report sent", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
+                    Text(
+                        "Report sent",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.focusRequester(reportSuccessFocus).focusable().semantics {
+                            heading()
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                    )
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "Thank you. Your report will be used to improve PhoneCode's safeguards.",
@@ -2044,6 +2066,9 @@ private fun PopoverCard(modifier: Modifier = Modifier, content: @Composable Colu
 
 private typealias ColumnScopeAlias = androidx.compose.foundation.layout.ColumnScope
 
+internal fun questionAnswered(selected: Collection<String>, custom: String): Boolean =
+    selected.isNotEmpty() || custom.isNotBlank()
+
 @Composable
 private fun ContextPopover(state: ChatUiState) {
     val colors = MaterialTheme.colorScheme
@@ -2095,9 +2120,15 @@ private fun PcDialog(
     content: @Composable ColumnScopeAlias.() -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    val maxHeight = with(LocalDensity.current) {
+        (LocalWindowInfo.current.containerSize.height.toDp() - 32.dp)
+            .coerceAtLeast(Spacing.touchTarget * 3f)
+    }
     Dialog(onDismissRequest = onDismiss) {
         Column(
-            modifier.fillMaxWidth().shadow(24.dp, MaterialTheme.shapes.extraLarge, clip = false)
+            modifier.fillMaxWidth().heightIn(max = maxHeight)
+                .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
+                .shadow(24.dp, MaterialTheme.shapes.extraLarge, clip = false)
                 .clip(MaterialTheme.shapes.extraLarge).background(colors.surfaceContainerHigh).padding(Spacing.m),
             content = content,
         )
@@ -2105,13 +2136,22 @@ private fun PcDialog(
 }
 
 @Composable
-private fun DialogAction(text: String, emphasized: Boolean, onClick: () -> Unit) {
+private fun DialogAction(text: String, emphasized: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
-        Modifier.clip(MaterialTheme.shapes.small).clickable(onClick = onClick).heightIn(min = Spacing.touchTarget).padding(horizontal = Spacing.s),
+        Modifier.clip(MaterialTheme.shapes.small).clickable(enabled = enabled, onClick = onClick)
+            .heightIn(min = Spacing.touchTarget).padding(horizontal = Spacing.s),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge, color = if (emphasized) colors.onBackground else colors.secondary)
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            color = when {
+                !enabled -> colors.tertiary
+                emphasized -> colors.onBackground
+                else -> colors.secondary
+            },
+        )
     }
 }
 
@@ -2278,6 +2318,10 @@ private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>
         ),
     ) { request.questions.map { mutableStateOf("") } }
     val question = request.questions[page]
+    fun answered(index: Int): Boolean =
+        questionAnswered(selections[index], customAnswers[index].value)
+    val currentAnswered = answered(page)
+    val allAnswered = request.questions.indices.all(::answered)
     PcDialog(onDismiss) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -2300,10 +2344,11 @@ private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>
                         fadeOut(tween(120, easing = PhoneEasings.easeOut)))
             },
             label = "questionPage",
+            modifier = Modifier.weight(1f, fill = false),
         ) { index ->
             val item = request.questions[index]
             Column(
-                Modifier.padding(top = 12.dp).heightIn(max = 420.dp)
+                Modifier.fillMaxWidth().padding(top = 12.dp)
                     .contentVerticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -2353,10 +2398,11 @@ private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>
             if (page > 0) DialogAction("Back", emphasized = false) { page-- }
             Spacer(Modifier.width(4.dp))
             if (page < request.questions.lastIndex) {
-                DialogAction("Next", emphasized = true) { page++ }
+                DialogAction("Next", emphasized = true, enabled = currentAnswered) { page++ }
             } else {
-                DialogAction("Submit", emphasized = true) {
-                onSubmit(request.questions.mapIndexed { qi, question ->
+                DialogAction("Submit", emphasized = true, enabled = allAnswered) {
+                    if (!allAnswered) return@DialogAction
+                    onSubmit(request.questions.mapIndexed { qi, question ->
                     val chosen = selections[qi].toMutableList()
                     val custom = customAnswers[qi].value.trim()
                     if (custom.isNotEmpty()) chosen.add(custom)

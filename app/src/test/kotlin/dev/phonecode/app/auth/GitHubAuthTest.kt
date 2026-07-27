@@ -10,15 +10,23 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class GitHubAuthTest {
 
     private val clientId = "phonecode-test-client"
     private val server = MockWebServer().apply { start() }
     private val stored = mutableMapOf<String, String>()
+    private val writes = mutableListOf<Map<String, String>>()
     private val auth = GitHubAuth(
         http = OkHttpClient(),
-        store = { k, v -> stored[k] = v },
+        store = { values ->
+            writes += values
+            values.forEach { (key, value) ->
+                if (value.isBlank()) stored.remove(key) else stored[key] = value
+            }
+        },
         read = { stored[it] },
         clientId = clientId,
         deviceCodeUrl = server.url("/login/device/code").toString(),
@@ -77,12 +85,13 @@ class GitHubAuthTest {
 
     // -- pollForToken --
 
-    @Test fun pollSucceedsAfterAuthorizationPendingAndStoresToken() {
+    @Test fun pollSucceedsAfterAuthorizationPendingWithoutPersistingToken() {
         server.enqueue(json("""{"error":"authorization_pending"}"""))
         server.enqueue(json("""{"access_token":"gho_tok","token_type":"bearer"}"""))
 
         assertEquals("gho_tok", auth.pollForToken(code()))
-        assertEquals("gho_tok", stored["git.token"])
+        assertFalse(stored.containsKey("git.token"))
+        assertTrue(writes.isEmpty())
         assertEquals(2, server.requestCount)
         repeat(2) {
             val body = server.takeRequest().body.readUtf8()
@@ -131,18 +140,22 @@ class GitHubAuthTest {
         assertTrue(server.takeRequest().body.readUtf8().contains("device_code=dev-1"))
     }
 
-    // -- fetchLogin --
+    // -- finishSignIn --
 
-    @Test fun fetchLoginStoresLoginAndGitUsername() {
+    @Test fun finishSignInPersistsAllCredentialsOnlyAfterIdentitySucceeds() {
         server.enqueue(json("""{"login":"octocat","id":1}"""))
-        assertEquals("octocat", auth.fetchLogin("gho_tok"))
+
+        assertEquals("octocat", auth.finishSignIn("gho_tok"))
+
+        assertEquals(1, writes.size)
+        assertEquals("gho_tok", stored["git.token"])
         assertEquals("octocat", stored["github.login"])
         assertEquals("octocat", stored["git.username"])
         assertEquals("Bearer gho_tok", server.takeRequest().getHeader("Authorization"))
         assertEquals("octocat", auth.login())
     }
 
-    @Test fun fetchLoginDoesNotReplayAccessTokenHeaderAcrossRedirect() {
+    @Test fun identityFailureDoesNotPersistAnyCredential() {
         server.enqueue(
             MockResponse()
                 .setResponseCode(302)
@@ -150,10 +163,87 @@ class GitHubAuthTest {
         )
         server.enqueue(json("""{"login":"attacker"}"""))
 
-        assertThrows(IOException::class.java) { auth.fetchLogin("gho_secret") }
+        assertThrows(IOException::class.java) { auth.finishSignIn("gho_secret") }
 
         assertEquals(1, server.requestCount)
         assertEquals("Bearer gho_secret", server.takeRequest().getHeader("Authorization"))
+        assertTrue(stored.isEmpty())
+        assertTrue(writes.isEmpty())
+    }
+
+    @Test fun cancellationAfterIdentityDoesNotPersistCredentials() {
+        server.enqueue(json("""{"login":"octocat","id":1}"""))
+        var activeChecks = 0
+
+        assertThrows(GitHubAuth.SignInAbandonedException::class.java) {
+            auth.finishSignIn("gho_tok", active = { ++activeChecks == 1 })
+        }
+
+        assertTrue(stored.isEmpty())
+        assertTrue(writes.isEmpty())
+    }
+
+    @Test fun cancellationWhilePublishingRollsBackToPreviousCredentials() {
+        stored["git.token"] = "manual-token"
+        stored["git.username"] = "manual-user"
+        server.enqueue(json("""{"login":"octocat","id":1}"""))
+        var active = true
+
+        assertThrows(GitHubAuth.SignInAbandonedException::class.java) {
+            auth.finishSignIn("gho_tok", active = { active }) {
+                active = false
+            }
+        }
+
+        assertEquals("manual-token", stored["git.token"])
+        assertEquals("manual-user", stored["git.username"])
+        assertFalse(stored.containsKey("github.login"))
+    }
+
+    @Test fun credentialTransactionExcludesConcurrentManualWrites() {
+        server.enqueue(json("""{"login":"octocat","id":1}"""))
+        val lock = Any()
+        val published = CountDownLatch(1)
+        val allowCompletion = CountDownLatch(1)
+        val manualWriteEntered = CountDownLatch(1)
+        val transactionalAuth = GitHubAuth(
+            http = OkHttpClient(),
+            store = { values ->
+                values.forEach { (key, value) ->
+                    if (value.isBlank()) stored.remove(key) else stored[key] = value
+                }
+            },
+            read = { stored[it] },
+            credentialLock = lock,
+            clientId = clientId,
+            deviceCodeUrl = server.url("/login/device/code").toString(),
+            tokenUrl = server.url("/login/oauth/access_token").toString(),
+            userUrl = server.url("/user").toString(),
+        )
+        val authThread = Thread {
+            transactionalAuth.finishSignIn("device-token") {
+                published.countDown()
+                assertTrue(allowCompletion.await(2, TimeUnit.SECONDS))
+            }
+        }.apply { start() }
+        assertTrue(published.await(2, TimeUnit.SECONDS))
+        val manualThread = Thread {
+            synchronized(lock) {
+                manualWriteEntered.countDown()
+                stored["git.token"] = "manual-token"
+                stored["git.username"] = "manual-user"
+                stored["github.login"] = "manual-user"
+            }
+        }.apply { start() }
+
+        assertFalse(manualWriteEntered.await(100, TimeUnit.MILLISECONDS))
+        allowCompletion.countDown()
+        authThread.join(2_000)
+        manualThread.join(2_000)
+
+        assertEquals("manual-token", stored["git.token"])
+        assertEquals("manual-user", stored["git.username"])
+        assertEquals("manual-user", stored["github.login"])
     }
 
     // -- signOut --
@@ -161,8 +251,9 @@ class GitHubAuthTest {
     @Test fun signOutClearsAllKeys() {
         stored["git.token"] = "t"; stored["git.username"] = "u"; stored["github.login"] = "l"
         auth.signOut()
-        assertEquals("", stored["git.token"])
-        assertEquals("", stored["git.username"])
-        assertEquals("", stored["github.login"])
+        assertFalse(stored.containsKey("git.token"))
+        assertFalse(stored.containsKey("git.username"))
+        assertFalse(stored.containsKey("github.login"))
+        assertEquals(1, writes.size)
     }
 }

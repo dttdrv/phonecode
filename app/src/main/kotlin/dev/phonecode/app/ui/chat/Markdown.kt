@@ -2,8 +2,10 @@ package dev.phonecode.app.ui.chat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -303,20 +306,38 @@ private fun TableBlock(table: MdBlock.Table, styles: MdStyles, baseStyle: TextSt
         MdAlign.End -> TextAlign.End
         MdAlign.Start -> TextAlign.Start
     }
-    Column(
-        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
-            .border(1.dp, colors.outlineVariant, MaterialTheme.shapes.small),
-    ) {
-        Row(Modifier.fillMaxWidth().background(colors.surfaceContainerHigh)) {
-            for (i in 0 until cols) {
-                TableCell(table.header.getOrElse(i) { "" }, styles, baseStyle.copy(fontWeight = FontWeight.SemiBold), textAlign(i), Modifier.weight(1f))
-            }
-        }
-        table.rows.forEach { row ->
-            Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant))
-            Row(Modifier.fillMaxWidth()) {
-                for (i in 0 until cols) {
-                    TableCell(row.getOrElse(i) { "" }, styles, baseStyle, textAlign(i), Modifier.weight(1f))
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val cellWidth = maxOf(112.dp, maxWidth / cols)
+        Box(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                .clip(MaterialTheme.shapes.small)
+                .border(1.dp, colors.outlineVariant, MaterialTheme.shapes.small),
+        ) {
+            Column(Modifier.width(cellWidth * cols)) {
+                Row(Modifier.background(colors.surfaceContainerHigh)) {
+                    for (i in 0 until cols) {
+                        TableCell(
+                            table.header.getOrElse(i) { "" },
+                            styles,
+                            baseStyle.copy(fontWeight = FontWeight.SemiBold),
+                            textAlign(i),
+                            Modifier.width(cellWidth),
+                        )
+                    }
+                }
+                table.rows.forEach { row ->
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant))
+                    Row {
+                        for (i in 0 until cols) {
+                            TableCell(
+                                row.getOrElse(i) { "" },
+                                styles,
+                                baseStyle,
+                                textAlign(i),
+                                Modifier.width(cellWidth),
+                            )
+                        }
+                    }
                 }
             }
         }

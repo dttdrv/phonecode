@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -70,6 +72,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -294,7 +298,7 @@ private fun SettingsPageContent(
         "mcp" -> McpPage(vm, onBack, onNestedBackActive)
         "skills" -> SkillsPage(vm, onBack, onNestedBackActive)
         "tools" -> AgentToolsPage(vm, onBack)
-        "files" -> FilesPage(vm, settingsVm, onBack)
+        "files" -> FilesPage(vm, onBack)
         "git" -> GitPage(vm, settingsVm, onBack)
         "export" -> ExportPage(vm, settingsVm, onBack)
         "about" -> AboutPage(vm, onOpenDoc = navigate, onBack = onBack)
@@ -327,7 +331,7 @@ private fun Page(
     val scrolled by remember { derivedStateOf { scrollState.value > 0 } }
     Box(Modifier.fillMaxSize().background(colors.background).statusBarsPadding()) {
         Column(
-            Modifier.fillMaxSize()
+            Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight()
                 .contentVerticalScroll(scrollState)
                 .background(colors.background)
                 .padding(start = Spacing.m, end = Spacing.m, top = Spacing.navBarHeight + 4.dp)
@@ -337,7 +341,7 @@ private fun Page(
             Spacer(Modifier.height(Spacing.xxl))
         }
         Row(
-            Modifier.fillMaxWidth().height(Spacing.navBarHeight)
+            Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth().height(Spacing.navBarHeight)
                 .shadow(if (scrolled) 2.dp else 0.dp, RectangleShape, clip = false)
                 .background(colors.background)
                 .padding(horizontal = 8.dp),
@@ -570,9 +574,8 @@ private fun GeneralPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun FilesPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () -> Unit) {
+private fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
     val state by collectSettingsState(vm)
-    val settings by settingsVm.settings.collectAsStateWithLifecycle()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) vm.linkSharedFolder(uri)
     }
@@ -612,18 +615,17 @@ private fun FilesPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: 
         PcGroup {
             CheckRow(
                 "Ask before each change",
-                selected = !settings.autoAccept,
+                selected = !state.autoAccept,
                 sub = "Review every action before it runs",
             ) {
-                settingsVm.update { it.copy(autoAccept = false) }
                 vm.setAutoAccept(false)
             }
             CheckRow(
                 "Allow changes automatically",
-                selected = settings.autoAccept,
+                selected = state.autoAccept,
                 sub = "Run workspace changes without approval prompts",
             ) {
-                if (!settings.autoAccept) confirmAutomaticApproval = true
+                if (!state.autoAccept) confirmAutomaticApproval = true
             }
         }
         Note("Reading the active workspace and linked folders is always allowed. Reads outside those locations always ask. Automatic approval controls writes, commands, Git operations, and actions from enabled MCP servers that can change data.")
@@ -657,7 +659,6 @@ private fun FilesPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: 
             action = "Enable automatic approval",
             onDismiss = { confirmAutomaticApproval = false },
         ) {
-            settingsVm.update { it.copy(autoAccept = true) }
             vm.setAutoAccept(true)
             confirmAutomaticApproval = false
         }
@@ -795,6 +796,7 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
     val preset = vm.allProviders().firstOrNull { it.id == providerId }
     var key by remember(providerId) { mutableStateOf("") }
     var hasStoredKey by remember(providerId) { mutableStateOf(vm.keyFor(providerId).isNotBlank()) }
+    var pendingCodexDisconnect by rememberSaveable(providerId) { mutableStateOf(false) }
     var pendingRemoveKey by remember(providerId) { mutableStateOf(false) }
     var pendingRemoveProvider by remember(providerId) { mutableStateOf(false) }
     var keyError by remember(providerId) { mutableStateOf<String?>(null) }
@@ -803,7 +805,7 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
         if (providerId == "codex") {
             PcSectionLabel("Account")
             PcGroup {
-                PcRow(onClick = { vm.signOutCodex(); onBack() }) {
+                PcRow(onClick = { pendingCodexDisconnect = true }) {
                     Column(Modifier.weight(1f)) {
                         Text("ChatGPT", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
                         Text("Signed in", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
@@ -893,6 +895,18 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
                     )
                 }
             }
+        }
+    }
+    if (pendingCodexDisconnect) {
+        ConfirmActionDialog(
+            title = "Disconnect ChatGPT?",
+            message = "This signs out of ChatGPT and removes the saved sign-in credentials. Existing chats stay on this device.",
+            action = "Disconnect",
+            onDismiss = { pendingCodexDisconnect = false },
+        ) {
+            vm.signOutCodex()
+            pendingCodexDisconnect = false
+            onBack()
         }
     }
     if (pendingRemoveKey) {
@@ -1244,19 +1258,27 @@ private fun ConfirmDiscardDialog(
     onKeepEditing: () -> Unit,
     onDiscard: () -> Unit,
 ) {
+    val maxHeight = with(LocalDensity.current) {
+        (LocalWindowInfo.current.containerSize.height.toDp() - 32.dp)
+            .coerceAtLeast(Spacing.touchTarget * 3f)
+    }
     Dialog(onDismissRequest = onKeepEditing) {
         Column(
-            Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge)
+            Modifier.fillMaxWidth().heightIn(max = maxHeight)
+                .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
+                .clip(MaterialTheme.shapes.extraLarge)
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .padding(Spacing.m),
         ) {
-            Text("Discard changes?", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-            Text(
-                message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = Spacing.xs, bottom = Spacing.m),
-            )
+            Column(Modifier.weight(1f, fill = false).contentVerticalScroll(rememberScrollState())) {
+                Text("Discard changes?", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Spacing.xs, bottom = Spacing.m),
+                )
+            }
             PcButton("Keep editing", onClick = onKeepEditing)
             Spacer(Modifier.height(Spacing.xs))
             PcButton("Discard", filled = false, destructive = true, onClick = onDiscard)
@@ -1274,19 +1296,27 @@ private fun ConfirmActionDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
+    val maxHeight = with(LocalDensity.current) {
+        (LocalWindowInfo.current.containerSize.height.toDp() - 32.dp)
+            .coerceAtLeast(Spacing.touchTarget * 3f)
+    }
     Dialog(onDismissRequest = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge)
+            Modifier.fillMaxWidth().heightIn(max = maxHeight)
+                .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
+                .clip(MaterialTheme.shapes.extraLarge)
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .padding(Spacing.m),
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-            Text(
-                message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = Spacing.xs, bottom = Spacing.m),
-            )
+            Column(Modifier.weight(1f, fill = false).contentVerticalScroll(rememberScrollState())) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Spacing.xs, bottom = Spacing.m),
+                )
+            }
             PcButton("Cancel", onClick = onDismiss)
             if (secondaryAction != null && onSecondary != null) {
                 Spacer(Modifier.height(Spacing.xs))
@@ -1942,6 +1972,43 @@ private fun DocPage(title: String, assetName: String, onBack: () -> Unit) {
 // Custom provider dialog
 // ---------------------------------------------------------------------------------------------
 
+@Composable
+internal fun CustomProviderTextFields(
+    name: String,
+    onNameChange: (String) -> Unit,
+    baseUrl: String,
+    onBaseUrlChange: (String) -> Unit,
+    modelsText: String,
+    onModelsTextChange: (String) -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Text("Provider name", style = MaterialTheme.typography.labelMedium, color = colors.secondary)
+    PcField(
+        name,
+        onNameChange,
+        "e.g. My LM Studio",
+        contentDescription = "Provider name",
+    )
+    Spacer(Modifier.height(6.dp))
+    Text("Base URL", style = MaterialTheme.typography.labelMedium, color = colors.secondary)
+    PcField(
+        baseUrl,
+        onBaseUrlChange,
+        "e.g. https://host/v1",
+        contentDescription = "Base URL",
+    )
+    Spacer(Modifier.height(6.dp))
+    Text("Model IDs", style = MaterialTheme.typography.labelMedium, color = colors.secondary)
+    PcField(
+        modelsText,
+        onModelsTextChange,
+        "One model id per line",
+        singleLine = false,
+        minLines = 2,
+        contentDescription = "Model IDs",
+    )
+}
+
 /**
  * Add a user-defined provider (round-3 feedback): name, base URL, wire format, and the model ids
  * to expose. Saved to providers.json - the same file the agent edits - so both arrival paths feed
@@ -1962,59 +2029,74 @@ private fun CustomProviderDialog(
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val id = name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+    val models = modelsText.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    val validationError = when {
+        name.isBlank() -> "Enter a provider name"
+        id.isBlank() -> "Name needs at least one letter or digit"
+        !isSafeCustomProviderId(id) -> "Use a shorter, unique provider name"
+        id in existingIds -> "\"$id\" already exists"
+        baseUrl.isBlank() -> "Enter the provider base URL"
+        !isSafeProviderEndpoint(baseUrl.trim()) -> "Use HTTPS, or HTTP only for localhost"
+        models.isEmpty() -> "Add at least one model id"
+        else -> null
+    }
+    val hasInput = name.isNotBlank() || baseUrl.isNotBlank() || modelsText.isNotBlank()
+    val maxHeight = with(LocalDensity.current) {
+        (LocalWindowInfo.current.containerSize.height.toDp() - 32.dp)
+            .coerceAtLeast(Spacing.touchTarget * 4f)
+    }
     Dialog(onDismissRequest = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().fillMaxHeight(0.9f)
+            Modifier.fillMaxWidth().heightIn(max = maxHeight)
+                .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
                 .shadow(24.dp, MaterialTheme.shapes.extraLarge, clip = false)
                 .clip(MaterialTheme.shapes.extraLarge).background(colors.surfaceContainerHigh)
-                .contentVerticalScroll(rememberScrollState()).padding(Spacing.m),
+                .padding(Spacing.m),
         ) {
-            Text("Add custom provider", style = MaterialTheme.typography.titleMedium, color = colors.onBackground, modifier = Modifier.padding(bottom = Spacing.s))
-            PcField(name, { name = it }, "Name (e.g. My LM Studio)")
-            Spacer(Modifier.height(6.dp))
-            PcField(baseUrl, { baseUrl = it }, "Base URL (e.g. https://host/v1)")
-            Spacer(Modifier.height(6.dp))
-            PcField(modelsText, { modelsText = it }, "Model ids, one per line", singleLine = false, minLines = 2)
-            Spacer(Modifier.height(Spacing.xs))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Anthropic format", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                    Text("Off = OpenAI-compatible (most servers)", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+            Column(
+                Modifier.fillMaxWidth().weight(1f, fill = false)
+                    .contentVerticalScroll(rememberScrollState()),
+            ) {
+                Text("Add custom provider", style = MaterialTheme.typography.titleMedium, color = colors.onBackground, modifier = Modifier.padding(bottom = Spacing.s))
+                CustomProviderTextFields(
+                    name,
+                    { name = it; error = null },
+                    baseUrl,
+                    { baseUrl = it; error = null },
+                    modelsText,
+                    { modelsText = it; error = null },
+                )
+                Spacer(Modifier.height(Spacing.xs))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Anthropic format", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
+                        Text("Off = OpenAI-compatible (most servers)", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                    }
+                    PcToggle(anthropicFormat, { anthropicFormat = it }, "Use Anthropic Messages format")
                 }
-                PcToggle(anthropicFormat, { anthropicFormat = it }, "Use Anthropic Messages format")
-            }
-            error?.let {
-                Spacer(Modifier.height(6.dp))
-                ErrorText(it, style = MaterialTheme.typography.labelSmall)
+                (error ?: validationError?.takeIf { hasInput })?.let {
+                    Spacer(Modifier.height(6.dp))
+                    ErrorText(it, style = MaterialTheme.typography.labelSmall)
+                }
             }
             Spacer(Modifier.height(Spacing.s))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 Box(Modifier.weight(1f)) { PcButton("Cancel", filled = false, onClick = onDismiss) }
                 Box(Modifier.weight(1f)) {
-                    PcButton(if (saving) "Saving…" else "Save", enabled = !saving) {
-                        val id = name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
-                        val models = modelsText.lines().map { it.trim() }.filter { it.isNotEmpty() }
-                        when {
-                            name.isBlank() -> error = "Name is required"
-                            id.isBlank() -> error = "Name needs at least one letter or digit"
-                            !isSafeCustomProviderId(id) -> error = "Use a shorter, unique provider name"
-                            id in existingIds -> error = "\"$id\" already exists"
-                            !isSafeProviderEndpoint(baseUrl.trim()) -> error = "Use HTTPS, or HTTP only for localhost"
-                            models.isEmpty() -> error = "Add at least one model id"
-                            else -> {
-                                saving = true
-                                scope.launch {
-                                    onSave(id, CustomProvider(
-                                        name = name.trim(),
-                                        baseUrl = baseUrl.trim().trimEnd('/'),
-                                        format = if (anthropicFormat) "anthropic" else "openai",
-                                        models = models.associateWith { CustomModel(name = it) },
-                                    )).onSuccess { onSaved(id) }.onFailure { failure ->
-                                        error = failure.message ?: "Custom provider could not be saved"
-                                    }
-                                    saving = false
-                                }
+                    PcButton(if (saving) "Saving…" else "Save", enabled = !saving && validationError == null) {
+                        if (validationError != null) return@PcButton
+                        saving = true
+                        scope.launch {
+                            onSave(id, CustomProvider(
+                                name = name.trim(),
+                                baseUrl = baseUrl.trim().trimEnd('/'),
+                                format = if (anthropicFormat) "anthropic" else "openai",
+                                models = models.associateWith { CustomModel(name = it) },
+                            )).onSuccess { onSaved(id) }.onFailure { failure ->
+                                error = failure.message ?: "Custom provider could not be saved"
                             }
+                            saving = false
                         }
                     }
                 }

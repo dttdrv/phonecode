@@ -15,13 +15,15 @@ import java.io.IOException
  * design/specs/github-device-flow.md. No backend or redirect URI: the app shows a short code,
  * the user enters it at github.com/login/device, and the app polls for the token.
  *
- * On success the token + login are persisted through [store] under `git.token` / `git.username` -
- * the exact keys the agent's git push/pull tools already read - plus `github.login` for display.
+ * On success the token + login are persisted together through [store] under `git.token` /
+ * `git.username` - the exact keys the agent's git push/pull tools already read - plus
+ * `github.login` for display.
  */
 class GitHubAuth(
     http: OkHttpClient,
-    private val store: (String, String) -> Unit,
+    private val store: (Map<String, String>) -> Unit,
     private val read: (String) -> String?,
+    private val credentialLock: Any = Any(),
     private val clientId: String = CLIENT_ID,
     // Injectable for tests (MockWebServer); production uses the real GitHub endpoints.
     private val deviceCodeUrl: String = DEVICE_CODE_ENDPOINT,
@@ -98,10 +100,7 @@ class GitHubAuth(
                 obj["access_token"]?.jsonPrimitive?.content to obj["error"]?.jsonPrimitive?.content
             }
 
-            if (token != null) {
-                store(KEY_TOKEN, token)
-                return token
-            }
+            if (token != null) return token
             when (error) {
                 "authorization_pending" -> Unit // normal; keep polling
                 "slow_down" -> intervalMs += 5_000L
@@ -123,8 +122,46 @@ class GitHubAuth(
         }
     }
 
-    /** Fetches + persists the user's GitHub login. Blocking; throws [IOException] on failure. */
-    fun fetchLogin(token: String): String {
+    /**
+     * Resolves the account identity, then commits all credentials in one store operation. The
+     * success callback is part of the transaction: cancellation or a publication failure restores
+     * the credentials that existed before this attempt.
+     */
+    fun finishSignIn(
+        token: String,
+        active: () -> Boolean = { true },
+        onAuthenticated: (String) -> Unit = {},
+    ): String {
+        ensureActive(active)
+        val login = fetchLogin(token)
+        ensureActive(active)
+
+        synchronized(credentialLock) {
+            val previous = credentialValues()
+            try {
+                ensureActive(active)
+                store(
+                    mapOf(
+                        KEY_TOKEN to token,
+                        KEY_LOGIN to login,
+                        KEY_GIT_USERNAME to login,
+                    ),
+                )
+                ensureActive(active)
+                onAuthenticated(login)
+                ensureActive(active)
+                return login
+            } catch (failure: Throwable) {
+                runCatching { store(previous) }
+                    .exceptionOrNull()
+                    ?.let(failure::addSuppressed)
+                throw failure
+            }
+        }
+    }
+
+    /** Fetches the user's GitHub login without changing persisted credentials. */
+    private fun fetchLogin(token: String): String {
         val request = Request.Builder()
             .url(userUrl)
             .addHeader("Authorization", "Bearer $token")
@@ -138,10 +175,6 @@ class GitHubAuth(
             }
             val login = json.parseToJsonElement(text).jsonObject["login"]?.jsonPrimitive?.content
                 ?: throw IOException("GitHub /user response missing login")
-            store(KEY_LOGIN, login)
-            // The git tools authenticate with these two keys; GitHub ignores the username when the
-            // password is a valid token, so the login doubles as a readable Basic username.
-            store(KEY_GIT_USERNAME, login)
             return login
         }
     }
@@ -149,7 +182,19 @@ class GitHubAuth(
     fun login(): String? = read(KEY_LOGIN)
 
     fun signOut() {
-        listOf(KEY_TOKEN, KEY_LOGIN, KEY_GIT_USERNAME).forEach { store(it, "") }
+        synchronized(credentialLock) {
+            store(EMPTY_CREDENTIALS)
+        }
+    }
+
+    private fun credentialValues(): Map<String, String> = mapOf(
+        KEY_TOKEN to read(KEY_TOKEN).orEmpty(),
+        KEY_LOGIN to read(KEY_LOGIN).orEmpty(),
+        KEY_GIT_USERNAME to read(KEY_GIT_USERNAME).orEmpty(),
+    )
+
+    private fun ensureActive(active: () -> Boolean) {
+        if (!active()) throw SignInAbandonedException()
     }
 
     @Serializable
@@ -186,6 +231,11 @@ class GitHubAuth(
         private const val KEY_TOKEN = "git.token"
         private const val KEY_GIT_USERNAME = "git.username"
         private const val KEY_LOGIN = "github.login"
+        private val EMPTY_CREDENTIALS = mapOf(
+            KEY_TOKEN to "",
+            KEY_LOGIN to "",
+            KEY_GIT_USERNAME to "",
+        )
     }
 }
 

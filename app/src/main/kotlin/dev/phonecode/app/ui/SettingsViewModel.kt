@@ -42,7 +42,12 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             updateMutex.withLock {
                 runCatching {
-                    withContext(Dispatchers.IO) { store.save(updated) }
+                    // Apply the field-level edit to the latest persisted record. ChatViewModel owns
+                    // activeSessionId and may have changed it since this screen loaded; saving our
+                    // whole snapshot would silently resurrect the previous chat on next launch.
+                    withContext(Dispatchers.IO) { store.update(transform) }
+                }.onSuccess { persisted ->
+                    _settings.compareAndSet(updated, persisted)
                 }.onFailure {
                     _settings.compareAndSet(updated, previous)
                 }

@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -332,6 +334,36 @@ Original instruction.
     }
 
     @Test
+    fun failedRedoKeepsTheExistingTurnVisible() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            selected = null,
+            lines = listOf(
+                ChatLine.User("Keep this question"),
+                ChatLine.Assistant("Keep this answer"),
+            ),
+        )
+
+        app.chatViewModel.redo()
+
+        assertEquals(
+            listOf(
+                ChatLine.User("Keep this question"),
+                ChatLine.Assistant("Keep this answer"),
+            ),
+            state.value.lines,
+        )
+        assertEquals("Select a model first.", state.value.error)
+    }
+
+    @Test
     fun settingsSeparateAgentDefaultsFromApprovalPolicy() {
         dismissOnboardingIfPresent()
         compose.onNodeWithContentDescription("Menu").performClick()
@@ -451,4 +483,36 @@ Original instruction.
         compose.onNodeWithText("Issues").assertIsDisplayed()
         compose.onNodeWithText("Skill files reload automatically", substring = true).assertIsDisplayed()
     }
+
+    @Test
+    fun chatGptDisconnectRequiresConfirmation() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(codexConnected = true)
+
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("Providers").performClick()
+        compose.onNodeWithText("ChatGPT").performClick()
+
+        compose.onNodeWithText("Disconnect").performClick()
+        compose.onNodeWithText("Disconnect ChatGPT?").assertIsDisplayed()
+        compose.onNodeWithText("Existing chats stay on this device.", substring = true).assertIsDisplayed()
+        assertTrue(state.value.codexConnected)
+
+        compose.onNodeWithText("Cancel").performClick()
+        assertTrue(state.value.codexConnected)
+
+        compose.onNodeWithText("Disconnect").performClick()
+        compose.onAllNodesWithText("Disconnect").onLast().performClick()
+        compose.waitForIdle()
+        assertFalse(state.value.codexConnected)
+    }
+
 }

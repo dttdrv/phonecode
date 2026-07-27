@@ -28,6 +28,7 @@ import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -46,7 +47,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -132,6 +136,7 @@ import dev.phonecode.app.ui.components.PcIconButton
 import dev.phonecode.app.ui.components.PcButton
 import dev.phonecode.app.ui.components.PcField
 import dev.phonecode.app.ui.components.MorphingMenu
+import dev.phonecode.app.ui.components.contentVerticalScroll
 import dev.phonecode.app.ui.components.pressFeedback
 import dev.phonecode.app.ui.components.rememberContentOverscroll
 import dev.phonecode.app.ui.components.rememberPredictiveBackMotion
@@ -1021,18 +1026,42 @@ private fun ChatRow(
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun OptionsCard(title: String, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+private fun OptionsCard(
+    title: String,
+    onDismiss: () -> Unit,
+    body: @Composable ColumnScope.() -> Unit,
+    actions: @Composable ColumnScope.() -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+    val maxHeight = with(density) {
+        (LocalWindowInfo.current.containerSize.height.toDp() - 32.dp)
+            .coerceAtLeast(Spacing.touchTarget * 3f)
+    }
+    val dialogScroll = rememberScrollState()
     // Material dialog container (publish-plan N2): platform shape/tonal elevation conventions.
     androidx.compose.material3.BasicAlertDialog(onDismissRequest = onDismiss) {
         androidx.compose.material3.Surface(
+            modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight)
+                .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom)),
             shape = MaterialTheme.shapes.extraLarge,
             color = colors.surfaceContainerHigh,
             tonalElevation = 6.dp,
         ) {
             Column(Modifier.fillMaxWidth().padding(Spacing.m)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = colors.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = Spacing.s))
-                content()
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.onBackground,
+                    modifier = Modifier.padding(bottom = Spacing.s),
+                )
+                Column(
+                    Modifier.fillMaxWidth().weight(1f, fill = false)
+                        .contentVerticalScroll(dialogScroll),
+                    content = body,
+                )
+                Spacer(Modifier.height(Spacing.m))
+                Column(Modifier.fillMaxWidth(), content = actions)
             }
         }
     }
@@ -1072,7 +1101,12 @@ private fun ChatOptionsMenu(
     onDelete: () -> Unit,
 ) {
     var mode by remember { mutableStateOf("menu") }
-    Column(Modifier.fillMaxWidth().padding(6.dp)) {
+    val density = LocalDensity.current
+    val maxMenuHeight = with(density) {
+        (LocalWindowInfo.current.containerSize.height.toDp() - 16.dp)
+            .coerceAtLeast(Spacing.touchTarget * 2f)
+    }
+    Column(Modifier.fillMaxWidth().heightIn(max = maxMenuHeight).padding(6.dp)) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 42.dp).padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1094,14 +1128,30 @@ private fun ChatOptionsMenu(
             )
         }
         if (mode == "move") {
-            MenuActionRow("Unsorted", Icons.Outlined.Inbox) { onMove(null); onDismiss() }
-            projects.forEach { p -> MenuActionRow(p.name, Icons.Outlined.Folder) { onMove(p.id); onDismiss() } }
+            LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
+                item(key = "unsorted") {
+                    MenuActionRow("Unsorted", Icons.Outlined.Inbox) { onMove(null); onDismiss() }
+                }
+                items(projects, key = { "project:${it.id}" }) { project ->
+                    MenuActionRow(project.name, Icons.Outlined.Folder) {
+                        onMove(project.id)
+                        onDismiss()
+                    }
+                }
+            }
         } else {
-            MenuActionRow(if (meta.pinned) "Unpin" else "Pin", Icons.Outlined.PushPin) { onPin(); onDismiss() }
-            MenuActionRow("Rename", Icons.Outlined.Edit) { onDismiss(); onRequestRename() }
-            MenuActionRow("Move to…", Icons.Outlined.Folder) { mode = "move" }
-            MenuActionRow(if (meta.archived) "Unarchive" else "Archive", Icons.Outlined.Archive) { onArchive(); onDismiss() }
-            MenuActionRow("Delete", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); onDismiss() }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                MenuActionRow(if (meta.pinned) "Unpin" else "Pin", Icons.Outlined.PushPin) { onPin(); onDismiss() }
+                MenuActionRow("Rename", Icons.Outlined.Edit) { onDismiss(); onRequestRename() }
+                MenuActionRow("Move to…", Icons.Outlined.Folder) { mode = "move" }
+                MenuActionRow(if (meta.archived) "Unarchive" else "Archive", Icons.Outlined.Archive) { onArchive(); onDismiss() }
+                MenuActionRow("Delete", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); onDismiss() }
+            }
         }
     }
 }
@@ -1129,9 +1179,13 @@ private fun ConfirmDeleteDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    OptionsCard(title, onDismiss) {
-        Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(Spacing.m))
+    OptionsCard(
+        title = title,
+        onDismiss = onDismiss,
+        body = {
+            Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        },
+    ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Box(Modifier.weight(1f)) { PcButton("Cancel", filled = false, onClick = onDismiss) }
             Box(Modifier.weight(1f)) { PcButton("Delete", destructive = true, onClick = onConfirm) }
@@ -1142,9 +1196,13 @@ private fun ConfirmDeleteDialog(
 @Composable
 private fun TextPromptDialog(title: String, placeholder: String, initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var value by remember { mutableStateOf(initial) }
-    OptionsCard(title, onDismiss) {
-        PcField(value, { value = it }, placeholder)
-        Spacer(Modifier.height(Spacing.s))
+    OptionsCard(
+        title = title,
+        onDismiss = onDismiss,
+        body = {
+            PcField(value, { value = it }, placeholder)
+        },
+    ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Box(Modifier.weight(1f)) { PcButton("Cancel", filled = false, onClick = onDismiss) }
             Box(Modifier.weight(1f)) { PcButton("Save") { if (value.isNotBlank()) onConfirm(value.trim()) } }

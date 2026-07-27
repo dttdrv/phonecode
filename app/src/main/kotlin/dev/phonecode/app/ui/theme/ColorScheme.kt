@@ -26,10 +26,10 @@ private val LightField = Color(0xFFE9E9E9)
 
 private val DarkInk1 = Color(0xFFFFFFFF)
 private val DarkInk2 = Color(0x9EEBEBF5)
-private val DarkInk3 = Color(0x66EBEBF5)
+private val DarkInk3 = Color(0xFF9A9AA0)
 private val LightInk1 = Color(0xFF000000)
 private val LightInk2 = Color(0xFF5F6368)
-private val LightInk3 = Color(0xFF73777C)
+private val LightInk3 = Color(0xFF6B6F73)
 
 // Edge-definition rings (Grok: a solid one-step ring, not an alpha hairline).
 private val DarkHair = Color(0xFF2A2A2A)

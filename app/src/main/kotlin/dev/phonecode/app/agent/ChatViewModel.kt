@@ -223,6 +223,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // [workspace]). Set at send() start, cleared when that turn finishes.
     @Volatile private var turnWorkspace: File? = null
     private val keyStore = SecureKeyStore(app)
+    private val gitCredentialLock = Any()
     private val http = OkHttpClient.Builder()
         .callTimeout(0, TimeUnit.MILLISECONDS)
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -735,8 +736,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (effort in reasoningEfforts(it.selected)) it.copy(effort = effort) else it
     }
     fun setAutoAccept(value: Boolean) {
-        _state.update { it.copy(autoAccept = value) }
-        viewModelScope.launch(Dispatchers.IO) { appSettings.update { it.copy(autoAccept = value) } }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { appSettings.update { it.copy(autoAccept = value) } }
+                .onSuccess { _state.update { state -> state.copy(autoAccept = value) } }
+                .onFailure {
+                    _state.update { state ->
+                        state.copy(
+                            error = if (value) {
+                                "Automatic approval could not be enabled; approval is still required."
+                            } else {
+                                "Ask-before-change could not be saved; automatic approval remains on."
+                            },
+                        )
+                    }
+                }
+        }
     }
 
     fun linkSharedFolder(uri: android.net.Uri) {
@@ -964,11 +978,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (_state.value.sessionLoading) return fail("Wait for the current data operation to finish.")
         viewModelScope.launch(Dispatchers.IO) {
             metadataMutationMutex.withLock {
+            val previouslyLinked = sharedFileAccess.linkedFolder(uri)
+            var newlyLinkedFolderId: String? = null
+            var newlyCreatedProjectId: String? = null
             runCatching {
                 val folders = sharedFileAccess.link(uri)
                 val folder = folders.first { it.handle == uri.toString() }
-                val project = projectStore.list().firstOrNull { it.folderId == folder.id }
-                    ?: projectStore.add("project-" + System.currentTimeMillis(), folder.name, folder.id)
+                if (previouslyLinked == null) newlyLinkedFolderId = folder.id
+                val project = projectStore.list().firstOrNull { it.folderId == folder.id } ?: run {
+                    projectStore.add("project-" + System.currentTimeMillis(), folder.name, folder.id)
+                        .also { newlyCreatedProjectId = it.id }
+                }
                 Triple(folders, projectStore.list(), project)
             }.onSuccess { (folders, projects, project) ->
                 withContext(Dispatchers.Main.immediate) {
@@ -976,7 +996,31 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     newChat(project.id)
                 }
             }.onFailure { error ->
-                _state.update { it.copy(error = "Could not create project: ${error.message}") }
+                val cleanupFailures = mutableListOf<Throwable>()
+                newlyCreatedProjectId?.let { projectId ->
+                    runCatching { projectStore.delete(projectId) }
+                        .exceptionOrNull()
+                        ?.let(cleanupFailures::add)
+                }
+                // If project deletion failed, keep its folder metadata and grant intact so the
+                // orphan remains visible and usable instead of becoming a broken hidden record.
+                if (cleanupFailures.isEmpty()) {
+                    newlyLinkedFolderId?.let { folderId ->
+                        runCatching { sharedFileAccess.unlink(folderId) }
+                            .exceptionOrNull()
+                            ?.let(cleanupFailures::add)
+                    }
+                }
+                cleanupFailures.forEach(error::addSuppressed)
+                _state.update {
+                    it.copy(
+                        sharedFolders = sharedFolderStore.list(),
+                        projects = projectStore.list(),
+                        error = "Could not create project: ${error.message}" +
+                            if (cleanupFailures.isEmpty()) "" else
+                                ". Cleanup was incomplete; review linked folders before retrying.",
+                    )
+                }
             }
             }
         }
@@ -1325,8 +1369,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val stored = values.map { (providerId, value) ->
             providerSecretName(providerId) to value.trim()
         }.toMap()
-        keyStore.putAll(stored)
-        stored.all { (name, value) -> keyStore.get(name).orEmpty() == value }
+        synchronized(gitCredentialLock) {
+            keyStore.putAll(stored)
+            stored.all { (name, value) -> keyStore.get(name).orEmpty() == value }
+        }
     }.getOrDefault(false)
     fun configureProviderKey(providerId: String, key: String): Boolean {
         val trimmed = key.trim()
@@ -1489,41 +1535,67 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val githubAuth by lazy {
         GitHubAuth(
             http,
-            store = keyStore::put,
+            store = keyStore::putAll,
             read = keyStore::get,
+            credentialLock = gitCredentialLock,
             clientId = githubOAuthClientId(BuildConfig.GITHUB_OAUTH_CLIENT_ID, BuildConfig.DEBUG),
         )
     }
-    @Volatile private var githubSignInActive = false
+    private enum class GitHubSignInStatus { ACTIVE, CANCELED, COMMITTED }
+
+    private class GitHubSignInAttempt {
+        private val status = AtomicReference(GitHubSignInStatus.ACTIVE)
+        fun canContinue(): Boolean = status.get() != GitHubSignInStatus.CANCELED
+        fun cancel(): Boolean = status.compareAndSet(GitHubSignInStatus.ACTIVE, GitHubSignInStatus.CANCELED)
+        fun commit(): Boolean = status.compareAndSet(GitHubSignInStatus.ACTIVE, GitHubSignInStatus.COMMITTED)
+    }
+
+    private val githubSignInAttempt = AtomicReference<GitHubSignInAttempt?>(null)
 
     fun startGitHubSignIn() {
-        if (githubSignInActive) return
-        githubSignInActive = true
+        val attempt = GitHubSignInAttempt()
+        if (!githubSignInAttempt.compareAndSet(null, attempt)) return
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                runCatching {
-                    val device = githubAuth.startDeviceFlow()
-                    _state.update { it.copy(githubAuthCode = device.userCode, githubVerifyUri = device.verificationUri) }
-                    val token = githubAuth.pollForToken(device) { githubSignInActive }
-                    val login = githubAuth.fetchLogin(token)
-                    _state.update { it.copy(githubLogin = login, githubAuthCode = null, githubVerifyUri = null, notice = "Signed in as @$login") }
-                }.onFailure { e ->
+            runCatching {
+                val device = githubAuth.startDeviceFlow()
+                if (!attempt.canContinue()) throw GitHubAuth.SignInAbandonedException()
+                _state.update { it.copy(githubAuthCode = device.userCode, githubVerifyUri = device.verificationUri) }
+                val token = githubAuth.pollForToken(device, attempt::canContinue)
+                githubAuth.finishSignIn(token, attempt::canContinue) { login ->
+                    if (!attempt.commit() || !githubSignInAttempt.compareAndSet(attempt, null)) {
+                        throw GitHubAuth.SignInAbandonedException()
+                    }
+                    _state.update {
+                        it.copy(
+                            githubLogin = login,
+                            githubAuthCode = null,
+                            githubVerifyUri = null,
+                            notice = "Signed in as @$login",
+                        )
+                    }
+                }
+            }.onFailure { error ->
+                attempt.cancel()
+                if (githubSignInAttempt.compareAndSet(attempt, null)) {
                     _state.update {
                         it.copy(
                             githubAuthCode = null,
                             githubVerifyUri = null,
-                            error = if (e is GitHubAuth.SignInAbandonedException) null else "GitHub sign-in failed: ${e.message}",
+                            error = if (error is GitHubAuth.SignInAbandonedException) {
+                                null
+                            } else {
+                                "GitHub sign-in failed: ${error.message}"
+                            },
                         )
                     }
                 }
-            } finally {
-                githubSignInActive = false
             }
         }
     }
 
     fun cancelGitHubSignIn() {
-        githubSignInActive = false
+        val attempt = githubSignInAttempt.get() ?: return
+        if (!attempt.cancel()) return
         _state.update { it.copy(githubAuthCode = null, githubVerifyUri = null) }
     }
 
@@ -1674,7 +1746,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // Authoritative read from the persisted settings file - the same source the settings
         // toggle displays. The in-memory copy diverged on devices that carried an older value
         // (device feedback: "auto-accept on even though it's off in settings").
-        val automaticChanges = withContext(Dispatchers.IO) { appSettings.load().autoAccept }
+        // The execution state changes synchronously on revocation. Reading the file here allowed
+        // one last mutation to auto-run while the UI already said "Ask before each change."
+        val automaticChanges = _state.value.autoAccept
         if (permissionCanAutoApprove(tool, automaticChanges)) return true
         val deferred = CompletableDeferred<Boolean>()
         pendingDecision = deferred
@@ -1917,11 +1991,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun redo() {
         if (_state.value.isRunning) return
         val lastUser = _state.value.lines.filterIsInstance<ChatLine.User>().lastOrNull() ?: return
+        val previousHistory = history
+        val previousLines = _state.value.lines
+        val previousEpoch = _state.value.timelineEpoch
         val historyCut = redoCutIndex(history)
         if (historyCut >= 0) history = history.take(historyCut)
         val lineCut = _state.value.lines.indexOfLast { it is ChatLine.User }
         if (lineCut >= 0) _state.update { it.copy(lines = it.lines.take(lineCut), timelineEpoch = it.timelineEpoch + 1) }
-        send(lastUser.text, lastUser.images)
+        if (!send(lastUser.text, lastUser.images)) {
+            history = previousHistory
+            _state.update { it.copy(lines = previousLines, timelineEpoch = previousEpoch) }
+        }
     }
 
     fun cancel() {
@@ -2296,9 +2376,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        // Stop background daemons promptly: the GitHub poll thread checks this flag every ≤500ms,
+        // Stop background daemons promptly: the GitHub poll thread checks this attempt every ≤500ms,
         // and the Codex loopback listener would otherwise hold port 1455 until its 5-min timeout.
-        githubSignInActive = false
+        githubSignInAttempt.getAndSet(null)?.cancel()
         configHotReload.close()
         codexAuth.stopLoopback()
         foregroundLeases.unregisterStopHandler("turn")

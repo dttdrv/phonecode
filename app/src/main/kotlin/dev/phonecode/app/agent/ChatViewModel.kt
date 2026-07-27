@@ -116,6 +116,9 @@ enum class ToolStatus { RUNNING, DONE, ERROR }
 
 data class PermissionRequest(val tool: String, val summary: String)
 
+internal fun permissionCanAutoApprove(tool: String, automaticChanges: Boolean): Boolean =
+    automaticChanges && !tool.equals("external_directory", ignoreCase = true)
+
 data class QuestionRequest(val questions: List<UserQuestion>)
 data class RetryState(val attempt: Int, val message: String)
 data class AiReportSubmission(val accepted: Boolean, val reference: String? = null, val error: String? = null)
@@ -1615,7 +1618,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // Authoritative read from the persisted settings file - the same source the settings
         // toggle displays. The in-memory copy diverged on devices that carried an older value
         // (device feedback: "auto-accept on even though it's off in settings").
-        if (withContext(Dispatchers.IO) { appSettings.load().autoAccept }) return true
+        val automaticChanges = withContext(Dispatchers.IO) { appSettings.load().autoAccept }
+        if (permissionCanAutoApprove(tool, automaticChanges)) return true
         val deferred = CompletableDeferred<Boolean>()
         pendingDecision = deferred
         _state.update { it.copy(pendingPermission = PermissionRequest(tool, summary)) }

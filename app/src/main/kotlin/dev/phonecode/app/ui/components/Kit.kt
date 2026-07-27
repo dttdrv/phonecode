@@ -33,10 +33,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -49,6 +53,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalDensity
@@ -57,6 +62,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.phonecode.app.ui.theme.ShapePill
+import dev.phonecode.app.ui.theme.ShapeButton
 import dev.phonecode.app.ui.theme.Spacing
 import dev.phonecode.app.ui.theme.PhoneSprings
 import androidx.compose.material3.Icon
@@ -136,14 +142,28 @@ fun Modifier.pressFeedback(
 }
 
 @Composable
-fun PcIconButton(icon: ImageVector, contentDescription: String?, modifier: Modifier = Modifier, tint: Color = MaterialTheme.colorScheme.onBackground, onClick: () -> Unit) {
+fun PcIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.onBackground,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier
             .size(Spacing.touchTarget)
             .pressFeedback(interaction, pressedScale = 0.96f)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.38f }
             .clip(ShapePill)
-            .clickable(interactionSource = interaction, indication = ripple(), role = Role.Button, onClick = onClick),
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(),
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, contentDescription, tint = tint, modifier = Modifier.size(22.dp)) }
 }
@@ -223,7 +243,8 @@ fun PcSectionLabel(text: String) {
         text,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 14.dp, top = 16.dp, bottom = 6.dp),
+        modifier = Modifier.padding(start = 14.dp, top = 16.dp, bottom = 6.dp)
+            .semantics { heading() },
     )
 }
 
@@ -238,25 +259,63 @@ fun PcField(
     password: Boolean = false,
     minLines: Int = 1,
     contentDescription: String = placeholder,
+    label: String? = null,
 ) {
     val colors = MaterialTheme.colorScheme
-    Box(
-        modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).background(colors.surfaceContainerHighest)
-            .padding(horizontal = 13.dp, vertical = 11.dp),
+    var passwordVisible by remember { mutableStateOf(false) }
+    Column(
+        modifier.fillMaxWidth().heightIn(min = Spacing.touchTarget)
+            .clip(MaterialTheme.shapes.small).background(colors.surfaceContainerHighest)
+            .padding(start = 13.dp, end = if (password) 2.dp else 13.dp, top = 7.dp, bottom = 7.dp),
     ) {
-        if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodySmall, color = colors.tertiary)
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onBackground),
-            cursorBrush = SolidColor(colors.primary),
-            singleLine = singleLine,
-            minLines = minLines,
-            visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-            // Password keyboard type keeps secrets out of IME learning/suggestions.
-            keyboardOptions = if (password) KeyboardOptions(keyboardType = KeyboardType.Password) else KeyboardOptions.Default,
-            modifier = Modifier.fillMaxWidth().semantics { this.contentDescription = contentDescription },
-        )
+        label?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+        }
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = if (label == null) 34.dp else 32.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (value.isEmpty() && label == null) {
+                    Text(placeholder, style = MaterialTheme.typography.bodySmall, color = colors.tertiary)
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onBackground),
+                    cursorBrush = SolidColor(colors.primary),
+                    singleLine = singleLine,
+                    minLines = minLines,
+                    visualTransformation = if (password && !passwordVisible) {
+                        PasswordVisualTransformation()
+                    } else {
+                        VisualTransformation.None
+                    },
+                    // Password keyboard type keeps secrets out of IME learning/suggestions.
+                    keyboardOptions = if (password) {
+                        KeyboardOptions(keyboardType = KeyboardType.Password)
+                    } else {
+                        KeyboardOptions.Default
+                    },
+                    modifier = Modifier.fillMaxWidth().semantics {
+                        this.contentDescription = contentDescription
+                    },
+                )
+            }
+            if (password) {
+                PcIconButton(
+                    icon = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    contentDescription = if (passwordVisible) {
+                        "Hide $contentDescription"
+                    } else {
+                        "Show $contentDescription"
+                    },
+                    tint = colors.onSurfaceVariant,
+                ) {
+                    passwordVisible = !passwordVisible
+                }
+            }
+        }
     }
 }
 
@@ -286,7 +345,7 @@ fun PcButton(
         else -> colors.onBackground
     }
     Row(
-        modifier.fillMaxWidth().pressFeedback(interaction, pressedScale = 0.97f).clip(MaterialTheme.shapes.small)
+        modifier.fillMaxWidth().pressFeedback(interaction, pressedScale = 0.97f).clip(ShapeButton)
             .background(background)
             .clickable(interactionSource = interaction, indication = ripple(), enabled = enabled, role = Role.Button, onClick = onClick)
             .heightIn(min = Spacing.touchTarget).padding(horizontal = Spacing.m),

@@ -1,6 +1,8 @@
 package dev.phonecode.app.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -15,6 +17,9 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
+import dev.phonecode.app.agent.ChatUiState
+import dev.phonecode.app.agent.PermissionRequest
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -74,7 +79,7 @@ Original instruction.
     @Test
     fun chatControlsOpenWithoutCrashing() {
         dismissOnboardingIfPresent()
-        compose.onNodeWithContentDescription("Attach photo or file").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Add attachment").assertIsDisplayed()
 
         // Model sheet opens from the composer's model pill (header is always visible; specific
         // model rows may sit below the sheet's scroll fold).
@@ -218,6 +223,95 @@ Original instruction.
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Open-source licenses").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
+    }
+
+    @Test
+    fun approvalDialogExplainsTheActionAndPreventsDuplicateDecisions() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            pendingPermission = PermissionRequest(
+                tool = "shell",
+                summary = "Run ./gradlew assembleRelease in the current project",
+            ),
+        )
+
+        compose.onNodeWithText("Approve agent action?").assertIsDisplayed()
+        compose.onNodeWithText("Run a command").assertIsDisplayed()
+        compose.onNodeWithText("shell", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Run ./gradlew assembleRelease in the current project").assertIsDisplayed()
+        compose.onNodeWithText("Review this action before it runs.", substring = true).assertIsDisplayed()
+
+        compose.onNodeWithText("Approve once").performClick().assertIsNotEnabled()
+        compose.onNodeWithText("Deny").assertIsNotEnabled()
+        state.value = state.value.copy(pendingPermission = null)
+    }
+
+    @Test
+    fun approvalActionsStayVisibleForLongContent() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            pendingPermission = PermissionRequest(
+                tool = "external_directory_" + "very_long_tool_name_".repeat(10),
+                summary = "Read a deliberately long external path. ".repeat(80),
+            ),
+        )
+
+        compose.onNodeWithText("Deny").assertIsDisplayed()
+        compose.onNodeWithText("Approve once").assertIsDisplayed()
+        state.value = state.value.copy(pendingPermission = null)
+    }
+
+    @Test
+    fun runningTurnKeepsStopAndQueuedSendReachable() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(isRunning = true)
+
+        compose.onNodeWithContentDescription("Message").performTextInput("Follow up")
+
+        compose.onNodeWithContentDescription("Stop").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Send").assertIsDisplayed()
+        state.value = state.value.copy(isRunning = false)
+    }
+
+    @Test
+    fun settingsSeparateAgentDefaultsFromApprovalPolicy() {
+        dismissOnboardingIfPresent()
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+
+        compose.onNodeWithText("General").performClick()
+        compose.onNodeWithText("Default agent mode").assertIsDisplayed()
+        compose.onNodeWithText("Build").assertIsDisplayed()
+        compose.onNodeWithText("Plan").assertIsDisplayed()
+        compose.onNodeWithText("Message input").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").performClick()
+
+        compose.onNodeWithText("Files & permissions").performClick()
+        compose.onNodeWithText("Approval policy").assertIsDisplayed()
+        compose.onNodeWithText("Ask before each change").assertIsDisplayed().assertIsSelected()
+        compose.onNodeWithText("Allow changes automatically").assertIsDisplayed()
+        compose.onNodeWithText("writes, commands, and Git operations", substring = true).assertIsDisplayed()
     }
 
     @Test

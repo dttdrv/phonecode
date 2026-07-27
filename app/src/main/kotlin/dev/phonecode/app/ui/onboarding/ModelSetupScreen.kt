@@ -3,7 +3,15 @@ package dev.phonecode.app.ui.onboarding
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +46,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -51,6 +62,8 @@ import dev.phonecode.app.ui.components.PcIconButton
 import dev.phonecode.app.ui.components.PcRow
 import dev.phonecode.app.ui.components.PcSectionLabel
 import dev.phonecode.app.ui.theme.Spacing
+import dev.phonecode.app.ui.theme.PhoneEasings
+import dev.phonecode.app.ui.theme.PhoneSprings
 import dev.phonecode.provider.preset.ProviderPreset
 
 @Composable
@@ -64,7 +77,6 @@ fun ModelSetupScreen(
         vm.allProviders().filter { it.id != "codex" }
     }
     var selectedProviderId by rememberSaveable { mutableStateOf<String?>(null) }
-    val selectedProvider = providers.firstOrNull { it.id == selectedProviderId }
     val navigateBack = {
         if (selectedProviderId == null) onBack() else selectedProviderId = null
     }
@@ -77,23 +89,38 @@ fun ModelSetupScreen(
             .navigationBarsPadding()
             .imePadding(),
     ) {
-        if (selectedProvider == null) {
-            ProviderChoice(
-                vm = vm,
-                providers = providers,
-                codexOAuthAvailable = state.codexOAuthAvailable,
-                codexConnected = state.codexConnected,
-                onBack = navigateBack,
-                onSelectProvider = { selectedProviderId = it },
-                onConfigured = onConfigured,
-            )
-        } else {
-            ApiKeySetup(
-                vm = vm,
-                provider = selectedProvider,
-                onBack = navigateBack,
-                onConfigured = onConfigured,
-            )
+        AnimatedContent(
+            targetState = selectedProviderId,
+            transitionSpec = {
+                val forward = targetState != null
+                (slideInHorizontally(tween(220, easing = PhoneEasings.easeInOut)) {
+                    if (forward) it / 4 else -it / 4
+                } + fadeIn(tween(160, easing = PhoneEasings.easeOut))) togetherWith
+                    (slideOutHorizontally(tween(180, easing = PhoneEasings.easeInOut)) {
+                        if (forward) -it / 4 else it / 4
+                    } + fadeOut(tween(120, easing = PhoneEasings.easeOut)))
+            },
+            label = "modelSetupPage",
+        ) { providerId ->
+            val provider = providers.firstOrNull { it.id == providerId }
+            if (provider == null) {
+                ProviderChoice(
+                    vm = vm,
+                    providers = providers,
+                    codexOAuthAvailable = state.codexOAuthAvailable,
+                    codexConnected = state.codexConnected,
+                    onBack = navigateBack,
+                    onSelectProvider = { selectedProviderId = it },
+                    onConfigured = onConfigured,
+                )
+            } else {
+                ApiKeySetup(
+                    vm = vm,
+                    provider = provider,
+                    onBack = navigateBack,
+                    onConfigured = onConfigured,
+                )
+            }
         }
     }
 }
@@ -110,6 +137,10 @@ private fun ProviderChoice(
 ) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
+    var showAllProviders by rememberSaveable { mutableStateOf(false) }
+    val recommendedIds = remember { setOf("openai", "anthropic", "google") }
+    val recommendedProviders = providers.filter { it.id in recommendedIds || vm.keyFor(it.id).isNotBlank() }
+    val otherProviders = providers.filterNot { it in recommendedProviders }
     SetupPage(
         title = "Set up a model",
         onBack = onBack,
@@ -134,7 +165,7 @@ private fun ProviderChoice(
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Credentials stay on this device. PhoneCode only uses them when you ask a model to work.",
+            "Keys stay encrypted on this device. Prompts, attachments, and tool results go directly to the provider you choose.",
             style = MaterialTheme.typography.bodyLarge,
             color = colors.onSurfaceVariant,
         )
@@ -163,27 +194,61 @@ private fun ProviderChoice(
             }
         }
 
-        PcSectionLabel("API key providers")
-        PcGroup {
-            providers.forEach { provider ->
-                val configured = vm.keyFor(provider.id).isNotBlank()
-                PcRow(onClick = { onSelectProvider(provider.id) }) {
-                    Icon(Icons.Outlined.Cloud, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(provider.displayName, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                        Text(
-                            if (configured) "Configured" else "Add an API key",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.onSurfaceVariant,
-                        )
-                    }
-                    Icon(
-                        if (configured) Icons.Filled.Check else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        null,
-                        tint = if (configured) colors.primary else colors.tertiary,
-                        modifier = Modifier.size(20.dp),
+        PcSectionLabel("Recommended providers")
+        Column(
+            Modifier.fillMaxWidth().animateContentSize(animationSpec = PhoneSprings.standardSpec()),
+            verticalArrangement = Arrangement.spacedBy(Spacing.s),
+        ) {
+            ProviderGroup(
+                providers = recommendedProviders,
+                vm = vm,
+                onSelectProvider = onSelectProvider,
+            )
+            if (otherProviders.isNotEmpty()) {
+                PcButton(
+                    text = if (showAllProviders) "Fewer providers" else "More providers",
+                    filled = false,
+                ) {
+                    showAllProviders = !showAllProviders
+                }
+            }
+            if (showAllProviders) {
+                ProviderGroup(
+                    providers = otherProviders,
+                    vm = vm,
+                    onSelectProvider = onSelectProvider,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProviderGroup(
+    providers: List<ProviderPreset>,
+    vm: ChatViewModel,
+    onSelectProvider: (String) -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    PcGroup {
+        providers.forEach { provider ->
+            val configured = vm.keyFor(provider.id).isNotBlank()
+            PcRow(onClick = { onSelectProvider(provider.id) }) {
+                Icon(Icons.Outlined.Cloud, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(provider.displayName, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
+                    Text(
+                        if (configured) "Configured" else "Add an API key",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurfaceVariant,
                     )
                 }
+                Icon(
+                    if (configured) Icons.Filled.Check else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    null,
+                    tint = if (configured) colors.primary else colors.tertiary,
+                    modifier = Modifier.size(20.dp),
+                )
             }
         }
     }
@@ -251,6 +316,7 @@ private fun ApiKeySetup(
             placeholder = if (hasStoredKey) "New API key (optional)" else "API key",
             password = true,
             contentDescription = "${provider.displayName} API key",
+            label = "API key",
         )
         if (secureStorageUnavailable) {
             Spacer(Modifier.height(Spacing.s))
@@ -262,7 +328,15 @@ private fun ApiKeySetup(
         }
         error?.let {
             Spacer(Modifier.height(Spacing.s))
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.error)
+            Text(
+                it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.error,
+                modifier = Modifier.semantics {
+                    error(it)
+                    liveRegion = LiveRegionMode.Polite
+                },
+            )
         }
     }
 }

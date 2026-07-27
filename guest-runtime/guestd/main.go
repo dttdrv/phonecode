@@ -24,6 +24,8 @@ const (
 	maxCommandBytes        = 32_768
 	maxOutputChunk         = 12_000
 	maxTimeoutMilliseconds = int64(1_800_000)
+	maxConcurrentCommands  = 4
+	maxPendingStdinFrames  = 8
 )
 
 var noncePattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -35,18 +37,28 @@ type daemon struct {
 	workspace string
 	output    io.Writer
 
-	writeMu sync.Mutex
-	active  sync.Map
-	wait    sync.WaitGroup
+	writeMu  sync.Mutex
+	active   sync.Map
+	wait     sync.WaitGroup
+	slotOnce sync.Once
+	slots    chan struct{}
 }
 
 type runningProcess struct {
-	command *exec.Cmd
-	cancel  context.CancelFunc
-	stdin   io.WriteCloser
+	command    *exec.Cmd
+	cancel     context.CancelFunc
+	stdin      io.WriteCloser
+	stdinQueue chan stdinChunk
+	stdinDone  chan struct{}
+	stdinOnce  sync.Once
 
 	outputMu sync.Mutex
 	seq      int64
+}
+
+type stdinChunk struct {
+	data []byte
+	eof  bool
 }
 
 func main() {
@@ -152,6 +164,9 @@ func (server *daemon) exec(frame protocolObject) error {
 	if _, loaded := server.active.Load(requestID); loaded {
 		return errors.New("duplicate live request id")
 	}
+	if !server.acquireCommandSlot() {
+		return errors.New("active command concurrency limit reached")
+	}
 
 	processContext, cancel := context.WithTimeout(
 		server.context,
@@ -162,6 +177,7 @@ func (server *daemon) exec(frame protocolObject) error {
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdin, err := command.StdinPipe()
 	if err != nil {
+		server.releaseCommandSlot()
 		cancel()
 		return err
 	}
@@ -174,11 +190,16 @@ func (server *daemon) exec(frame protocolObject) error {
 	command.Stdout = output
 	command.Stderr = output
 	if err := command.Start(); err != nil {
+		server.releaseCommandSlot()
 		cancel()
 		return server.writeError(requestID, "EXEC_START", "failed to start command")
 	}
+	process.startInputPump()
 	if _, loaded := server.active.LoadOrStore(requestID, process); loaded {
 		process.stop(syscall.SIGKILL)
+		_ = command.Wait()
+		process.stopInputPump()
+		server.releaseCommandSlot()
 		cancel()
 		return errors.New("duplicate live request id")
 	}
@@ -186,7 +207,10 @@ func (server *daemon) exec(frame protocolObject) error {
 		"id": requestID, "pid": command.Process.Pid, "type": "started", "v": 1,
 	}); err != nil {
 		process.stop(syscall.SIGKILL)
+		_ = command.Wait()
+		process.stopInputPump()
 		server.active.Delete(requestID)
+		server.releaseCommandSlot()
 		cancel()
 		return err
 	}
@@ -194,7 +218,10 @@ func (server *daemon) exec(frame protocolObject) error {
 	server.wait.Add(1)
 	go func() {
 		defer server.wait.Done()
+		defer server.releaseCommandSlot()
 		waitErr := command.Wait()
+		process.terminateAndReapGroup()
+		process.stopInputPump()
 		status := exitStatus(waitErr)
 		server.active.Delete(requestID)
 		cancel()
@@ -203,6 +230,70 @@ func (server *daemon) exec(frame protocolObject) error {
 		})
 	}()
 	return nil
+}
+
+func (server *daemon) acquireCommandSlot() bool {
+	server.slotOnce.Do(func() {
+		server.slots = make(chan struct{}, maxConcurrentCommands)
+	})
+	select {
+	case server.slots <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (server *daemon) releaseCommandSlot() {
+	<-server.slots
+}
+
+func (process *runningProcess) startInputPump() {
+	process.stdinQueue = make(chan stdinChunk, maxPendingStdinFrames)
+	process.stdinDone = make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-process.stdinDone:
+				return
+			case chunk := <-process.stdinQueue:
+				if len(chunk.data) > 0 {
+					if _, err := process.stdin.Write(chunk.data); err != nil {
+						process.stopInputPump()
+						return
+					}
+				}
+				if chunk.eof {
+					_ = process.stdin.Close()
+					process.stopInputPump()
+					return
+				}
+			}
+		}
+	}()
+}
+
+func (process *runningProcess) stopInputPump() {
+	process.stdinOnce.Do(func() {
+		close(process.stdinDone)
+	})
+}
+
+func (process *runningProcess) enqueueInput(data []byte, eof bool) error {
+	chunk := stdinChunk{data: append([]byte(nil), data...), eof: eof}
+	select {
+	case <-process.stdinDone:
+		return errors.New("command stdin is closed")
+	default:
+	}
+	select {
+	case process.stdinQueue <- chunk:
+		return nil
+	case <-process.stdinDone:
+		return errors.New("command stdin is closed")
+	default:
+		return errors.New("command stdin backpressure limit reached")
+	}
 }
 
 func (server *daemon) stdin(frame protocolObject) error {
@@ -233,15 +324,7 @@ func (server *daemon) stdin(frame protocolObject) error {
 		return errors.New("stdin request is not active")
 	}
 	process := value.(*runningProcess)
-	if len(data) > 0 {
-		if _, err := process.stdin.Write(data); err != nil {
-			return err
-		}
-	}
-	if eof {
-		return process.stdin.Close()
-	}
-	return nil
+	return process.enqueueInput(data, eof)
 }
 
 func (server *daemon) signal(frame protocolObject) error {
@@ -296,6 +379,33 @@ func (process *runningProcess) stop(signal syscall.Signal) error {
 		return nil
 	}
 	return err
+}
+
+func (process *runningProcess) terminateAndReapGroup() {
+	if process.command.Process == nil {
+		return
+	}
+	processGroup := process.command.Process.Pid
+	_ = syscall.Kill(-processGroup, syscall.SIGKILL)
+	deadline := time.Now().Add(time.Second)
+	for {
+		var status syscall.WaitStatus
+		pid, err := syscall.Wait4(-processGroup, &status, syscall.WNOHANG, nil)
+		if pid > 0 {
+			continue
+		}
+		if errors.Is(err, syscall.EINTR) {
+			continue
+		}
+		if errors.Is(err, syscall.ECHILD) &&
+			errors.Is(syscall.Kill(-processGroup, 0), syscall.ESRCH) {
+			return
+		}
+		if time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 type processOutput struct {

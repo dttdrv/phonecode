@@ -20,6 +20,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
@@ -83,6 +84,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -93,7 +95,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Description
@@ -140,6 +141,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -322,10 +325,10 @@ fun ChatScreen(
         // Ethereal ambient mist: while the model runs, a slow breathing wash of light at the top
         // of the screen - monochrome (white mist on black, soft shadow on white).
         if (state.isRunning) {
-            val breath by rememberNeuralBreath(3000)
+            val breath = rememberNeuralBreath(3000)
             Box(
                 Modifier.fillMaxWidth().height(190.dp)
-                    .graphicsLayer { alpha = 0.4f + 0.5f * breath }
+                    .graphicsLayer { alpha = 0.4f + 0.5f * breath.value }
                     .background(
                         androidx.compose.ui.graphics.Brush.verticalGradient(
                             listOf(colors.onBackground.copy(alpha = 0.09f), androidx.compose.ui.graphics.Color.Transparent),
@@ -346,7 +349,10 @@ fun ChatScreen(
             // - a fade, never a slide; exits faster than enters).
             AnimatedContent(
                 targetState = empty,
-                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
+                transitionSpec = {
+                    fadeIn(tween(220, easing = PhoneEasings.easeOut)) togetherWith
+                        fadeOut(tween(180, easing = PhoneEasings.easeOut))
+                },
                 label = "emptySwap",
                 modifier = Modifier.fillMaxSize(),
             ) { isEmpty ->
@@ -371,8 +377,8 @@ fun ChatScreen(
                 if (isEmpty) {
                     AnimatedVisibility(
                         visible = !imeVisible,
-                        enter = fadeIn(tween(150)),
-                        exit = fadeOut(tween(120)),
+                        enter = fadeIn(tween(150, easing = PhoneEasings.easeOut)),
+                        exit = fadeOut(tween(120, easing = PhoneEasings.easeOut)),
                         modifier = Modifier.align(Alignment.Center),
                     ) {
                         EmptyState(
@@ -497,8 +503,9 @@ fun ChatScreen(
             }
             // Model selector moved out of the composer into the title: tap to switch.
             Row(
-                Modifier.padding(top = 3.dp).clip(ShapePill).background(colors.surfaceContainerHigh.copy(alpha = 0.72f))
-                    .clickable {
+                Modifier.padding(top = 3.dp).heightIn(min = 48.dp)
+                    .clip(ShapePill).background(colors.surfaceContainerHigh.copy(alpha = 0.72f))
+                    .clickable(role = Role.Button) {
                         if (modelConfigured) modelOpen = true else onOpenModelSetup()
                     }
                     .padding(start = 11.dp, end = 7.dp, top = 3.dp, bottom = 3.dp),
@@ -529,7 +536,7 @@ fun ChatScreen(
             val ctxFrac = state.contextLimit?.let { if (it > 0) ctxUsed.toFloat() / it else 0f } ?: 0f
             Box(
                 Modifier.size(48.dp).clip(ShapePill).background(colors.surfaceContainerHigh)
-                    .clickable { modelOpen = false; contextOpen = true }
+                    .clickable(role = Role.Button) { modelOpen = false; contextOpen = true }
                     .semantics { contentDescription = "Context usage ${(ctxFrac.coerceIn(0f, 1f) * 100).toInt()} percent" },
                 contentAlignment = Alignment.Center,
             ) {
@@ -571,8 +578,10 @@ fun ChatScreen(
             AnimatedContent(
                 targetState = state.error,
                 transitionSpec = {
-                    (slideInVertically(tween(160, easing = PhoneEasings.iOSStandard)) { it / 2 } + fadeIn(tween(140))) togetherWith
-                        (slideOutVertically(tween(120, easing = PhoneEasings.iOSStandard)) { it / 3 } + fadeOut(tween(100)))
+                    (slideInVertically(tween(160, easing = PhoneEasings.easeOut)) { it / 2 } +
+                        fadeIn(tween(140, easing = PhoneEasings.easeOut))) togetherWith
+                        (slideOutVertically(tween(120, easing = PhoneEasings.easeOut)) { it / 3 } +
+                            fadeOut(tween(100, easing = PhoneEasings.easeOut)))
                 },
                 label = "errorBanner",
             ) { error ->
@@ -586,8 +595,10 @@ fun ChatScreen(
             AnimatedContent(
                 targetState = state.retry,
                 transitionSpec = {
-                    (slideInVertically(tween(160, easing = PhoneEasings.iOSStandard)) { it / 2 } + fadeIn(tween(140))) togetherWith
-                        (slideOutVertically(tween(120, easing = PhoneEasings.iOSStandard)) { it / 3 } + fadeOut(tween(100)))
+                    (slideInVertically(tween(160, easing = PhoneEasings.easeOut)) { it / 2 } +
+                        fadeIn(tween(140, easing = PhoneEasings.easeOut))) togetherWith
+                        (slideOutVertically(tween(120, easing = PhoneEasings.easeOut)) { it / 3 } +
+                            fadeOut(tween(100, easing = PhoneEasings.easeOut)))
                 },
                 label = "retryBanner",
             ) { retry ->
@@ -596,8 +607,10 @@ fun ChatScreen(
             AnimatedContent(
                 targetState = state.notice,
                 transitionSpec = {
-                    (slideInVertically(tween(160, easing = PhoneEasings.iOSStandard)) { it / 2 } + fadeIn(tween(140))) togetherWith
-                        (slideOutVertically(tween(120, easing = PhoneEasings.iOSStandard)) { it / 3 } + fadeOut(tween(100)))
+                    (slideInVertically(tween(160, easing = PhoneEasings.easeOut)) { it / 2 } +
+                        fadeIn(tween(140, easing = PhoneEasings.easeOut))) togetherWith
+                        (slideOutVertically(tween(120, easing = PhoneEasings.easeOut)) { it / 3 } +
+                            fadeOut(tween(100, easing = PhoneEasings.easeOut)))
                 },
                 label = "noticeBanner",
             ) { notice ->
@@ -1173,10 +1186,12 @@ private fun ReportChoice(
 private fun ThinkingDot(active: Boolean, open: Boolean) {
     val colors = MaterialTheme.colorScheme
     // Only run the infinite pulse while streaming - an idle dot costs zero animation frames.
-    val alpha = if (active) {
-        val pulse by rememberNeuralBreath(1400)
-        0.4f + pulse * 0.6f
-    } else 1f
+    val pulse = if (active) rememberNeuralBreath(1400) else null
+    val dotScale = animateFloatAsState(
+        targetValue = if (open) 1.2f else 1f,
+        animationSpec = PhoneSprings.quick,
+        label = "thinkingDotScale",
+    )
     val dotBackground = if (active) {
         // Live: a small point of light (bright ink fading to mid) instead of a flat grey.
         Modifier.background(
@@ -1188,7 +1203,11 @@ private fun ThinkingDot(active: Boolean, open: Boolean) {
         Modifier.background(if (open) colors.secondary else colors.tertiary)
     }
     Box(
-        Modifier.size(8.dp).graphicsLayer { this.alpha = alpha; scaleX = if (open) 1.2f else 1f; scaleY = if (open) 1.2f else 1f }
+        Modifier.size(8.dp).graphicsLayer {
+            alpha = pulse?.let { 0.4f + it.value * 0.6f } ?: 1f
+            scaleX = dotScale.value
+            scaleY = dotScale.value
+        }
             .clip(ShapePill).then(dotBackground),
     )
 }
@@ -1324,10 +1343,7 @@ private fun ToolActivityView(line: ChatLine.ToolActivity) {
     val error = line.status == ToolStatus.ERROR
     val running = line.status == ToolStatus.RUNNING
     var detailsOpen by remember(line.id) { mutableStateOf(false) }
-    val iconAlpha = if (running) {
-        val pulse by rememberNeuralBreath(1800)
-        0.45f + pulse * 0.55f
-    } else 1f
+    val iconPulse = if (running) rememberNeuralBreath(1800) else null
     val interaction = remember { MutableInteractionSource() }
     Column(
         Modifier.fillMaxWidth().pressFeedback(interaction, pressedScale = 0.99f).clip(MaterialTheme.shapes.medium)
@@ -1346,8 +1362,10 @@ private fun ToolActivityView(line: ChatLine.ToolActivity) {
             ) {
                 Icon(
                     toolIcon(line.name), null,
-                    tint = (if (error) colors.onErrorContainer else colors.secondary).copy(alpha = iconAlpha),
-                    modifier = Modifier.size(16.dp),
+                    tint = if (error) colors.onErrorContainer else colors.secondary,
+                    modifier = Modifier.size(16.dp).graphicsLayer {
+                        alpha = iconPulse?.let { 0.45f + it.value * 0.55f } ?: 1f
+                    },
                 )
             }
             Column(Modifier.weight(1f)) {
@@ -1571,7 +1589,6 @@ private fun Composer(
                     .neuralRing(active = state.isRunning, shape = ShapeComposer)
                     .clip(ShapeComposer)
                     .background(colors.surfaceContainerHigh)
-                    .animateContentSize(spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow))
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             ) {
                 if (photos.isNotEmpty()) {
@@ -1594,16 +1611,19 @@ private fun Composer(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     PcIconButton(
-                        Icons.Outlined.AttachFile,
-                        "Attach photo or file",
+                        Icons.Filled.Add,
+                        "Add attachment",
                         tint = if (!enabled || state.sessionLoading) colors.tertiary else colors.secondary,
-                        onClick = { if (enabled && !state.sessionLoading) onUpload() },
+                        enabled = enabled && !state.sessionLoading,
+                        onClick = onUpload,
                     )
-                    Box(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                    Box(
+                        Modifier.weight(1f).heightIn(min = 48.dp).padding(horizontal = 4.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
                         if (input.isEmpty()) Text(
                             when {
                                 state.sessionLoading -> "Opening chat…"
-                                !enabled -> "Set up a model to chat"
                                 else -> "Message..."
                             },
                             style = MaterialTheme.typography.bodySmall,
@@ -1627,29 +1647,27 @@ private fun Composer(
                             modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Message" },
                         )
                     }
-                    val composerAction = when {
-                        !enabled || state.sessionLoading -> null
-                        input.isNotBlank() || photos.isNotEmpty() -> false
-                        state.isRunning -> true
-                        else -> null
-                    }
-                    AnimatedContent(
-                        targetState = composerAction,
-                        transitionSpec = {
-                            if (initialState == null || targetState == null) {
-                                (scaleIn(initialScale = 0.92f, animationSpec = PhoneSprings.quickSpec()) + fadeIn(PhoneTweens.popEnter)) togetherWith
-                                    (scaleOut(targetScale = 0.92f, animationSpec = PhoneSprings.quickSpec()) + fadeOut(PhoneTweens.popExit))
-                            } else {
-                                fadeIn(tween(150, easing = PhoneEasings.iOSStandard)) togetherWith
-                                    fadeOut(tween(100, easing = PhoneEasings.iOSStandard))
-                            }
-                        },
-                        label = "composerAction",
-                    ) { action ->
-                        when (action) {
-                            true -> PcRoundButton(Icons.Filled.Stop, "Stop", filled = true, onClick = onStop)
-                            false -> PcRoundButton(Icons.Filled.ArrowUpward, "Send", filled = true, onClick = onSend)
-                            null -> Unit
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                        AnimatedVisibility(
+                            visible = enabled && !state.sessionLoading && state.isRunning,
+                            enter = scaleIn(initialScale = 0.92f, animationSpec = PhoneSprings.quickSpec()) +
+                                fadeIn(PhoneTweens.popEnter),
+                            exit = scaleOut(targetScale = 0.92f, animationSpec = PhoneSprings.quickSpec()) +
+                                fadeOut(PhoneTweens.popExit),
+                            label = "composerStop",
+                        ) {
+                            PcRoundButton(Icons.Filled.Stop, "Stop", filled = true, onClick = onStop)
+                        }
+                        AnimatedVisibility(
+                            visible = enabled && !state.sessionLoading &&
+                                (input.isNotBlank() || photos.isNotEmpty()),
+                            enter = scaleIn(initialScale = 0.92f, animationSpec = PhoneSprings.quickSpec()) +
+                                fadeIn(PhoneTweens.popEnter),
+                            exit = scaleOut(targetScale = 0.92f, animationSpec = PhoneSprings.quickSpec()) +
+                                fadeOut(PhoneTweens.popExit),
+                            label = "composerSend",
+                        ) {
+                            PcRoundButton(Icons.Filled.ArrowUpward, "Send", filled = true, onClick = onSend)
                         }
                     }
                 }
@@ -2011,11 +2029,15 @@ private fun trimZero(v: Double): String = "%.1f".format(v).removeSuffix(".0")
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-private fun PcDialog(onDismiss: () -> Unit, content: @Composable ColumnScopeAlias.() -> Unit) {
+private fun PcDialog(
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScopeAlias.() -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
     Dialog(onDismissRequest = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().shadow(24.dp, MaterialTheme.shapes.extraLarge, clip = false)
+            modifier.fillMaxWidth().shadow(24.dp, MaterialTheme.shapes.extraLarge, clip = false)
                 .clip(MaterialTheme.shapes.extraLarge).background(colors.surfaceContainerHigh).padding(Spacing.m),
             content = content,
         )
@@ -2036,16 +2058,134 @@ private fun DialogAction(text: String, emphasized: Boolean, onClick: () -> Unit)
 @Composable
 private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, onDeny: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    PcDialog(onDeny) {
-        Text("Allow ${request.tool}?", style = MaterialTheme.typography.titleMedium, color = colors.onBackground)
-        Spacer(Modifier.height(8.dp))
-        Text(request.summary, style = MaterialTheme.typography.labelMedium, color = colors.secondary)
-        Spacer(Modifier.height(Spacing.s))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            DialogAction("Deny", emphasized = false, onClick = onDeny)
-            Spacer(Modifier.width(8.dp))
-            DialogAction("Allow", emphasized = true, onClick = onApprove)
+    val presentation = remember(request.tool) { approvalPresentation(request.tool) }
+    var submitted by rememberSaveable(request) { mutableStateOf(false) }
+    fun resolve(decision: () -> Unit) {
+        if (submitted) return
+        submitted = true
+        decision()
+    }
+    PcDialog(
+        onDismiss = { resolve(onDeny) },
+        modifier = Modifier.fillMaxHeight(0.9f),
+    ) {
+        Column(Modifier.weight(1f).contentVerticalScroll(rememberScrollState())) {
+            Text(
+                "Approve agent action?",
+                style = MaterialTheme.typography.titleLarge,
+                color = colors.onBackground,
+                modifier = Modifier.semantics { heading() },
+            )
+            Text(
+                "Review this action before it runs.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Spacer(Modifier.height(Spacing.m))
+            Text("ACTION", style = MaterialTheme.typography.labelSmall, color = colors.tertiary)
+            Text(
+                presentation.action,
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.onBackground,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Text(
+                "Tool · ${request.tool}",
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = PcMono),
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(top = 3.dp),
+            )
+            Spacer(Modifier.height(Spacing.s))
+            Text("DETAILS", style = MaterialTheme.typography.labelSmall, color = colors.tertiary)
+            Box(
+                Modifier.fillMaxWidth().padding(top = 5.dp)
+                    .heightIn(min = Spacing.touchTarget)
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(colors.surface)
+                    .padding(Spacing.s),
+            ) {
+                Text(
+                    request.summary.ifBlank { "No additional details were provided." },
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = PcMono),
+                    color = colors.onBackground,
+                )
+            }
+            Box(
+                Modifier.fillMaxWidth().padding(top = Spacing.s)
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(colors.surface)
+                    .padding(Spacing.s),
+            ) {
+                Column {
+                    Text(presentation.risk, style = MaterialTheme.typography.labelLarge, color = colors.onBackground)
+                    Text(
+                        presentation.guidance,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
         }
+        Spacer(Modifier.height(Spacing.s))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+            Box(Modifier.weight(1f)) {
+                PcButton("Deny", filled = false, enabled = !submitted) { resolve(onDeny) }
+            }
+            Box(Modifier.weight(1f)) {
+                PcButton("Approve once", enabled = !submitted) { resolve(onApprove) }
+            }
+        }
+    }
+}
+
+private data class ApprovalPresentation(
+    val action: String,
+    val risk: String,
+    val guidance: String,
+)
+
+private fun approvalPresentation(tool: String): ApprovalPresentation {
+    val normalized = tool.lowercase()
+    return when {
+        normalized == "external_directory" || normalized.startsWith("external_directory_") ->
+            ApprovalPresentation(
+                action = "Read outside linked folders",
+                risk = "External file access",
+                guidance = "This reads the exact file or folder path shown above. PhoneCode always asks for this access.",
+            )
+        normalized.contains("shell") || normalized.contains("terminal") || normalized.contains("process") ->
+            ApprovalPresentation(
+                action = "Run a command",
+                risk = "Command execution",
+                guidance = "Commands can change files, install software, or contact external services.",
+            )
+        normalized.contains("write") || normalized.contains("edit") || normalized.contains("patch") ||
+            normalized.contains("delete") || normalized.contains("move") ->
+            ApprovalPresentation(
+                action = "Change files",
+                risk = "Workspace change",
+                guidance = "The agent may create, edit, move, or delete project files.",
+            )
+        normalized.contains("git") ->
+            ApprovalPresentation(
+                action = "Run a Git operation",
+                risk = "Repository change",
+                guidance = "This may change branches, commits, or a connected remote repository.",
+            )
+        normalized.contains("web") || normalized.contains("http") || normalized.contains("fetch") ->
+            ApprovalPresentation(
+                action = "Contact an external service",
+                risk = "External request",
+                guidance = "Data in the request may be sent outside this device.",
+            )
+        else ->
+            ApprovalPresentation(
+                action = tool.replace('_', ' ').replaceFirstChar { it.uppercase() },
+                risk = "Approval required",
+                guidance = "Only approve actions that match what you asked PhoneCode to do.",
+            )
     }
 }
 
@@ -2088,8 +2228,10 @@ private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>
             targetState = page,
             transitionSpec = {
                 val direction = if (targetState > initialState) 1 else -1
-                (slideInHorizontally(tween(220)) { direction * it / 4 } + fadeIn(tween(160))) togetherWith
-                    (slideOutHorizontally(tween(180)) { -direction * it / 4 } + fadeOut(tween(120)))
+                (slideInHorizontally(tween(220, easing = PhoneEasings.easeInOut)) { direction * it / 4 } +
+                    fadeIn(tween(160, easing = PhoneEasings.easeOut))) togetherWith
+                    (slideOutHorizontally(tween(180, easing = PhoneEasings.easeInOut)) { -direction * it / 4 } +
+                        fadeOut(tween(120, easing = PhoneEasings.easeOut)))
             },
             label = "questionPage",
         ) { index ->

@@ -15,7 +15,7 @@
     },
     {
       "name": "system.img",
-      "role": "immutable-alpine-minirootfs-targz-v1-carried-in-raw-read-only-block-device",
+      "role": "immutable-alpine-minirootfs-targz-v1-in-sector-aligned-raw-read-only-carrier",
       "required": true
     }
   ]

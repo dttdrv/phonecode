@@ -9,15 +9,24 @@ export TZ=UTC
 
 BUSYBOX=/bin/busybox
 NEW_ROOT=/newroot
-SYSTEM_IMAGE=/run/system.tar.gz
-SYSTEM_IMAGE_BYTES=4023732
-SYSTEM_IMAGE_SHA256=f55a90f69052c5bd6f92cb09a8f47065970830b194c917a006fb94028e721259
+SYSTEM_CARRIER=/run/system.carrier
+SYSTEM_CARRIER_BYTES=4023808
+SYSTEM_CARRIER_SHA256=3028c1fc05a52383ed0cddc535f320a285005e54ec9cd34961e94da0fc059c66
+SYSTEM_PAYLOAD=/run/system.tar.gz
+SYSTEM_PAYLOAD_BYTES=4023732
+SYSTEM_PAYLOAD_SHA256=f55a90f69052c5bd6f92cb09a8f47065970830b194c917a006fb94028e721259
 KERNEL_RELEASE=6.18.35-0-virt
 CONTROL_PORT_NAME=org.phonecode.guest.0
 
 panic() {
-  printf 'phonecode-init: %s\n' "$*" >/dev/console
-  exec "$BUSYBOX" sh
+  console=/dev/console
+  [ ! -c "$NEW_ROOT/dev/console" ] || console="$NEW_ROOT/dev/console"
+  printf 'phonecode-init: %s\n' "$*" >"$console" 2>/dev/null || true
+  "$BUSYBOX" poweroff -f >/dev/null 2>&1 || true
+  "$BUSYBOX" halt -f >/dev/null 2>&1 || true
+  while :; do
+    "$BUSYBOX" sleep 3600
+  done
 }
 
 "$BUSYBOX" --install -s /bin
@@ -41,16 +50,24 @@ while [ ! -b /dev/vda ] && [ "$attempt" -lt 100 ]; do
 done
 [ -b /dev/vda ] || panic "immutable system device is absent"
 
-dd if=/dev/vda of="$SYSTEM_IMAGE" bs="$SYSTEM_IMAGE_BYTES" count=1 2>/dev/null ||
-  panic "cannot read immutable system image"
-[ "$(wc -c <"$SYSTEM_IMAGE")" -eq "$SYSTEM_IMAGE_BYTES" ] ||
-  panic "immutable system image length mismatch"
-printf '%s  %s\n' "$SYSTEM_IMAGE_SHA256" "$SYSTEM_IMAGE" |
+dd if=/dev/vda of="$SYSTEM_CARRIER" bs="$SYSTEM_CARRIER_BYTES" count=1 2>/dev/null ||
+  panic "cannot read immutable system carrier"
+[ "$(wc -c <"$SYSTEM_CARRIER")" -eq "$SYSTEM_CARRIER_BYTES" ] ||
+  panic "immutable system carrier length mismatch"
+printf '%s  %s\n' "$SYSTEM_CARRIER_SHA256" "$SYSTEM_CARRIER" |
   sha256sum -c - >/dev/null ||
-  panic "immutable system image digest mismatch"
+  panic "immutable system carrier digest mismatch"
 
-tar -xzf "$SYSTEM_IMAGE" -C "$NEW_ROOT" --no-same-owner ||
-  panic "cannot extract immutable system image"
+dd if="$SYSTEM_CARRIER" of="$SYSTEM_PAYLOAD" bs="$SYSTEM_PAYLOAD_BYTES" count=1 2>/dev/null ||
+  panic "cannot read immutable system payload"
+[ "$(wc -c <"$SYSTEM_PAYLOAD")" -eq "$SYSTEM_PAYLOAD_BYTES" ] ||
+  panic "immutable system payload length mismatch"
+printf '%s  %s\n' "$SYSTEM_PAYLOAD_SHA256" "$SYSTEM_PAYLOAD" |
+  sha256sum -c - >/dev/null ||
+  panic "immutable system payload digest mismatch"
+
+tar -xzf "$SYSTEM_PAYLOAD" -C "$NEW_ROOT" --no-same-owner ||
+  panic "cannot extract immutable system payload"
 install -D -m 0755 /phonecode-guestd "$NEW_ROOT/usr/local/bin/phonecode-guestd" ||
   panic "cannot install guest daemon"
 
@@ -72,6 +89,7 @@ mount --move /dev "$NEW_ROOT/dev" || panic "cannot move devtmpfs"
 mount --move /proc "$NEW_ROOT/proc" || panic "cannot move proc"
 mount --move /sys "$NEW_ROOT/sys" || panic "cannot move sysfs"
 
+exec 3<>"$NEW_ROOT$CONTROL_PORT" || panic "cannot open dedicated control port"
 exec chroot "$NEW_ROOT" /usr/local/bin/phonecode-guestd \
-  <"$NEW_ROOT$CONTROL_PORT" >"$NEW_ROOT$CONTROL_PORT" 2>"$NEW_ROOT$CONTROL_PORT"
-panic "guest daemon exited"
+  <&3 >&3 2>"$NEW_ROOT/dev/console" ||
+  panic "guest daemon exited"

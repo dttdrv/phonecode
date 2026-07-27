@@ -59,10 +59,16 @@ class OnboardingFlowTest {
         }
 
         compose.onNodeWithText("Get started").performClick()
+        compose.onNodeWithText("Required for agent work").assertIsDisplayed()
+        compose.onNodeWithText("Recommended for project work").assertIsDisplayed()
+        compose.onNodeWithText("Optional for repository sync").assertIsDisplayed()
         compose.onNodeWithText("Connect a model").performClick()
 
         compose.onNodeWithText("Choose how to connect").assertIsDisplayed()
-        compose.onNodeWithText("API key providers").assertIsDisplayed()
+        compose.onNodeWithText("Recommended providers").assertIsDisplayed()
+        compose.onAllNodesWithText("Mistral").assertCountEquals(0)
+        compose.onNodeWithText("More providers").performClick()
+        compose.onNodeWithText("Mistral").assertIsDisplayed()
         compose.onAllNodesWithText("Add custom provider").assertCountEquals(0)
 
         compose.onNodeWithContentDescription("Back").performClick()
@@ -72,6 +78,8 @@ class OnboardingFlowTest {
         }
         compose.onNodeWithText("Set up a model").assertIsDisplayed()
         compose.onNodeWithContentDescription("Message").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Add attachment").assertIsNotEnabled()
+        compose.onAllNodesWithText("Set up a model to chat").assertCountEquals(0)
         compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("screenshots/26-chat-unconfigured.png")
@@ -82,8 +90,10 @@ class OnboardingFlowTest {
         compose.onRoot().captureRoboImage("screenshots/25-model-setup.png")
         compose.onNodeWithText("OpenAI").performClick()
         compose.onNodeWithText("Save and continue").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Show OpenAI API key").assertIsDisplayed()
         compose.onRoot().captureRoboImage("screenshots/27-model-setup-api-key.png")
         compose.onNodeWithContentDescription("OpenAI API key").performTextInput("test-key")
+        compose.onNodeWithText("API key").assertIsDisplayed()
         assertNull(UiTestSecureKeyStore.stored("openai"))
         compose.onNodeWithText("Save and continue").performClick()
         compose.waitUntil(5_000) {

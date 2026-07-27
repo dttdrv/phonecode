@@ -81,6 +81,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -188,11 +189,11 @@ fun SettingsScreen(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () 
                     } else {
                         val pop = depthOf(targetState) < depthOf(initialState)
                         (if (pop) {
-                            (slideInHorizontally(tween(260, easing = PhoneEasings.iOSStandard)) { -it / 4 }) togetherWith
-                                slideOutHorizontally(tween(220, easing = PhoneEasings.iOSStandard)) { it }
+                            (slideInHorizontally(tween(260, easing = PhoneEasings.easeInOut)) { -it / 4 }) togetherWith
+                                slideOutHorizontally(tween(220, easing = PhoneEasings.easeInOut)) { it }
                         } else {
-                            (slideInHorizontally(tween(260, easing = PhoneEasings.iOSStandard)) { it }) togetherWith
-                                slideOutHorizontally(tween(220, easing = PhoneEasings.iOSStandard)) { -it / 4 }
+                            (slideInHorizontally(tween(260, easing = PhoneEasings.easeInOut)) { it }) togetherWith
+                                slideOutHorizontally(tween(220, easing = PhoneEasings.easeInOut)) { -it / 4 }
                         }).apply { targetContentZIndex = if (pop) -1f else 1f }
                     }
                 },
@@ -279,7 +280,7 @@ private fun Page(
                 color = colors.onBackground,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).semantics { heading() },
             )
             if (action == null) Spacer(Modifier.width(Spacing.touchTarget)) else Box(Modifier.width(Spacing.touchTarget)) { action() }
         }
@@ -295,7 +296,7 @@ private fun NavRow(label: String, value: String? = null, icon: ImageVector? = nu
     val colors = MaterialTheme.colorScheme
     PcRow(onClick = onClick) {
         if (icon != null) Icon(icon, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = colors.onBackground, modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, modifier = Modifier.weight(1f))
         if (value != null) Text(value, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(18.dp))
     }
@@ -306,7 +307,7 @@ private fun ToggleRow(label: String, sub: String? = null, checked: Boolean, onCh
     val colors = MaterialTheme.colorScheme
     PcRow(onClick = { onChange(!checked) }) {
         Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyMedium, color = colors.onBackground)
+            Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
             if (sub != null) Text(sub, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 1.dp))
         }
         PcToggle(checked, onChange, "$label ${if (checked) "on" else "off"}")
@@ -314,10 +315,26 @@ private fun ToggleRow(label: String, sub: String? = null, checked: Boolean, onCh
 }
 
 @Composable
-private fun CheckRow(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun CheckRow(label: String, selected: Boolean, sub: String? = null, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    PcRow(onClick = onClick) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = colors.onBackground, modifier = Modifier.weight(1f))
+    PcRow(
+        modifier = Modifier.semantics {
+            this.selected = selected
+            role = Role.RadioButton
+        },
+        onClick = onClick,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
+            if (sub != null) {
+                Text(
+                    sub,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 1.dp),
+                )
+            }
+        }
         if (selected) Icon(Icons.Filled.Check, null, tint = colors.onBackground, modifier = Modifier.size(20.dp))
     }
 }
@@ -327,8 +344,8 @@ private fun Note(text: String) {
     val colors = MaterialTheme.colorScheme
     Box(
         Modifier.fillMaxWidth().padding(top = Spacing.xs).clip(MaterialTheme.shapes.medium)
-            .background(colors.surface).padding(14.dp),
-    ) { Text(text, style = MaterialTheme.typography.labelMedium, color = colors.secondary) }
+            .background(colors.surface).padding(Spacing.m),
+    ) { Text(text, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant) }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -418,19 +435,32 @@ private fun AgentToolsPage(vm: ChatViewModel, onBack: () -> Unit) {
 private fun GeneralPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
     Page("General", onBack) {
-        PcSectionLabel("Defaults")
+        PcSectionLabel("Default agent mode")
         PcGroup {
             AgentMode.entries.forEach { mode ->
                 CheckRow(
-                    "Default mode: " + mode.name.lowercase().replaceFirstChar { it.uppercase() },
+                    mode.name.lowercase().replaceFirstChar { it.uppercase() },
                     selected = settings.defaultMode == mode.name,
+                    sub = if (mode == AgentMode.BUILD) {
+                        "Can use tools and make approved changes"
+                    } else {
+                        "Explores and proposes a plan without changing files"
+                    },
                 ) {
                     // Default governs NEW conversations (applied in ChatViewModel.newChat / init); changing
                     // it must not retroactively flip the active chat's mode - that's the per-chat Plan toggle.
                     settingsVm.update { it.copy(defaultMode = mode.name) }
                 }
             }
-            ToggleRow("Send on Enter", checked = settings.sendOnEnter) { v -> settingsVm.update { it.copy(sendOnEnter = v) } }
+        }
+        Note("This applies to new chats. You can switch the active chat from the model menu.")
+        PcSectionLabel("Message input")
+        PcGroup {
+            ToggleRow(
+                "Send on Enter",
+                "When off, Enter adds a new line",
+                checked = settings.sendOnEnter,
+            ) { v -> settingsVm.update { it.copy(sendOnEnter = v) } }
         }
     }
 }
@@ -473,18 +503,26 @@ private fun FilesPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: 
         }
         PcButton("Link a folder", filled = false) { picker.launch(null) }
         Note("The system picker grants access only to the folder you choose. Linked access survives app restarts and can be removed here or in system settings.")
-        PcSectionLabel("Agent changes")
+        PcSectionLabel("Approval policy")
         PcGroup {
-            CheckRow("Ask before changes", selected = !settings.autoAccept) {
+            CheckRow(
+                "Ask before each change",
+                selected = !settings.autoAccept,
+                sub = "Review every action before it runs",
+            ) {
                 settingsVm.update { it.copy(autoAccept = false) }
                 vm.setAutoAccept(false)
             }
-            CheckRow("Allow changes automatically", selected = settings.autoAccept) {
+            CheckRow(
+                "Allow changes automatically",
+                selected = settings.autoAccept,
+                sub = "Run workspace changes without approval prompts",
+            ) {
                 settingsVm.update { it.copy(autoAccept = true) }
                 vm.setAutoAccept(true)
             }
         }
-        Note("Reading the active workspace and linked folders is always allowed. This setting controls writes, terminal commands, Git operations, and other actions that can change data.")
+        Note("Reading the active workspace and linked folders is always allowed. Reads outside those locations always ask. Automatic approval controls writes, commands, and Git operations that can change data.")
         state.notice?.let {
             Spacer(Modifier.height(10.dp))
             Note(it)
@@ -519,12 +557,17 @@ private fun FilesPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: 
 private fun AppearancePage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
     Page("Appearance", onBack) {
-        PcSectionLabel("Theme")
+        PcSectionLabel("Color theme")
         PcGroup {
             ThemeMode.entries.forEach { mode ->
                 CheckRow(
                     mode.name.lowercase().replaceFirstChar { it.uppercase() },
                     selected = settings.mode == mode,
+                    sub = when (mode) {
+                        ThemeMode.SYSTEM -> "Match your phone's appearance"
+                        ThemeMode.LIGHT -> "Always use the light theme"
+                        ThemeMode.DARK -> "Always use the dark theme"
+                    },
                 ) { settingsVm.update { it.copy(themeMode = mode.name) } }
             }
         }
@@ -557,6 +600,7 @@ private fun PersonalPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
             singleLine = false,
             minLines = 5,
         )
+        Note("These instructions are included in new agent turns. Do not add passwords, tokens, or other secrets.")
     }
 }
 
@@ -1509,7 +1553,11 @@ private fun GitPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: ()
         }
         PcSectionLabel("Advanced")
         PcGroup {
-            ToggleRow("Show advanced", "Ignore unless you know git", checked = advanced) { advanced = it }
+            ToggleRow(
+                "Advanced Git settings",
+                "Task branches and manual credentials",
+                checked = advanced,
+            ) { advanced = it }
             if (advanced) {
                 ToggleRow(
                     "Auto-branch each task",
@@ -1545,7 +1593,7 @@ private fun ExportPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack:
         PcSectionLabel("Your data")
         Note("Exports are not encrypted. Saved provider and sign-in credentials are excluded, but chats and tool activity may contain sensitive content.")
         Spacer(Modifier.height(10.dp))
-        PcButton("Export chats & settings", filled = false) { exporter.launch("phonecode-backup-$stamp.zip") }
+        PcButton("Export chats & settings") { exporter.launch("phonecode-backup-$stamp.zip") }
         Spacer(Modifier.height(10.dp))
         PcButton("Import from a file", filled = false) { importer.launch(arrayOf("application/zip", "application/octet-stream")) }
         state.notice?.let {

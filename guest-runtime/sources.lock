@@ -7,5 +7,5 @@ blocked_reason=matching linux-virt 6.18.35 modules lack retained signed-package 
 alpine-minirootfs|3.24.1|https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.1-aarch64.tar.gz|f55a90f69052c5bd6f92cb09a8f47065970830b194c917a006fb94028e721259|openpgp:0482D84022F52DF1C4E7CD43293ACD0907D9495A
 alpine-vmlinuz-virt|6.18.35-r0|https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/netboot-3.24.1/vmlinuz-virt|47970e0ee0478fe5c60824a89f162d5a353fa29466e5d3bddb0f9c506f1ed756|sha256
 alpine-initramfs-virt|6.18.35-r0|https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/netboot-3.24.1/initramfs-virt|e47d38bc88509a3db11affc09f9762f9643b026bd29441724a4729ad8e97add6|sha256
-busybox-static-apk|1.37.0-r31|https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/busybox-static-1.37.0-r31.apk|965777e06b94bf11981d5f4ecdfcd577879f4b0dda544294d1dd3f72b217bc75|openpgp:alpine-devel@lists.alpinelinux.org-616ae350
+busybox-static-apk|1.37.0-r31|https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/busybox-static-1.37.0-r31.apk|965777e06b94bf11981d5f4ecdfcd577879f4b0dda544294d1dd3f72b217bc75|alpine-apk-rsa:alpine-devel@lists.alpinelinux.org-616ae350
 go-source|1.26.5|https://go.dev/dl/go1.26.5.src.tar.gz|495be4bc87176ac567392e5b4116abd98466d33d7b49d41e764ccc6976b2dc42|sha256

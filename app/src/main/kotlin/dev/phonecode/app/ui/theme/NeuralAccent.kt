@@ -7,21 +7,22 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.border
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
@@ -95,6 +96,17 @@ fun Modifier.neuralRing(active: Boolean, shape: Shape, width: Dp = 1.dp): Modifi
     val ink = MaterialTheme.colorScheme.onBackground
     val shared = LocalNeuralPhase.current
     val local = if (shared == null) rememberNeuralPhase() else null
-    val phase by requireNotNull(shared ?: local)
-    return this.border(width, neuralSweepBrush(phase, ink.copy(alpha = 0.7f)), shape)
+    val phase = requireNotNull(shared ?: local)
+    return this.drawWithCache {
+        val outline = shape.createOutline(size, layoutDirection, this)
+        val stroke = Stroke(width.toPx())
+        onDrawWithContent {
+            drawContent()
+            drawOutline(
+                outline = outline,
+                brush = neuralSweepBrush(phase.value, ink.copy(alpha = 0.7f)),
+                style = stroke,
+            )
+        }
+    }
 }

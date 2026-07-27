@@ -51,3 +51,9 @@ The complete message shapes and field bounds are in
 
 Protocol v1 carries no Android path, file descriptor number, content URI, provider credential,
 OAuth token, API key, arbitrary mount, network destination, or package-download authority.
+
+At most four commands are active at once. Stdin uses a bounded eight-frame queue so a command that
+does not read cannot block signal or shutdown processing. Signals, timeout, normal completion, and
+transport shutdown terminate and reap descendants that remain in the command's same process group.
+A descendant that deliberately creates a new session leaves that process group and is not claimed
+to be contained by this mechanism; stronger containment requires a separate guest sandbox.

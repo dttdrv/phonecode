@@ -73,10 +73,10 @@ fun OnboardingScreen(
                 val forward = targetState > initialState
                 val enterOffset: (Int) -> Int = { if (forward) it / 3 else -it / 3 }
                 val exitOffset: (Int) -> Int = { if (forward) -it / 4 else it / 4 }
-                (slideInHorizontally(tween(240, easing = PhoneEasings.iOSStandard), enterOffset) +
-                    fadeIn(tween(180, easing = PhoneEasings.iOSStandard))) togetherWith
-                    (slideOutHorizontally(tween(160, easing = PhoneEasings.iOSStandard), exitOffset) +
-                        fadeOut(tween(120, easing = PhoneEasings.iOSStandard)))
+                (slideInHorizontally(tween(240, easing = PhoneEasings.easeInOut), enterOffset) +
+                    fadeIn(tween(180, easing = PhoneEasings.easeOut))) togetherWith
+                    (slideOutHorizontally(tween(160, easing = PhoneEasings.easeInOut), exitOffset) +
+                        fadeOut(tween(120, easing = PhoneEasings.easeOut)))
             },
             label = "onboarding",
         ) { currentStep ->
@@ -186,8 +186,8 @@ private fun Connect(
                 modifier = Modifier.weight(1f).padding(start = 4.dp),
             )
             Text(
-                "2 of 2",
-                style = MaterialTheme.typography.labelLarge,
+                "Step 2 of 2",
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                 color = colors.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 12.dp),
             )
@@ -203,45 +203,44 @@ private fun Connect(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Connect one model, then choose the workspace and services you want. You can return here after each step.",
+                "Connect a model to start. Add a project folder and GitHub when you need them.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
             )
             Spacer(Modifier.height(24.dp))
-            Spacer(Modifier.height(12.dp))
             PcGroup {
                 OptionRow(
                     icon = Icons.Outlined.Cloud,
                     title = "Connect a model",
-                    sub = if (modelReady) "Configured" else "Required · sign in or add a provider key",
+                    sub = if (modelReady) "Ready to use" else "Required for agent work",
                     complete = modelReady,
                     onClick = onConnectModels,
                 )
                 OptionRow(
                     icon = Icons.Outlined.Folder,
                     title = "Choose a project folder",
-                    sub = if (projectReady) "Ready" else "Optional · use a folder from your phone",
+                    sub = if (projectReady) "Project folder ready" else "Recommended for project work",
                     complete = projectReady,
                     onClick = onCreateProject,
                 )
                 OptionRow(
                     icon = Icons.Outlined.AccountTree,
                     title = "Connect GitHub",
-                    sub = if (githubReady) "Ready" else "Optional · pull and push repositories",
+                    sub = if (githubReady) "Repository sync ready" else "Optional for repository sync",
                     complete = githubReady,
                     onClick = onConnectGitHub,
                 )
             }
         }
         PcButton(
-            text = "Continue to PhoneCode",
+            text = "Start building",
             enabled = modelReady,
             modifier = Modifier.padding(horizontal = 20.dp).heightIn(min = 56.dp),
             onClick = onDone,
         )
         if (!modelReady) {
             Text(
-                "Connect a model to continue, or skip and do it later.",
+                "A model is required to run an agent. Optional setup can wait.",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
                 textAlign = TextAlign.Center,

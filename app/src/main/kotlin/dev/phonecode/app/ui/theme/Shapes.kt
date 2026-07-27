@@ -16,8 +16,8 @@ val PhoneShapes = Shapes(
 
 val ShapePill = RoundedCornerShape(percent = 50)
 
-// The composer capsule: FIXED 26dp radius - exactly half the resting (single-line) height, so at
-// rest it is a mathematically perfect pill, and unlike percent-50 the corners do not warp while
-// animateContentSize grows the box (device feedback: "the chat input box is not perfectly rounded").
-val ShapeComposer = RoundedCornerShape(26.dp)
+// The composer capsule has a fixed radius equal to half its 60dp resting outer height. A fixed
+// radius keeps multiline growth generous without the corner distortion of a percent-based pill.
+val ShapeComposer = RoundedCornerShape(30.dp)
+val ShapeButton = RoundedCornerShape(18.dp)
 val ShapeMediumIcon = RoundedCornerShape(13.dp)

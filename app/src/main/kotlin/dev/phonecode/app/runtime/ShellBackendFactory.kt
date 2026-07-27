@@ -9,14 +9,21 @@ import dev.phonecode.tools.shell.UnavailableShellBackend
 import java.io.File
 
 internal object ShellBackendFactory {
-    private const val RELEASE_UNAVAILABLE =
-        "The isolated VM runtime is not available in this release build."
-
     fun create(
         app: PhoneCodeApplication,
         debugRuntimeEnabled: Boolean,
     ): ShellBackend {
-        if (!debugRuntimeEnabled) return UnavailableShellBackend(RELEASE_UNAVAILABLE)
+        if (!debugRuntimeEnabled) {
+            val artifactStore = VmArtifactStore.from(app)
+            return createRelease(artifactStore) { verifiedStore ->
+                IsolatedVmShellBackend.create(
+                    context = app,
+                    artifactStore = verifiedStore,
+                    acquireForegroundLease = app.foregroundLeases::acquire,
+                    releaseForegroundLease = app.foregroundLeases::release,
+                )
+            }
+        }
 
         val userland = EnvironmentBootstrap.ensure(app)
         return LocalShellBackend(
@@ -40,6 +47,22 @@ internal object ShellBackendFactory {
                     },
                 )
             },
+        )
+    }
+
+    internal fun createRelease(
+        artifactStore: VmArtifactStore,
+        isolatedBackendFactory: (VmArtifactStore) -> ShellBackend,
+    ): ShellBackend = try {
+        artifactStore.verify()
+        isolatedBackendFactory(artifactStore)
+    } catch (error: VmArtifactException) {
+        UnavailableShellBackend(requireNotNull(error.message))
+    } catch (error: Throwable) {
+        UnavailableShellBackend(
+            "Isolated VM runtime verification failed: " +
+                (error.message?.take(300) ?: error.javaClass.simpleName) +
+                ".",
         )
     }
 }

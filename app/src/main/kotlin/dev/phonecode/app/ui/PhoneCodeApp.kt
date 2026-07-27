@@ -325,12 +325,12 @@ fun PhoneCodeApp() {
                         startDestination = "chat",
                         modifier = Modifier.fillMaxSize(),
                         enterTransition = {
-                            slideInHorizontally(tween(240, easing = PhoneEasings.iOSStandard)) { it }
+                            slideInHorizontally(tween(240, easing = PhoneEasings.easeInOut)) { it }
                         },
                         exitTransition = { androidx.compose.animation.ExitTransition.None },
                         popEnterTransition = { androidx.compose.animation.EnterTransition.None },
                         popExitTransition = {
-                            slideOutHorizontally(tween(180, easing = PhoneEasings.iOSStandard)) { it }
+                            slideOutHorizontally(tween(180, easing = PhoneEasings.easeInOut)) { it }
                         },
                     ) {
                         composable("chat") {}
@@ -394,8 +394,8 @@ fun PhoneCodeApp() {
             androidx.compose.animation.AnimatedVisibility(
                 visible = showOnboarding,
                 enter = androidx.compose.animation.EnterTransition.None,
-                exit = slideOutHorizontally(tween(220, easing = PhoneEasings.iOSStandard)) { -it / 4 } +
-                    fadeOut(tween(160, easing = PhoneEasings.iOSStandard)),
+                exit = slideOutHorizontally(tween(220, easing = PhoneEasings.easeOut)) { -it / 4 } +
+                    fadeOut(tween(160, easing = PhoneEasings.easeOut)),
             ) {
                 OnboardingScreen(
                     step = onboardingStep,
@@ -804,8 +804,8 @@ private fun SidebarTitleSearch(
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
         AnimatedVisibility(
             visible = !expanded,
-            enter = fadeIn(tween(150)),
-            exit = fadeOut(tween(100)),
+            enter = fadeIn(tween(150, easing = PhoneEasings.easeOut)),
+            exit = fadeOut(tween(100, easing = PhoneEasings.easeOut)),
         ) {
             Text(
                 "PhoneCode",
@@ -815,8 +815,10 @@ private fun SidebarTitleSearch(
         }
         AnimatedVisibility(
             visible = expanded,
-            enter = expandHorizontally(expandFrom = Alignment.End, animationSpec = tween(220, easing = PhoneEasings.iOSStandard)) + fadeIn(tween(160)),
-            exit = shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = tween(170, easing = PhoneEasings.iOSStandard)) + fadeOut(tween(110)),
+            enter = expandHorizontally(expandFrom = Alignment.End, animationSpec = tween(220, easing = PhoneEasings.easeInOut)) +
+                fadeIn(tween(160, easing = PhoneEasings.easeOut)),
+            exit = shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = tween(170, easing = PhoneEasings.easeInOut)) +
+                fadeOut(tween(110, easing = PhoneEasings.easeOut)),
         ) {
             Row(
                 Modifier.fillMaxSize().clip(ShapePill).background(colors.surfaceContainerHigh)

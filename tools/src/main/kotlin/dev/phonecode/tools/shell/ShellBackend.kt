@@ -32,7 +32,7 @@ interface ShellBackend {
         maxChars: Int = 12_000,
     ): ToolResult
 
-    fun input(
+    suspend fun input(
         sessionId: String,
         data: String,
         appendNewline: Boolean = true,

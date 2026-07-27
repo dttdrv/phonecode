@@ -17,10 +17,17 @@ object PhoneSprings {
 }
 
 object PhoneEasings {
-    val iOSStandard = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
+    /** Enter/exit, fades, banners, and small UI feedback. */
+    val easeOut = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
+
+    /** Elements moving or morphing while remaining on screen. */
+    val easeInOut = CubicBezierEasing(0.77f, 0f, 0.175f, 1f)
+
+    /** Reserved for drawer-like movement; gesture-driven drawers remain spring-driven. */
+    val drawer = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 }
 
 object PhoneTweens {
-    val popEnter get() = tween<Float>(durationMillis = 220, easing = PhoneEasings.iOSStandard)
-    val popExit get() = tween<Float>(durationMillis = 150, easing = PhoneEasings.iOSStandard)
+    val popEnter get() = tween<Float>(durationMillis = 220, easing = PhoneEasings.easeOut)
+    val popExit get() = tween<Float>(durationMillis = 150, easing = PhoneEasings.easeOut)
 }

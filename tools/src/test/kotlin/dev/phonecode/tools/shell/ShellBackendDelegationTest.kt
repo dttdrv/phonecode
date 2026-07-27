@@ -132,7 +132,7 @@ class ShellBackendDelegationTest {
             return ToolResult("output")
         }
 
-        override fun input(
+        override suspend fun input(
             sessionId: String,
             data: String,
             appendNewline: Boolean,

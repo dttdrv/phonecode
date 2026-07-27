@@ -45,8 +45,8 @@ android {
         applicationId = "dev.phonecode"
         minSdk = 26
         targetSdk = 36
-        versionCode = 40
-        versionName = "0.4.0"
+        versionCode = 50
+        versionName = "0.5.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GITHUB_OAUTH_CLIENT_ID", githubOauthClientId.asBuildConfigString())
         buildConfigField("boolean", "CODEX_OAUTH_ENABLED", "false")
@@ -397,7 +397,7 @@ val verifyVmFdHygiene by tasks.registering(Exec::class) {
     }
 }
 
-val releaseHostEvidenceDirectory = rootProject.file("release-evidence/0.4.0/vm-host")
+val releaseHostEvidenceDirectory = rootProject.file("release-evidence/0.5.0/vm-host")
 val releaseHostStageDirectory = layout.buildDirectory.dir("generated/phonecodeReleaseHostRuntime")
 val releaseHostStageRoot = releaseHostStageDirectory.get().asFile
 val prepareReleaseHostEvidence by tasks.registering(Exec::class) {
@@ -491,7 +491,7 @@ val releaseGuestComplianceFiles = listOf(
     "SOURCE-MANIFEST.sha256",
 ).map { file("src/release/assets/licenses/guest/$it") }
 val releaseHostSourceDirectory = releaseHostEvidenceDirectory.resolve("sources")
-val releaseGuestSourceDirectory = rootProject.file("release-evidence/0.4.0/guest/sources")
+val releaseGuestSourceDirectory = rootProject.file("release-evidence/0.5.0/guest/sources")
 val canonicalHostSourceLock = rootProject.file("native-runtime/sources.lock")
 val canonicalGuestSourceLock = rootProject.file("guest-runtime/sources.lock")
 val canonicalGuestPackageLock = rootProject.file("guest-runtime/packages.lock")
@@ -519,7 +519,7 @@ val releaseAppComplianceFiles = listOf(
     rootProject.file("legal/release/JetBrainsMono-PROVENANCE.json"),
 ) + mermaidReleaseEvidenceFiles
 val remainingReleaseImplementationBlockers = listOf(
-    "wire IsolatedVmController into the production turn runtime",
+    "implement authenticated host-project workspace transport for the isolated VM runtime",
 )
 val remainingReleaseComplianceBlockers = listOf(
     "extract the final initramfs and system image and reconcile their actual package inventory",
@@ -1052,7 +1052,7 @@ val verifyMermaidReleaseEvidence by tasks.registering(Exec::class) {
 }
 
 val releaseBundle = layout.buildDirectory.file("outputs/bundle/release/app-release.aab")
-val playSubmissionEvidenceManifest = rootProject.file("play/0.4.0/submission-evidence.json")
+val playSubmissionEvidenceManifest = rootProject.file("play/0.5.0/submission-evidence.json")
 val playSubmissionEvidenceValidator = rootProject.file("play/verify_submission_evidence.py")
 val verifyPlaySubmissionEvidenceSchema by tasks.registering(Exec::class) {
     group = "verification"

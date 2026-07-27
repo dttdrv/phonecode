@@ -58,6 +58,17 @@ internal class VmGuestRemoteException(
     message: String,
 ) : VmProtocolException(message)
 
+internal interface VmShellClient {
+    suspend fun execute(command: String, timeoutMillis: Int): VmExecutionResult
+    suspend fun start(command: String, timeoutMillis: Int): VmBackgroundSession
+    fun output(id: Long): VmSessionOutput
+    suspend fun input(id: Long, bytes: ByteArray, eof: Boolean = false)
+    suspend fun signal(id: Long, signal: VmGuestSignal)
+    suspend fun stop(id: Long): VmExecutionResult
+    suspend fun awaitBackground(id: Long): VmExecutionResult
+    suspend fun shutdown()
+}
+
 /**
  * Stateful host endpoint for the framed guest protocol.
  *
@@ -71,7 +82,7 @@ internal class VmGuestClient(
     private val cleanupWriteTimeoutMillis: Long = DEFAULT_CLEANUP_WRITE_TIMEOUT_MILLIS,
     private val beforeBackgroundWrite: suspend () -> Unit = {},
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
-) {
+) : VmShellClient {
     private val stateMutex = Mutex()
     private val outputMutex = Mutex()
     private val supervisor = SupervisorJob()
@@ -121,7 +132,7 @@ internal class VmGuestClient(
         }
     }
 
-    suspend fun execute(
+    override suspend fun execute(
         command: String,
         timeoutMillis: Int,
     ): VmExecutionResult {
@@ -138,12 +149,12 @@ internal class VmGuestClient(
         }
     }
 
-    suspend fun start(
+    override suspend fun start(
         command: String,
         timeoutMillis: Int,
     ): VmBackgroundSession {
         val request = openRequest(background = true)
-        backgrounds[request.id] = BackgroundRecord(request.output)
+        backgrounds[request.id] = BackgroundRecord(request.output, request.terminal)
         try {
             writeFrame(VmGuestProtocol.exec(request.id, command, timeoutMillis, background = true))
             return request.started.await()
@@ -158,7 +169,7 @@ internal class VmGuestClient(
         }
     }
 
-    fun output(id: Long): VmSessionOutput {
+    override fun output(id: Long): VmSessionOutput {
         val record = backgrounds[id] ?: throw VmProtocolException("VM background request $id is unknown")
         record.error?.let { throw it }
         val result = record.result
@@ -170,19 +181,19 @@ internal class VmGuestClient(
         )
     }
 
-    suspend fun input(
+    override suspend fun input(
         id: Long,
         bytes: ByteArray,
-        eof: Boolean = false,
+        eof: Boolean,
     ) {
         writeLiveBackgroundFrame(id, VmGuestProtocol.stdin(id, bytes, eof))
     }
 
-    suspend fun signal(id: Long, signal: VmGuestSignal) {
+    override suspend fun signal(id: Long, signal: VmGuestSignal) {
         writeLiveBackgroundFrame(id, VmGuestProtocol.signal(id, signal.name))
     }
 
-    suspend fun stop(id: Long): VmExecutionResult {
+    override suspend fun stop(id: Long): VmExecutionResult {
         val record = backgrounds[id] ?: throw VmProtocolException("VM background request $id is unknown")
         record.error?.let { throw it }
         record.result?.let { return it }
@@ -232,7 +243,13 @@ internal class VmGuestClient(
         return requireNotNull(resolution.request).terminal.await()
     }
 
-    suspend fun shutdown() {
+    override suspend fun awaitBackground(id: Long): VmExecutionResult {
+        val record = backgrounds[id]
+            ?: throw VmProtocolException("VM background request $id is unknown")
+        return record.terminal.await()
+    }
+
+    override suspend fun shutdown() {
         val shouldWrite = stateMutex.withLock {
             when (connectionState) {
                 ConnectionState.CLOSED -> false
@@ -519,6 +536,7 @@ internal class VmGuestClient(
 
     private class BackgroundRecord(
         val output: VmOutputWindow,
+        val terminal: CompletableDeferred<VmExecutionResult>,
     ) {
         @Volatile
         var result: VmExecutionResult? = null

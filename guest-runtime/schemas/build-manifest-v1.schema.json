@@ -12,6 +12,7 @@
     "protocol_version",
     "schema",
     "sources_lock_sha256",
+    "system_payload",
     "toolchain_lock_sha256"
   ],
   "properties": {
@@ -41,35 +42,101 @@
       "type": "array",
       "minItems": 3,
       "maxItems": 3,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "bytes",
-          "name",
-          "sha256"
-        ],
-        "properties": {
-          "name": {
-            "enum": [
-              "initramfs.cpio.gz",
-              "system.img",
-              "vmlinuz"
-            ]
-          },
-          "bytes": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "sha256": {
-            "$ref": "#/$defs/sha256"
-          }
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/initramfsArtifact"
+        },
+        {
+          "$ref": "#/$defs/systemArtifact"
+        },
+        {
+          "$ref": "#/$defs/kernelArtifact"
         }
-      },
-      "uniqueItems": true
+      ],
+      "items": false
+    },
+    "system_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
     }
   },
   "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bytes",
+        "name",
+        "sha256"
+      ],
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "initramfsArtifact": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "initramfs.cpio.gz"
+            }
+          }
+        }
+      ]
+    },
+    "systemArtifact": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "system.img"
+            }
+          }
+        }
+      ]
+    },
+    "kernelArtifact": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "vmlinuz"
+            }
+          }
+        }
+      ]
+    },
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"

@@ -48,7 +48,7 @@ class ReleaseRuntimePackagingTest {
             "stageReleaseHostRuntime",
             "verifyReleaseHostEvidence",
             "src/release/assets/licenses/guest",
-            "wire IsolatedVmController into the production turn runtime",
+            "implement authenticated host-project workspace transport for the isolated VM runtime",
             "reconcile source-level copyright and NOTICE obligations for runtime components",
             "audit the complete signed AAB native graph and upload native debug symbols",
             "complete signed-device VM lifecycle and Play artifact evidence",
@@ -56,5 +56,17 @@ class ReleaseRuntimePackagingTest {
         ).forEach { requiredGate ->
             assertTrue("Play release gate is missing: $requiredGate", build.contains(requiredGate))
         }
+    }
+
+    @Test
+    fun releaseCandidateUsesVersion050EvidencePaths() {
+        val build = File(root, "app/build.gradle.kts").readText()
+
+        assertTrue(build.contains("""versionCode = 50"""))
+        assertTrue(build.contains("""versionName = "0.5.0""""))
+        assertTrue(build.contains("""release-evidence/0.5.0/vm-host"""))
+        assertTrue(build.contains("""release-evidence/0.5.0/guest/sources"""))
+        assertTrue(build.contains("""play/0.5.0/submission-evidence.json"""))
+        assertTrue(File(root, "play/0.5.0/README.md").isFile)
     }
 }

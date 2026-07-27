@@ -20,7 +20,7 @@ class UnavailableShellBackend(
 
     override fun output(sessionId: String, workspacePath: String?, maxChars: Int) = unavailable()
 
-    override fun input(
+    override suspend fun input(
         sessionId: String,
         data: String,
         appendNewline: Boolean,

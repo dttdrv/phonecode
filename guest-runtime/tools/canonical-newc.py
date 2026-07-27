@@ -2,6 +2,7 @@
 """Create and verify PhoneCode's deterministic gzip-compressed newc archive."""
 
 import gzip
+import io
 import os
 import stat
 import sys
@@ -60,7 +61,7 @@ def append_entry(
     pad4(archive)
 
 
-def create(root: Path, output: Path, epoch: int) -> None:
+def newc_bytes(root: Path, epoch: int) -> bytes:
     if not root.is_dir():
         fail(f"input root is not a directory: {root}")
     archive = bytearray()
@@ -83,12 +84,22 @@ def create(root: Path, output: Path, epoch: int) -> None:
         append_entry(archive, inode, str(relative), mode, payload, epoch)
         inode += 1
     append_entry(archive, inode, TRAILER, 0, b"", epoch)
+    return bytes(archive)
+
+
+def gzip_bytes(payload: bytes, epoch: int) -> bytes:
+    raw = io.BytesIO()
+    with gzip.GzipFile(
+        filename="", mode="wb", fileobj=raw, compresslevel=9, mtime=epoch
+    ) as compressed:
+        compressed.write(payload)
+    return raw.getvalue()
+
+
+def create(root: Path, output: Path, epoch: int) -> None:
+    archive = newc_bytes(root, epoch)
     output.parent.mkdir(parents=True, exist_ok=True)
-    with output.open("wb") as raw:
-        with gzip.GzipFile(
-            filename="", mode="wb", fileobj=raw, compresslevel=9, mtime=epoch
-        ) as compressed:
-            compressed.write(archive)
+    output.write_bytes(gzip_bytes(archive, epoch))
 
 
 def hex_field(data: bytes, offset: int) -> int:
@@ -103,10 +114,13 @@ def align4(offset: int) -> int:
 
 
 def verify(archive_path: Path, expected_epoch: int) -> None:
+    compressed_bytes = archive_path.read_bytes()
     try:
-        data = gzip.decompress(archive_path.read_bytes())
+        data = gzip.decompress(compressed_bytes)
     except (OSError, EOFError) as error:
         fail(f"invalid deterministic gzip stream: {error}")
+    if compressed_bytes != gzip_bytes(data, expected_epoch):
+        fail("gzip stream is not canonical")
     offset = 0
     expected_inode = 1
     seen = []
@@ -152,10 +166,15 @@ def verify(archive_path: Path, expected_epoch: int) -> None:
         except UnicodeError:
             fail("entry name is not valid")
         payload_start = align4(name_end)
+        if any(data[name_end:payload_start]):
+            fail("entry name padding is not canonical")
         payload_end = payload_start + size
         if len(data[payload_start:payload_end]) != size:
             fail("entry payload is truncated")
-        offset = align4(payload_end)
+        next_offset = align4(payload_end)
+        if any(data[payload_end:next_offset]):
+            fail("entry payload padding is not canonical")
+        offset = next_offset
         if name == TRAILER:
             if mode != 0 or size != 0:
                 fail("trailer is not canonical")

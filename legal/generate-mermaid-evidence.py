@@ -225,9 +225,9 @@ def render_outputs(package: dict[str, object]) -> dict[str, bytes]:
         "metadata": {
             "component": {
                 "type": "application",
-                "bom-ref": "pkg:generic/phonecode-mermaid-asset@0.4.0",
+                "bom-ref": "pkg:generic/phonecode-mermaid-asset@0.5.0",
                 "name": "PhoneCode Mermaid web asset",
-                "version": "0.4.0",
+                "version": "0.5.0",
             },
             "properties": [
                 {

@@ -12,6 +12,9 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.phonecode.app.MainActivity
+import dev.phonecode.app.PhoneCodeApplication
+import dev.phonecode.app.agent.ChatUiState
+import dev.phonecode.app.agent.PermissionRequest
 import dev.phonecode.app.data.PersistedMessage
 import dev.phonecode.app.data.PersistedPart
 import dev.phonecode.app.data.PersistedRole
@@ -29,6 +32,7 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * The design feedback loop: renders the REAL app (same composition as UiSmokeTest) to PNGs in
@@ -198,5 +202,73 @@ class ScreenshotTest {
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
         shoot("13-settings-root-dark")
+    }
+
+    @Test
+    fun approvalAndSettingsDetails() {
+        awaitConversation()
+        val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            pendingPermission = PermissionRequest(
+                tool = "shell",
+                summary = "Run ./gradlew assembleRelease in the current project",
+            ),
+        )
+        shootScreen("14-approval-command")
+        state.value = state.value.copy(pendingPermission = null)
+
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+        listOf(
+            "General" to "15-settings-general",
+            "Files & permissions" to "16-settings-files-permissions",
+            "Appearance" to "17-settings-appearance",
+            "Personalization" to "18-settings-personalization",
+            "Export & import" to "19-settings-export-import",
+        ).forEach { (page, image) ->
+            compose.onNodeWithText(page).performClick()
+            shoot(image)
+            compose.onNodeWithContentDescription("Back").performClick()
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h640dp-xxxhdpi")
+    fun playListingPhoneScreenshots() {
+        awaitConversation()
+        compose.onRoot().captureRoboImage(
+            "../play/0.5.0/graphics/phone/01-agent-conversation.png",
+        )
+
+        val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            pendingPermission = PermissionRequest(
+                tool = "shell",
+                summary = "Run the release checks in the current project",
+            ),
+        )
+        compose.waitForIdle()
+        captureScreenRoboImage("../play/0.5.0/graphics/phone/02-action-approval.png")
+        state.value = state.value.copy(pendingPermission = null)
+
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onRoot().captureRoboImage(
+            "../play/0.5.0/graphics/phone/03-project-drawer.png",
+        )
+
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onRoot().captureRoboImage(
+            "../play/0.5.0/graphics/phone/04-settings.png",
+        )
     }
 }

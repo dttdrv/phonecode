@@ -11,7 +11,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -72,14 +71,14 @@ fun MorphingMenu(
     LaunchedEffect(expanded) { state.targetState = expanded }
     if (expanded || state.currentState || !state.isIdle) {
         val transition = rememberTransition(state, label = "morphingMenu")
-        val progress by transition.animateFloat(
+        val progress = transition.animateFloat(
             transitionSpec = {
-                if (targetState) tween(200, easing = PhoneEasings.iOSStandard)
-                else tween(150, easing = PhoneEasings.iOSStandard)
+                if (targetState) tween(200, easing = PhoneEasings.easeInOut)
+                else tween(150, easing = PhoneEasings.easeInOut)
             },
             label = "menuProgress",
         ) { if (it) 1f else 0f }
-        val contentProgress = ((progress - 0.35f) / 0.65f).coerceIn(0f, 1f)
+        val clip = remember { Path() }
         Popup(
             popupPositionProvider = positionProvider,
             onDismissRequest = onDismiss,
@@ -87,11 +86,12 @@ fun MorphingMenu(
         ) {
             Box(
                 modifier.drawWithContent {
-                    val width = anchorPixels + (size.width - anchorPixels) * progress
-                    val height = anchorPixels + (size.height - anchorPixels) * progress
+                    val value = progress.value
+                    val width = anchorPixels + (size.width - anchorPixels) * value
+                    val height = anchorPixels + (size.height - anchorPixels) * value
                     val left = if (alignEnd) size.width - width else 0f
                     val top = if (above) size.height - height else 0f
-                    val radius = anchorPixels / 2f + (finalCorner - anchorPixels / 2f) * progress
+                    val radius = anchorPixels / 2f + (finalCorner - anchorPixels / 2f) * value
                     repeat(4) { index ->
                         val spread = (4 - index) * density.density
                         drawRoundRect(
@@ -102,9 +102,8 @@ fun MorphingMenu(
                         )
                     }
                     drawRoundRect(background, Offset(left, top), Size(width, height), CornerRadius(radius))
-                    val clip = Path().apply {
-                        addRoundRect(RoundRect(left, top, left + width, top + height, radius, radius))
-                    }
+                    clip.reset()
+                    clip.addRoundRect(RoundRect(left, top, left + width, top + height, radius, radius))
                     clipPath(clip) { this@drawWithContent.drawContent() }
                     drawRoundRect(
                         outline,
@@ -117,6 +116,7 @@ fun MorphingMenu(
             ) {
                 Column(
                     Modifier.graphicsLayer {
+                        val contentProgress = ((progress.value - 0.35f) / 0.65f).coerceIn(0f, 1f)
                         alpha = contentProgress
                         translationY = (1f - contentProgress) * if (above) 4.dp.toPx() else (-4).dp.toPx()
                     },

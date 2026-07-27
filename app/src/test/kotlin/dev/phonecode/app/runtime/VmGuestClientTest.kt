@@ -15,6 +15,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
@@ -196,7 +197,10 @@ class VmGuestClientTest {
         val session = fixture.client.start("cat", timeoutMillis = 1_000)
         assertEquals(4321, session.pid)
         fixture.client.input(session.id, "hello\n".toByteArray())
-        outputWritten.await()
+        select<Unit> {
+            outputWritten.onAwait { }
+            guest.onAwait { }
+        }
         assertArrayEquals("ready\n".toByteArray(), fixture.client.output(session.id).output)
         fixture.client.signal(session.id, VmGuestSignal.INT)
         val stopped = fixture.client.stop(session.id)

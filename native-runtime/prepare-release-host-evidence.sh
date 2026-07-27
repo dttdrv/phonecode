@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(cd "$ROOT/.." && pwd)
-OUTPUT=${1:-"$PROJECT_ROOT/release-evidence/0.4.0/vm-host"}
+OUTPUT=${1:-"$PROJECT_ROOT/release-evidence/0.5.0/vm-host"}
 LOCK="$ROOT/sources.lock"
 DOWNLOADS="$ROOT/.downloads"
 
@@ -164,9 +164,9 @@ document = {
     "metadata": {
         "component": {
             "type": "application",
-            "bom-ref": "pkg:generic/phonecode-vm-host@0.4.0",
+            "bom-ref": "pkg:generic/phonecode-vm-host@0.5.0",
             "name": "PhoneCode VM host runtime",
-            "version": "0.4.0",
+            "version": "0.5.0",
         }
     },
     "components": components,

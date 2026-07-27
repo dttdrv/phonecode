@@ -113,7 +113,7 @@ class LocalShellBackend(
     override fun output(sessionId: String, workspacePath: String?, maxChars: Int): ToolResult =
         processManager.output(sessionId, workspacePath, maxChars)
 
-    override fun input(
+    override suspend fun input(
         sessionId: String,
         data: String,
         appendNewline: Boolean,

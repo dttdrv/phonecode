@@ -50,6 +50,19 @@ func hello() map[string]any {
 	return map[string]any{"id": 0, "nonce": testNonce, "type": "hello", "v": 1}
 }
 
+func protocolFrame(t *testing.T, value map[string]any) protocolObject {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var frame protocolObject
+	if err := json.Unmarshal(payload, &frame); err != nil {
+		t.Fatal(err)
+	}
+	return frame
+}
+
 func TestHandshakeReturnsExactNonceAndCapabilities(t *testing.T) {
 	input := bytes.NewReader(framed(t, hello()))
 	var output bytes.Buffer
@@ -329,5 +342,151 @@ func TestRejectsCommandAndFrameShapeOutsideProtocolLimits(t *testing.T) {
 		if err := serve(context.Background(), &input, io.Discard, t.TempDir()); err == nil {
 			t.Fatalf("accepted invalid frame: %#v", invalid)
 		}
+	}
+}
+
+func TestRejectsCommandsBeyondConcurrencyLimit(t *testing.T) {
+	const expectedConcurrencyLimit = 4
+	server := &daemon{
+		context:   context.Background(),
+		workspace: t.TempDir(),
+		output:    io.Discard,
+	}
+	defer server.stopAll()
+
+	for id := int64(1); id <= expectedConcurrencyLimit; id++ {
+		err := server.exec(protocolFrame(t, map[string]any{
+			"background": true,
+			"command":    "sleep 30",
+			"cwd":        "/workspace",
+			"id":         id,
+			"timeout_ms": 5000,
+			"type":       "exec",
+			"v":          1,
+		}))
+		if err != nil {
+			t.Fatalf("command %d rejected before the limit: %v", id, err)
+		}
+	}
+
+	err := server.exec(protocolFrame(t, map[string]any{
+		"background": true,
+		"command":    "sleep 30",
+		"cwd":        "/workspace",
+		"id":         int64(expectedConcurrencyLimit + 1),
+		"timeout_ms": 5000,
+		"type":       "exec",
+		"v":          1,
+	}))
+	if err == nil || !strings.Contains(err.Error(), "concurrency limit") {
+		t.Fatalf("command beyond concurrency limit returned %v", err)
+	}
+}
+
+func TestShutdownIsIndependentOfBlockedCommandStdin(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var input bytes.Buffer
+	input.Write(framed(t, hello()))
+	input.Write(framed(t, map[string]any{
+		"background": true,
+		"command":    "sleep 30",
+		"cwd":        "/workspace",
+		"id":         21,
+		"timeout_ms": 5000,
+		"type":       "exec",
+		"v":          1,
+	}))
+	chunk := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("x"), maxOutputChunk))
+	for range 8 {
+		input.Write(framed(t, map[string]any{
+			"data_b64": chunk,
+			"eof":      false,
+			"id":       21,
+			"type":     "stdin",
+			"v":        1,
+		}))
+	}
+	input.Write(framed(t, map[string]any{"id": 0, "type": "shutdown", "v": 1}))
+
+	done := make(chan error, 1)
+	go func() {
+		done <- serve(ctx, &input, io.Discard, t.TempDir())
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("shutdown behind stdin returned %v", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		cancel()
+		<-done
+		t.Fatal("blocked command stdin prevented shutdown")
+	}
+}
+
+func TestCommandStdinBackpressureIsBounded(t *testing.T) {
+	var input bytes.Buffer
+	input.Write(framed(t, hello()))
+	input.Write(framed(t, map[string]any{
+		"background": true,
+		"command":    "sleep 30",
+		"cwd":        "/workspace",
+		"id":         22,
+		"timeout_ms": 5000,
+		"type":       "exec",
+		"v":          1,
+	}))
+	chunk := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("x"), maxOutputChunk))
+	for range 256 {
+		input.Write(framed(t, map[string]any{
+			"data_b64": chunk,
+			"eof":      false,
+			"id":       22,
+			"type":     "stdin",
+			"v":        1,
+		}))
+	}
+
+	err := serve(context.Background(), &input, io.Discard, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "stdin backpressure limit") {
+		t.Fatalf("stdin above the bounded queue returned %v", err)
+	}
+}
+
+func TestNormalExitStopsRemainingCommandProcessGroup(t *testing.T) {
+	workspace := t.TempDir()
+	server := &daemon{
+		context:   context.Background(),
+		workspace: workspace,
+		output:    io.Discard,
+	}
+	err := server.exec(protocolFrame(t, map[string]any{
+		"background": true,
+		"command":    "sleep 30 & echo $! > child.pid",
+		"cwd":        "/workspace",
+		"id":         31,
+		"timeout_ms": 5000,
+		"type":       "exec",
+		"v":          1,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.wait.Wait()
+
+	pidBytes, err := os.ReadFile(workspace + "/child.pid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(pidBytes)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(pid, 0); err == nil {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+		t.Fatalf("normal command exit left process-group child %d running", pid)
 	}
 }

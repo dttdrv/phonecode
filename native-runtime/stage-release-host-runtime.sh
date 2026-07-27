@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(cd "$ROOT/.." && pwd)
 OUTPUT=${1:-"$PROJECT_ROOT/app/build/generated/phonecodeReleaseHostRuntime"}
-EVIDENCE=${2:-"$PROJECT_ROOT/release-evidence/0.4.0/vm-host"}
+EVIDENCE=${2:-"$PROJECT_ROOT/release-evidence/0.5.0/vm-host"}
 RUNTIME="$ROOT/out/arm64-v8a"
 SYMBOLS="$ROOT/out/symbols/arm64-v8a"
 MANIFEST="$ROOT/arm64-v8a.SHA256SUMS"

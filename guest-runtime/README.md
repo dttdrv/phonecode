@@ -40,14 +40,16 @@ metadata, and divergent clean builds are rejected.
 
 ## Runtime architecture
 
-The immutable base is the exact signed Alpine 3.24.1 AArch64 minirootfs tarball. It is copied
-byte-for-byte as `system.img` and carried in a raw read-only virtio block device; it is not a
-mountable filesystem image. A future purpose-built `/init` must verify its declared byte count and
-SHA-256 before extracting it into bounded tmpfs. `/workspace` is explicitly ephemeral for this
+The immutable base payload is the exact signed Alpine 3.24.1 AArch64 minirootfs tarball. `system.img`
+is a deterministic 4,023,808-byte carrier: the 4,023,732-byte upstream payload followed by 76 zero
+bytes so virtio-blk can expose the complete image in 512-byte sectors. `/init` separately verifies
+the carrier size/hash and the upstream payload size/hash before extracting the payload into bounded
+tmpfs. It is not a mountable filesystem image. `/workspace` is explicitly ephemeral for this
 tranche. Persistent project storage belongs to the separate descriptor and lifecycle work.
 
 ## Release boundary
 
 The release gate remains authoritative. Completion requires reproducible, licensed bytes plus
-controller/service/turn integration, device lifecycle evidence, and signed-AAB inspection. A valid
-schema or skeleton check is not runtime or release evidence.
+authenticated host-project workspace transport into the integrated isolated-VM backend, device
+lifecycle evidence, and signed-AAB inspection. A valid schema or skeleton check is not runtime or
+release evidence.

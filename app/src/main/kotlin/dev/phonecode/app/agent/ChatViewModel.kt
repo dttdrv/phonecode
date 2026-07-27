@@ -86,6 +86,7 @@ import dev.phonecode.tools.web.WebSearchTool
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -114,7 +115,7 @@ import java.util.concurrent.TimeUnit
 
 data class ModelOption(val providerId: String, val modelId: String, val label: String)
 
-enum class ToolStatus { RUNNING, DONE, ERROR }
+enum class ToolStatus { AWAITING_APPROVAL, RUNNING, DONE, ERROR, STOPPED }
 enum class TurnOutcome { STOPPED, FAILED }
 
 data class PermissionRequest(val tool: String, val summary: String)
@@ -127,10 +128,67 @@ internal fun permissionCanAutoApprove(tool: String, automaticChanges: Boolean): 
         !normalized.startsWith("external_directory_")
 }
 
+internal fun restoredAgentMode(
+    persistedMode: String?,
+    interrupted: Boolean,
+    fallback: AgentMode,
+): AgentMode {
+    if (interrupted) return AgentMode.PLAN
+    return persistedMode
+        ?.let { runCatching { AgentMode.valueOf(it) }.getOrNull() }
+        ?: fallback
+}
+
+internal data class AgentModePersistenceResult(
+    val durable: Boolean,
+    val current: Boolean,
+)
+
+/**
+ * A mode request may be superseded while its atomic file write is in progress. Repair the durable
+ * value to the newest authority before returning; if that repair transiently fails, retry Plan so
+ * a later process restore cannot resurrect a superseded Build grant.
+ */
+internal fun persistAgentModeWithLatestAuthority(
+    requestedMode: AgentMode,
+    previousMode: AgentMode?,
+    persist: (AgentMode) -> Boolean,
+    authoritativeMode: () -> AgentMode,
+): AgentModePersistenceResult {
+    var attemptedMode = requestedMode
+    var superseded = false
+    var retriedSafeMode = false
+    while (true) {
+        val stored = runCatching { persist(attemptedMode) }.getOrDefault(false)
+        val latestMode = authoritativeMode()
+        if (stored && latestMode == attemptedMode) {
+            return AgentModePersistenceResult(durable = true, current = !superseded)
+        }
+        if (latestMode != attemptedMode) {
+            superseded = true
+            attemptedMode = latestMode
+            retriedSafeMode = false
+            continue
+        }
+        val safeFallback = latestMode == AgentMode.PLAN || previousMode == AgentMode.PLAN
+        if (superseded && safeFallback && !retriedSafeMode) {
+            attemptedMode = AgentMode.PLAN
+            retriedSafeMode = true
+            continue
+        }
+        return AgentModePersistenceResult(durable = false, current = !superseded)
+    }
+}
+
 data class QuestionRequest(val questions: List<UserQuestion>)
 data class RetryState(val attempt: Int, val message: String)
 data class AiReportSubmission(val accepted: Boolean, val reference: String? = null, val error: String? = null)
+data class SettingsOperation(val running: Boolean = false, val error: String? = null)
 data class AgentToolInfo(val name: String, val description: String, val source: String, val access: String)
+
+internal fun providerDeleteOperationKey(id: String) = "provider-delete:$id"
+internal fun mcpDeleteOperationKey(name: String) = "mcp-delete:$name"
+internal fun skillDeleteOperationKey(id: String) = "skill-delete:$id"
 
 private data class BackupRestore(
     val count: Int,
@@ -210,6 +268,9 @@ data class ChatUiState(
     val interruptedTurn: Boolean = false,
     val turnOutcome: TurnOutcome? = null,
     val draftPhotos: Map<String, List<MessagePart.Image>> = emptyMap(),
+    val reportSubmitting: Boolean = false,
+    val reportSubmission: AiReportSubmission? = null,
+    val settingsOperations: Map<String, SettingsOperation> = emptyMap(),
 )
 
 /** Orchestrates the agent loop for the chat UI: builds provider + tools + loop, streams events into UI state. */
@@ -249,7 +310,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val baseTools: List<Tool> =
         defaultFileTools() + ApplyPatchTool() + ExternalDirectoryTool() + QuestionTool() +
             SharedReadTool(sharedFileAccess) + SharedWriteTool(sharedFileAccess) +
-            PlanExitTool { setAgentMode(AgentMode.BUILD) } + todoTools(todoStore) +
+            PlanExitTool { setAgentModeAndWait(AgentMode.BUILD) } + todoTools(todoStore) +
             WebFetchTool(http) + WebSearchTool(http) + TaskTool(::runSubagent) + gitTools { gitCredentials() } +
             ShellTool(shellBackend) + ProcessTool(shellBackend) +
             ExtensionConfigReadTool(repo) { workspace } + ExtensionConfigWriteTool(repo) { workspace }
@@ -339,6 +400,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val runtimeReloadMutex = Mutex()
     private val mcpReloadMutex = Mutex()
     private val metadataMutationMutex = Mutex()
+    private val agentModeMutationMutex = Mutex()
+    private val agentModeRequestLock = Any()
+    private val agentModeRequestOrder = AtomicLong()
+    private val latestAgentModeRequests = mutableMapOf<String, Long>()
+    private val pendingAgentModes = mutableMapOf<String, AgentMode>()
     private val autoAcceptMutationLock = Any()
     @Volatile private var lastMcpFingerprint: String? = null
     @Volatile private var lastSkillsFingerprint: String? = null
@@ -374,7 +440,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     hiddenModels = modelPrefs.hiddenModels(),
                     disabledProviders = modelPrefs.disabledProviders(),
                     autoAccept = startupSettings.autoAccept,
-                    agentMode = startupMode,
                     codexConnected = BuildConfig.CODEX_OAUTH_ENABLED && keyStore.get("codex.access") != null,
                     githubLogin = keyStore.get("github.login"),
                     currentSessionId = sessionId,
@@ -412,13 +477,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             turnOutcome = latest.turnOutcome?.let { saved ->
                                 runCatching { TurnOutcome.valueOf(saved) }.getOrNull()
                             },
+                            agentMode = restoredAgentMode(latest.agentMode, interrupted, startupMode),
                             queued = latest.queuedMessages,
                             sessionLoading = false,
                         )
                     }
                 }
                 if (interrupted) {
-                    sessionStore.checkpoint(latest.copy(messages = restored.map { it.toPersisted() }, activeTurn = false))
+                    sessionStore.save(
+                        latest.copy(
+                            messages = restored.map { it.toPersisted() },
+                            activeTurn = false,
+                            agentMode = AgentMode.PLAN.name,
+                        ),
+                    )
                 }
                 appSettings.update { it.copy(activeSessionId = latest.id) }
             }
@@ -733,19 +805,204 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Remove a user-defined provider: config entry, preset, and its picker models. */
     fun deleteCustomProvider(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                val cfg = customProviders.load()
-                customProviders.save(cfg.copy(provider = cfg.provider - id))
-                keyStore.put(customProviderSecretName(id), "")
-                keyStore.put(id, "")
-                reloadProvidersNow().getOrThrow()
-            }.onFailure { error ->
+            deleteCustomProviderAndWait(id).onFailure { error ->
                 _state.update { it.copy(error = error.message ?: "Custom provider could not be removed") }
             }
         }
     }
 
-    fun setAgentMode(mode: AgentMode) = _state.update { it.copy(agentMode = mode) }
+    suspend fun deleteCustomProviderAndWait(id: String): Result<Unit> =
+        runSettingsOperation(providerDeleteOperationKey(id)) {
+        runCatching {
+            val cfg = customProviders.load()
+            val previousSecrets = mapOf(
+                customProviderSecretName(id) to keyStore.get(customProviderSecretName(id)).orEmpty(),
+                id to keyStore.get(id).orEmpty(),
+            )
+            var configurationChanged = false
+            try {
+                customProviders.save(cfg.copy(provider = cfg.provider - id))
+                configurationChanged = true
+                keyStore.putAll(previousSecrets.keys.associateWith { "" })
+                reloadProvidersNow().getOrThrow()
+            } catch (failure: Throwable) {
+                // The JSON file and encrypted preferences cannot share one filesystem transaction,
+                // so compensate every committed step before reporting a retryable failure.
+                if (configurationChanged) {
+                    runCatching { customProviders.save(cfg) }
+                        .onFailure(failure::addSuppressed)
+                }
+                runCatching { keyStore.putAll(previousSecrets) }
+                    .onFailure(failure::addSuppressed)
+                runCatching { reloadProvidersNow().getOrThrow() }
+                    .onFailure(failure::addSuppressed)
+                throw failure
+            }
+        }
+    }
+
+    fun clearSettingsOperation(key: String) {
+        _state.update { it.copy(settingsOperations = it.settingsOperations - key) }
+    }
+
+    private suspend fun runSettingsOperation(
+        key: String,
+        operation: suspend () -> Result<Unit>,
+    ): Result<Unit> {
+        val owned = viewModelScope.async(Dispatchers.IO) {
+            _state.update {
+                it.copy(settingsOperations = it.settingsOperations + (key to SettingsOperation(running = true)))
+            }
+            runCatching { operation() }
+                .fold(onSuccess = { it }, onFailure = { Result.failure(it) })
+                .also { result ->
+                _state.update {
+                    it.copy(
+                        settingsOperations = it.settingsOperations + (
+                            key to SettingsOperation(
+                                running = false,
+                                error = result.exceptionOrNull()?.message,
+                            )
+                        ),
+                    )
+                }
+            }
+        }
+        return owned.await()
+    }
+
+    fun setAgentMode(mode: AgentMode) {
+        val visibleMode = _state.value.agentMode
+        val targetSessionId = sessionId
+        val requestOrder = registerAgentModeRequest(targetSessionId, mode, visibleMode) ?: return
+        val snapshot = history
+        val targetProjectId = currentProjectId
+        val targetTodos = todoStore.snapshot()
+        // Entering Plan is a safety boundary: close mutation access immediately. Build is granted
+        // only after the durable write succeeds off the UI thread.
+        if (mode == AgentMode.PLAN) {
+            _state.update { it.copy(agentMode = AgentMode.PLAN) }
+        }
+        viewModelScope.launch {
+            persistAgentModeChange(
+                targetSessionId = targetSessionId,
+                mode = mode,
+                requestOrder = requestOrder,
+                snapshot = snapshot,
+                targetProjectId = targetProjectId,
+                targetTodos = targetTodos,
+            )
+        }
+    }
+
+    private suspend fun setAgentModeAndWait(mode: AgentMode): Boolean {
+        val visibleMode = _state.value.agentMode
+        val targetSessionId = sessionId
+        val requestOrder = registerAgentModeRequest(targetSessionId, mode, visibleMode) ?: return true
+        val snapshot = history
+        val targetProjectId = currentProjectId
+        val targetTodos = todoStore.snapshot()
+        if (mode == AgentMode.PLAN) {
+            _state.update { it.copy(agentMode = AgentMode.PLAN) }
+        }
+        return persistAgentModeChange(
+            targetSessionId = targetSessionId,
+            mode = mode,
+            requestOrder = requestOrder,
+            snapshot = snapshot,
+            targetProjectId = targetProjectId,
+            targetTodos = targetTodos,
+        )
+    }
+
+    private fun registerAgentModeRequest(
+        targetSessionId: String,
+        mode: AgentMode,
+        visibleMode: AgentMode,
+    ): Long? = synchronized(agentModeRequestLock) {
+        if (pendingAgentModes[targetSessionId] == mode ||
+            (pendingAgentModes[targetSessionId] == null && visibleMode == mode)
+        ) {
+            return@synchronized null
+        }
+        agentModeRequestOrder.incrementAndGet().also { order ->
+            latestAgentModeRequests[targetSessionId] = order
+            pendingAgentModes[targetSessionId] = mode
+        }
+    }
+
+    private suspend fun persistAgentModeChange(
+        targetSessionId: String,
+        mode: AgentMode,
+        requestOrder: Long,
+        snapshot: List<ChatMessage>,
+        targetProjectId: String?,
+        targetTodos: List<TodoItem>,
+    ): Boolean = withContext(Dispatchers.IO) {
+        agentModeMutationMutex.withLock {
+            val stillLatest = synchronized(agentModeRequestLock) {
+                latestAgentModeRequests[targetSessionId] == requestOrder
+            }
+            if (!stillLatest) return@withLock false
+
+            val previousMode = sessionStore.load(targetSessionId)?.agentMode
+                ?.let { runCatching { AgentMode.valueOf(it) }.getOrNull() }
+            val persistence = persistAgentModeWithLatestAuthority(
+                requestedMode = mode,
+                previousMode = previousMode,
+                persist = { attemptedMode ->
+                    runCatching {
+                        if (!sessionStore.setAgentMode(targetSessionId, attemptedMode.name)) {
+                            val created = sessionStore.create(
+                                PersistedSession(
+                                    id = targetSessionId,
+                                    title = "New chat",
+                                    updatedAt = System.currentTimeMillis(),
+                                    messages = snapshot.map { it.toPersisted() },
+                                    projectId = targetProjectId,
+                                    todos = targetTodos,
+                                    agentMode = attemptedMode.name,
+                                ),
+                            )
+                            check(created || sessionStore.setAgentMode(targetSessionId, attemptedMode.name)) {
+                                "The chat mode could not be checkpointed"
+                            }
+                        }
+                    }.isSuccess
+                },
+                authoritativeMode = {
+                    synchronized(agentModeRequestLock) {
+                        if (latestAgentModeRequests[targetSessionId] == requestOrder) {
+                            mode
+                        } else {
+                            pendingAgentModes[targetSessionId] ?: AgentMode.PLAN
+                        }
+                    }
+                },
+            )
+
+            val isCurrentRequest = synchronized(agentModeRequestLock) {
+                (latestAgentModeRequests[targetSessionId] == requestOrder).also { current ->
+                    if (current) pendingAgentModes.remove(targetSessionId)
+                }
+            }
+            if (!isCurrentRequest) return@withLock false
+            if (sessionId == targetSessionId) {
+                if (persistence.durable) {
+                    _state.update { it.copy(agentMode = mode, sessions = sessionStore.list()) }
+                } else if (mode == AgentMode.PLAN) {
+                    _state.update {
+                        it.copy(error = "Plan mode could not be saved; this chat remains read-only for this session.")
+                    }
+                } else {
+                    _state.update {
+                        it.copy(error = "Build mode could not be saved; this chat remains in Plan mode.")
+                    }
+                }
+            }
+            persistence.durable
+        }
+    }
     fun setEffort(effort: ReasoningEffort) = _state.update {
         if (effort in reasoningEfforts(it.selected)) it.copy(effort = effort) else it
     }
@@ -885,7 +1142,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val activeProjectId = setActiveProject(projectId)
         val defaultMode = runCatching { AgentMode.valueOf(appSettings.load().defaultMode) }.getOrDefault(AgentMode.BUILD)
         todoStore.replace(emptyList())
-        sessionStore.create(PersistedSession(sessionId, "New chat", System.currentTimeMillis(), emptyList(), activeProjectId))
+        sessionStore.create(
+            PersistedSession(
+                id = sessionId,
+                title = "New chat",
+                updatedAt = System.currentTimeMillis(),
+                messages = emptyList(),
+                projectId = activeProjectId,
+                agentMode = defaultMode.name,
+            ),
+        )
         appSettings.update { it.copy(activeSessionId = sessionId) }
         _state.update {
             it.copy(
@@ -976,6 +1242,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         turnOutcome = loaded.turnOutcome?.let { saved ->
                             runCatching { TurnOutcome.valueOf(saved) }.getOrNull()
                         },
+                        agentMode = restoredAgentMode(loaded.agentMode, interrupted, startupMode),
                         sessionLoading = false,
                         currentSessionId = sessionId,
                         currentProjectId = activeProjectId,
@@ -990,6 +1257,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         messages = restored.map { it.toPersisted() },
                         activeTurn = false,
                         projectId = committed.second,
+                        agentMode = if (interrupted) AgentMode.PLAN.name else loaded.agentMode,
                     ),
                 )
             }
@@ -1217,38 +1485,60 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteMcpServer(name: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            deleteMcpServerAndWait(name).onFailure { failure ->
+                _state.update { it.copy(error = failure.message ?: "MCP server could not be deleted") }
+            }
+        }
+    }
+
+    suspend fun deleteMcpServerAndWait(name: String): Result<Unit> =
+        runSettingsOperation(mcpDeleteOperationKey(name)) {
             repo.removeMcpServer(name).fold(
                 onSuccess = { updated ->
                     _state.update { it.copy(mcpServers = updated.mcp, mcpConfigError = null) }
                     reconnectMcp()
+                    Result.success(Unit)
                 },
-                onFailure = { failure ->
-                    _state.update { it.copy(mcpConfigError = failure.message ?: "MCP server could not be deleted") }
-                },
+                onFailure = { failure -> Result.failure(failure) },
             )
         }
-    }
 
     fun setMcpEnabled(name: String, enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
+            setMcpEnabledAndWait(name, enabled).onFailure { failure ->
+                _state.update { it.copy(error = failure.message ?: "MCP server could not be updated") }
+            }
+        }
+    }
+
+    suspend fun setMcpEnabledAndWait(name: String, enabled: Boolean): Result<Unit> =
+        withContext(Dispatchers.IO) {
             repo.setMcpEnabled(name, enabled).fold(
                 onSuccess = { updated ->
                     _state.update { it.copy(mcpServers = updated.mcp, mcpConfigError = null) }
-                    reconnectMcp()
+                    reconnectMcpNow(force = true)
+                    Result.success(Unit)
                 },
-                onFailure = { failure ->
-                    _state.update { it.copy(mcpConfigError = failure.message ?: "MCP server could not be updated") }
-                },
+                onFailure = { failure -> Result.failure(failure) },
             )
         }
-    }
 
     /** Reconnect every enabled remote MCP server and fold the resulting tools into the registry. */
     fun reconnectMcp() {
         mcpReconnectJob?.cancel()
         mcpReconnectJob = viewModelScope.launch(Dispatchers.IO) {
-            reconnectMcpNow(force = true)
+            reconnectMcpAndWait().onFailure { failure ->
+                if (failure !is kotlinx.coroutines.CancellationException) {
+                    _state.update {
+                        it.copy(mcpConfigError = failure.message ?: "MCP servers could not be reconnected")
+                    }
+                }
+            }
         }
+    }
+
+    suspend fun reconnectMcpAndWait(): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { reconnectMcpNow(force = true) }
     }
 
     private suspend fun reconnectMcpNow(force: Boolean = false) = mcpReloadMutex.withLock {
@@ -1310,21 +1600,41 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSkillEnabled(id: String, enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
-            repo.setSkillEnabled(id, enabled, workspace).fold(
-                onSuccess = { refreshSkillsNow() },
-                onFailure = { failure -> _state.update { it.copy(error = failure.message ?: "Skill could not be updated") } },
-            )
+            setSkillEnabledAndWait(id, enabled).onFailure { failure ->
+                _state.update { it.copy(error = failure.message ?: "Skill could not be updated") }
+            }
         }
     }
 
-    fun deleteSkill(id: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            repo.deleteSkill(id, workspace).fold(
-                onSuccess = { refreshSkillsNow() },
-                onFailure = { failure -> _state.update { it.copy(error = failure.message ?: "Skill could not be deleted") } },
+    suspend fun setSkillEnabledAndWait(id: String, enabled: Boolean): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            repo.setSkillEnabled(id, enabled, workspace).fold(
+                onSuccess = {
+                    refreshSkillsNow()
+                    Result.success(Unit)
+                },
+                onFailure = { failure -> Result.failure(failure) },
             )
         }
+
+    fun deleteSkill(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            deleteSkillAndWait(id).onFailure { failure ->
+                _state.update { it.copy(error = failure.message ?: "Skill could not be deleted") }
+            }
+        }
     }
+
+    suspend fun deleteSkillAndWait(id: String): Result<Unit> =
+        runSettingsOperation(skillDeleteOperationKey(id)) {
+            repo.deleteSkill(id, workspace).fold(
+                onSuccess = {
+                    refreshSkillsNow()
+                    Result.success(Unit)
+                },
+                onFailure = { failure -> Result.failure(failure) },
+            )
+        }
 
     suspend fun readSkill(id: String): Result<String> = withContext(Dispatchers.IO) {
         repo.readSkill(id, workspace)
@@ -1476,6 +1786,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val targetSessionId = sessionId
         val targetProjectId = currentProjectId
         val targetTodos = todoStore.snapshot()
+        val targetAgentMode = _state.value.agentMode
         val writeOrder = sessionWriteOrder.incrementAndGet()
         (getApplication<Application>() as PhoneCodeApplication).turnScope.launch(Dispatchers.IO) {
             persist(
@@ -1484,6 +1795,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 targetSessionId = targetSessionId,
                 targetProjectId = targetProjectId,
                 targetTodos = targetTodos,
+                targetAgentMode = targetAgentMode,
                 writeOrder = writeOrder,
                 expectedGeneration = expectedGeneration,
                 turnOutcome = turnOutcome,
@@ -1504,7 +1816,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    suspend fun submitAiReport(category: String, note: String): AiReportSubmission = withContext(Dispatchers.IO) {
+    fun submitAiReport(category: String, note: String) {
+        if (_state.value.reportSubmitting) return
+        _state.update { it.copy(reportSubmitting = true, reportSubmission = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val submission = performAiReport(category, note)
+            _state.update { it.copy(reportSubmitting = false, reportSubmission = submission) }
+        }
+    }
+
+    fun clearAiReportSubmission() {
+        if (_state.value.reportSubmitting) return
+        _state.update { it.copy(reportSubmission = null) }
+    }
+
+    private fun performAiReport(category: String, note: String): AiReportSubmission {
         val body = aiReportPayload(
             category = category,
             note = note,
@@ -1516,7 +1842,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             .url("https://dttdrv.xyz/api/phonecode/report")
             .post(body)
             .build()
-        runCatching {
+        return runCatching {
             reportHttp.newCall(request).execute().use { response ->
                 when (response.code) {
                     202 -> AiReportSubmission(
@@ -1745,6 +2071,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                 messages = repaired.map { it.toPersisted() },
                                 projectId = safeProjectId,
                                 activeTurn = false,
+                                agentMode = restoredAgentMode(
+                                    restored.agentMode,
+                                    restored.activeTurn,
+                                    runCatching { AgentMode.valueOf(saved.defaultMode) }
+                                        .getOrDefault(AgentMode.BUILD),
+                                ).name,
                             )
                             if (loaded == null) {
                                 sessionStore.create(normalized)
@@ -1783,7 +2115,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                 hiddenModels = restored.hiddenModels,
                                 disabledProviders = restored.disabledProviders,
                                 autoAccept = restored.settings.autoAccept,
-                                agentMode = runCatching { AgentMode.valueOf(restored.settings.defaultMode) }.getOrDefault(AgentMode.BUILD),
+                                agentMode = restoredAgentMode(
+                                    restored.session.agentMode,
+                                    interrupted = false,
+                                    fallback = runCatching {
+                                        AgentMode.valueOf(restored.settings.defaultMode)
+                                    }.getOrDefault(AgentMode.BUILD),
+                                ),
                                 lines = restored.messages.toChatLines(),
                                 currentSessionId = restored.session.id,
                                 currentProjectId = activeProjectId,
@@ -1972,6 +2310,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         val turnSessionId = sessionId
         val turnProjectId = currentProjectId
+        val turnAgentMode = _state.value.agentMode
         val gen = ++generation
         // Pin this turn's workspace so a mid-stream project move/delete can't redirect the agent's
         // file/git tools into a different directory (data-integrity guard).
@@ -1996,6 +2335,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     activeTurn = true,
                     targetSessionId = turnSessionId,
                     targetProjectId = turnProjectId,
+                    targetAgentMode = turnAgentMode,
                     expectedGeneration = gen,
                 )
             }
@@ -2108,6 +2448,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             pendingMessages.clear() // stop means stop: don't let queued messages auto-run after a cancel
             _state.update {
                 it.copy(
+                    lines = it.lines.map { line ->
+                        if (line is ChatLine.ToolActivity && line.status == ToolStatus.AWAITING_APPROVAL) {
+                            line.copy(
+                                status = ToolStatus.STOPPED,
+                                detail = STOPPED_BEFORE_APPROVAL_MESSAGE,
+                            )
+                        } else {
+                            line
+                        }
+                    },
                     isRunning = false,
                     retry = null,
                     pendingPermission = null,
@@ -2132,6 +2482,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val stoppedProjectId = currentProjectId
         val stoppedHistory = history
         val stoppedTodos = todoStore.snapshot()
+        val stoppedAgentMode = _state.value.agentMode
         (getApplication<Application>() as PhoneCodeApplication).turnScope.launch {
             try {
                 if (stoppedHistory.isEmpty()) {
@@ -2142,6 +2493,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         targetSessionId = stoppedSessionId,
                         targetProjectId = stoppedProjectId,
                         targetTodos = stoppedTodos,
+                        targetAgentMode = stoppedAgentMode,
                         writeOrder = stoppedWriteOrder,
                         turnOutcome = TurnOutcome.STOPPED,
                         queuedMessages = stoppedQueued,
@@ -2164,15 +2516,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         turnOutcome: TurnOutcome? = _state.value.turnOutcome,
     ) {
         val streamed = commitStreaming()
+        val stoppedApprovalCallIds = _state.value.lines
+            .filterIsInstance<ChatLine.ToolActivity>()
+            .filter { it.status == ToolStatus.STOPPED && it.detail == STOPPED_BEFORE_APPROVAL_MESSAGE }
+            .mapTo(mutableSetOf()) { it.id }
         val parts = buildList {
             if (streamed.reasoning.isNotBlank()) add(MessagePart.Reasoning(streamed.reasoning))
             if (streamed.text.isNotBlank()) add(MessagePart.Text(streamed.text))
         }
-        history = repairInterruptedHistory(history).let { repaired ->
+        history = repairInterruptedHistory(history, stoppedApprovalCallIds).let { repaired ->
             if (parts.isEmpty()) repaired else repaired + ChatMessage(Role.ASSISTANT, parts)
         }
         if (history.isNotEmpty() && persistChanges) {
-            persist(turnOutcome = turnOutcome)
+            persist(targetAgentMode = _state.value.agentMode, turnOutcome = turnOutcome)
         } else if (persistChanges) {
             sessionStore.setActiveTurn(sessionId, false, sessionWriteOrder.incrementAndGet())
         }
@@ -2202,10 +2558,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     activeTurn = true,
                     targetSessionId = targetSessionId,
                     targetProjectId = targetProjectId,
+                    targetAgentMode = _state.value.agentMode,
                     expectedGeneration = expectedGeneration,
                 )
             }
-            is AgentEvent.ToolStarted -> {
+            is AgentEvent.ToolAwaitingApproval -> {
                 commitStreaming()
                 _state.update {
                     it.copy(
@@ -2213,17 +2570,45 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         lines = it.lines + ChatLine.ToolActivity(
                             event.id,
                             event.name,
-                            ToolStatus.RUNNING,
+                            ToolStatus.AWAITING_APPROVAL,
                             summarizeArgs(event.argsJson),
                             boundedToolInput(event.argsJson),
                         ),
                     )
                 }
             }
+            is AgentEvent.ToolStarted -> {
+                commitStreaming()
+                _state.update { state ->
+                    val index = state.lines.indexOfLast {
+                        it is ChatLine.ToolActivity &&
+                            it.id == event.id &&
+                            it.status == ToolStatus.AWAITING_APPROVAL
+                    }
+                    if (index < 0) {
+                        state.copy(
+                            retry = null,
+                            lines = state.lines + ChatLine.ToolActivity(
+                                event.id,
+                                event.name,
+                                ToolStatus.RUNNING,
+                                summarizeArgs(event.argsJson),
+                                boundedToolInput(event.argsJson),
+                            ),
+                        )
+                    } else {
+                        val updated = state.lines.toMutableList()
+                        updated[index] = (updated[index] as ChatLine.ToolActivity).copy(status = ToolStatus.RUNNING)
+                        state.copy(retry = null, lines = updated)
+                    }
+                }
+            }
             is AgentEvent.ToolFinished -> _state.update { state ->
-                // Update only the most recent RUNNING line with this id (synthetic ids can repeat across turns).
+                // Update only the most recent active line with this id (synthetic ids can repeat across turns).
                 val index = state.lines.indexOfLast {
-                    it is ChatLine.ToolActivity && it.id == event.id && it.status == ToolStatus.RUNNING
+                    it is ChatLine.ToolActivity &&
+                        it.id == event.id &&
+                        (it.status == ToolStatus.RUNNING || it.status == ToolStatus.AWAITING_APPROVAL)
                 }
                 if (index < 0) {
                     state
@@ -2287,6 +2672,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             event.messages,
                             targetSessionId = targetSessionId,
                             targetProjectId = targetProjectId,
+                            targetAgentMode = _state.value.agentMode,
                             expectedGeneration = expectedGeneration,
                             turnOutcome = TurnOutcome.FAILED,
                             queuedMessages = terminalQueued,
@@ -2300,6 +2686,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                 history,
                                 targetSessionId = targetSessionId,
                                 targetProjectId = targetProjectId,
+                                targetAgentMode = _state.value.agentMode,
                                 expectedGeneration = expectedGeneration,
                                 turnOutcome = TurnOutcome.FAILED,
                                 queuedMessages = terminalQueued,
@@ -2327,6 +2714,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         event.messages,
                         targetSessionId = targetSessionId,
                         targetProjectId = targetProjectId,
+                        targetAgentMode = _state.value.agentMode,
                         expectedGeneration = expectedGeneration,
                         queuedMessages = terminalQueued,
                     )
@@ -2343,6 +2731,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         targetSessionId: String = sessionId,
         targetProjectId: String? = currentProjectId,
         targetTodos: List<TodoItem> = todoStore.snapshot(),
+        targetAgentMode: AgentMode,
         expectedGeneration: Int? = null,
         writeOrder: Long = sessionWriteOrder.incrementAndGet(),
         turnOutcome: TurnOutcome? = _state.value.turnOutcome,
@@ -2366,6 +2755,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     todos = targetTodos,
                     turnOutcome = turnOutcome?.name,
                     queuedMessages = queuedMessages,
+                    agentMode = targetAgentMode.name,
                 ),
                 writeOrder,
             )
@@ -2400,8 +2790,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         val index = lines.indexOfLast { it is ChatLine.ToolActivity && it.id == part.callId }
                         if (index >= 0) {
                             lines[index] = (lines[index] as ChatLine.ToolActivity).copy(
-                                status = if (part.isError) ToolStatus.ERROR else ToolStatus.DONE,
-                                detail = part.content,
+                                status = when {
+                                    !part.isError -> ToolStatus.DONE
+                                    part.content == USER_STOPPED_BEFORE_APPROVAL_RESULT -> ToolStatus.STOPPED
+                                    else -> ToolStatus.ERROR
+                                },
+                                detail = if (part.content == USER_STOPPED_BEFORE_APPROVAL_RESULT) {
+                                    STOPPED_BEFORE_APPROVAL_MESSAGE
+                                } else {
+                                    part.content
+                                },
                             )
                         }
                     }
@@ -2579,7 +2977,10 @@ internal fun aiReportPayload(
 internal fun redoCutIndex(history: List<ChatMessage>): Int =
     history.indexOfLast { m -> m.role == Role.USER && m.parts.any { it is MessagePart.Text } }
 
-internal fun repairInterruptedHistory(history: List<ChatMessage>): List<ChatMessage> {
+internal fun repairInterruptedHistory(
+    history: List<ChatMessage>,
+    stoppedApprovalCallIds: Set<String> = emptySet(),
+): List<ChatMessage> {
     val unresolved = linkedMapOf<String, MessagePart.ToolCall>()
     history.forEach { message ->
         message.parts.forEach { part ->
@@ -2596,7 +2997,11 @@ internal fun repairInterruptedHistory(history: List<ChatMessage>): List<ChatMess
         unresolved.values.map {
             MessagePart.ToolResult(
                 callId = it.id,
-                content = "Interrupted before PhoneCode recorded the result. Review workspace changes before retrying.",
+                content = if (it.id in stoppedApprovalCallIds) {
+                    USER_STOPPED_BEFORE_APPROVAL_RESULT
+                } else {
+                    "Interrupted before PhoneCode recorded the result. Review workspace changes before retrying."
+                },
                 isError = true,
             )
         },
@@ -2605,6 +3010,8 @@ internal fun repairInterruptedHistory(history: List<ChatMessage>): List<ChatMess
 
 private const val TURN_INTERRUPTED_MESSAGE =
     "The previous turn stopped unexpectedly. Review any file changes before retrying."
+private const val STOPPED_BEFORE_APPROVAL_MESSAGE = "Stopped before approval."
+private const val USER_STOPPED_BEFORE_APPROVAL_RESULT = "[phonecode:user-stopped-before-approval]"
 
 internal fun formatDuration(millis: Long): String {
     val seconds = (millis.coerceAtLeast(0) + 999) / 1_000

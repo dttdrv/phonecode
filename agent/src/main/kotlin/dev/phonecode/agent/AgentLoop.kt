@@ -265,13 +265,12 @@ class AgentLoop(
         emit(AgentEvent.TurnComplete(messages.toList()))
     }
 
-    /** Emits ToolStarted for the batch, runs it (parallel unless any tool is sequential), then emits ToolFinished in call order. */
+    /** Runs the batch (parallel unless any tool is sequential), then emits ToolFinished in call order. */
     private suspend fun FlowCollector<AgentEvent>.executeBatch(
         calls: List<ToolCallAccumulator>,
         mode: AgentMode,
         registry: ToolRegistry,
     ): List<MessagePart> {
-        calls.forEach { emit(AgentEvent.ToolStarted(it.id, it.name, it.args.toString())) }
         // Serialize whenever a tool can prompt for permission (mutating) or opts into sequential,
         // so permission dialogs never race - even if a tool sets sequential=false while mutating.
         val anySequential = calls.any {
@@ -279,8 +278,23 @@ class AgentLoop(
             tool?.sequential == true || tool?.mutates(parseArgs(it.args.toString())) == true
         }
         val results = if (anySequential) {
-            calls.map { executeOne(it, mode, registry) }
+            calls.map { call ->
+                val argsJson = call.args.toString()
+                val tool = registry.get(call.name)
+                val mutates = tool?.mutates(parseArgs(argsJson)) == true
+                if (mutates && mode != AgentMode.PLAN) {
+                    emit(AgentEvent.ToolAwaitingApproval(call.id, call.name, argsJson))
+                } else {
+                    emit(AgentEvent.ToolStarted(call.id, call.name, argsJson))
+                }
+                executeOne(call, mode, registry) {
+                    if (mutates && mode != AgentMode.PLAN) {
+                        emit(AgentEvent.ToolStarted(call.id, call.name, argsJson))
+                    }
+                }
+            }
         } else {
+            calls.forEach { emit(AgentEvent.ToolStarted(it.id, it.name, it.args.toString())) }
             coroutineScope { calls.map { call -> async { executeOne(call, mode, registry) } }.awaitAll() }
         }
         return calls.mapIndexed { i, call ->
@@ -290,7 +304,12 @@ class AgentLoop(
         }
     }
 
-    private suspend fun executeOne(call: ToolCallAccumulator, mode: AgentMode, registry: ToolRegistry): ToolResult {
+    private suspend fun executeOne(
+        call: ToolCallAccumulator,
+        mode: AgentMode,
+        registry: ToolRegistry,
+        onPermissionGranted: suspend () -> Unit = {},
+    ): ToolResult {
         val tool = registry.get(call.name)
             ?: return ToolResult("unknown tool: ${call.name}", isError = true)
         val args = parseArgs(call.args.toString())
@@ -301,6 +320,7 @@ class AgentLoop(
         if (tool.mutates(args) && !context.requestPermission(tool.name, summarize(call))) {
             return ToolResult("permission denied by user for ${tool.name}", isError = true)
         }
+        onPermissionGranted()
         return try {
             tool.execute(args, context).limitOutput()
         } catch (cancel: CancellationException) {

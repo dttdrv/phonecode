@@ -39,12 +39,18 @@ class QuestionTool : Tool {
             putJsonObject("questions") {
                 put("type", "array")
                 put("description", "The questions to ask the user, in order.")
+                put("maxItems", MAX_QUESTIONS)
                 putJsonObject("items") {
                     put("type", "object")
                     putJsonObject("properties") {
-                        putJsonObject("question") { put("type", "string"); put("description", "The question to ask.") }
+                        putJsonObject("question") {
+                            put("type", "string")
+                            put("maxLength", MAX_QUESTION_CHARS)
+                            put("description", "The question to ask.")
+                        }
                         putJsonObject("header") {
                             put("type", "string")
+                            put("maxLength", MAX_HEADER_CHARS)
                             put("description", "Short label shown beside the question (optional).")
                         }
                         putJsonObject("multiSelect") {
@@ -53,13 +59,19 @@ class QuestionTool : Tool {
                         }
                         putJsonObject("options") {
                             put("type", "array")
+                            put("maxItems", MAX_OPTIONS_PER_QUESTION)
                             put("description", "Suggested answers (optional); the user may also type their own.")
                             putJsonObject("items") {
                                 put("type", "object")
                                 putJsonObject("properties") {
-                                    putJsonObject("label") { put("type", "string"); put("description", "The option text.") }
+                                    putJsonObject("label") {
+                                        put("type", "string")
+                                        put("maxLength", MAX_OPTION_LABEL_CHARS)
+                                        put("description", "The option text.")
+                                    }
                                     putJsonObject("description") {
                                         put("type", "string")
+                                        put("maxLength", MAX_OPTION_DESCRIPTION_CHARS)
                                         put("description", "What choosing this option means (optional).")
                                     }
                                 }
@@ -78,8 +90,11 @@ class QuestionTool : Tool {
     }
 
     override suspend fun execute(args: JsonObject, context: ToolContext): ToolResult {
-        val questions = parseQuestions(args)
-            ?: return ToolResult("question: provide a non-empty 'questions' array", isError = true)
+        val questions = try {
+            parseQuestions(args)
+        } catch (invalid: InvalidQuestionInput) {
+            return ToolResult("question: ${invalid.message}", isError = true)
+        }
         val answers = context.askUser(questions)
         val body = answers.joinToString("\n") { answer ->
             val value = answer.answers.filter { it.isNotBlank() }.joinToString(", ").ifEmpty { "Unanswered" }
@@ -88,21 +103,67 @@ class QuestionTool : Tool {
         return ToolResult(body.ifEmpty { "Unanswered" })
     }
 
-    private fun parseQuestions(args: JsonObject): List<UserQuestion>? {
-        val array = args["questions"] as? JsonArray ?: return null
-        val parsed = array.mapNotNull { element ->
-            val obj = element as? JsonObject ?: return@mapNotNull null
-            val question = (obj["question"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return@mapNotNull null
+    private fun parseQuestions(args: JsonObject): List<UserQuestion> {
+        val array = args["questions"] as? JsonArray
+            ?: throw InvalidQuestionInput("provide a non-empty 'questions' array")
+        if (array.isEmpty()) throw InvalidQuestionInput("provide a non-empty 'questions' array")
+        if (array.size > MAX_QUESTIONS) {
+            throw InvalidQuestionInput("provide at most $MAX_QUESTIONS questions")
+        }
+        return array.mapIndexed { questionIndex, element ->
+            val number = questionIndex + 1
+            val obj = element as? JsonObject
+                ?: throw InvalidQuestionInput("question $number must be an object")
+            val question = (obj["question"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?: throw InvalidQuestionInput("question $number text is required")
+            if (question.length > MAX_QUESTION_CHARS) {
+                throw InvalidQuestionInput(
+                    "question text exceeds $MAX_QUESTION_CHARS characters (question $number)",
+                )
+            }
             val header = (obj["header"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
+            if (header.length > MAX_HEADER_CHARS) {
+                throw InvalidQuestionInput("question $number header exceeds $MAX_HEADER_CHARS characters")
+            }
             val multiSelect = (obj["multiSelect"] as? JsonPrimitive)?.booleanOrNull ?: false
-            val options = (obj["options"] as? JsonArray).orEmpty().mapNotNull { opt ->
-                val optObj = opt as? JsonObject ?: return@mapNotNull null
-                val label = (optObj["label"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return@mapNotNull null
+            val optionArray = (obj["options"] as? JsonArray).orEmpty()
+            if (optionArray.size > MAX_OPTIONS_PER_QUESTION) {
+                throw InvalidQuestionInput(
+                    "question $number must provide at most $MAX_OPTIONS_PER_QUESTION options",
+                )
+            }
+            val options = optionArray.mapIndexed { optionIndex, opt ->
+                val optionNumber = optionIndex + 1
+                val optObj = opt as? JsonObject
+                    ?: throw InvalidQuestionInput("question $number option $optionNumber must be an object")
+                val label = (optObj["label"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                    ?: throw InvalidQuestionInput("question $number option $optionNumber label is required")
+                if (label.length > MAX_OPTION_LABEL_CHARS) {
+                    throw InvalidQuestionInput(
+                        "question $number option $optionNumber label exceeds $MAX_OPTION_LABEL_CHARS characters",
+                    )
+                }
                 val desc = (optObj["description"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
+                if (desc.length > MAX_OPTION_DESCRIPTION_CHARS) {
+                    throw InvalidQuestionInput(
+                        "question $number option $optionNumber description exceeds " +
+                            "$MAX_OPTION_DESCRIPTION_CHARS characters",
+                    )
+                }
                 UserOption(label, desc)
             }
             UserQuestion(question, header, multiSelect, options)
         }
-        return parsed.ifEmpty { null }
+    }
+
+    private class InvalidQuestionInput(message: String) : IllegalArgumentException(message)
+
+    private companion object {
+        const val MAX_QUESTIONS = 8
+        const val MAX_OPTIONS_PER_QUESTION = 20
+        const val MAX_QUESTION_CHARS = 1_000
+        const val MAX_HEADER_CHARS = 120
+        const val MAX_OPTION_LABEL_CHARS = 240
+        const val MAX_OPTION_DESCRIPTION_CHARS = 1_000
     }
 }

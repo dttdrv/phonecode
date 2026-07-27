@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -109,6 +110,8 @@ fun ModelSetupScreen(
                     providers = providers,
                     codexOAuthAvailable = state.codexOAuthAvailable,
                     codexConnected = state.codexConnected,
+                    errorMessage = state.error,
+                    onDismissError = vm::clearError,
                     onBack = navigateBack,
                     onSelectProvider = { selectedProviderId = it },
                     onConfigured = onConfigured,
@@ -117,6 +120,8 @@ fun ModelSetupScreen(
                 ApiKeySetup(
                     vm = vm,
                     provider = provider,
+                    globalError = state.error,
+                    onDismissError = vm::clearError,
                     onBack = navigateBack,
                     onConfigured = onConfigured,
                 )
@@ -131,6 +136,8 @@ private fun ProviderChoice(
     providers: List<ProviderPreset>,
     codexOAuthAvailable: Boolean,
     codexConnected: Boolean,
+    errorMessage: String?,
+    onDismissError: () -> Unit,
     onBack: () -> Unit,
     onSelectProvider: (String) -> Unit,
     onConfigured: () -> Unit,
@@ -169,6 +176,10 @@ private fun ProviderChoice(
             style = MaterialTheme.typography.bodyLarge,
             color = colors.onSurfaceVariant,
         )
+        errorMessage?.let {
+            Spacer(Modifier.height(Spacing.m))
+            SetupError(it, onDismissError)
+        }
 
         if (codexOAuthAvailable) {
             PcSectionLabel("ChatGPT")
@@ -188,6 +199,8 @@ private fun ProviderChoice(
                     vm.startCodexSignIn()?.let { url ->
                         runCatching {
                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        }.onFailure {
+                            vm.surfaceError("Could not open the sign-in page.")
                         }
                     }
                 }
@@ -258,6 +271,8 @@ private fun ProviderGroup(
 private fun ApiKeySetup(
     vm: ChatViewModel,
     provider: ProviderPreset,
+    globalError: String?,
+    onDismissError: () -> Unit,
     onBack: () -> Unit,
     onConfigured: () -> Unit,
 ) {
@@ -285,7 +300,9 @@ private fun ApiKeySetup(
                 if (configured) {
                     onConfigured()
                 } else {
-                    error = "No available model was found for this provider."
+                    val requestedKeySaved = key.isBlank() ||
+                        vm.keyFor(provider.id) == key.trim()
+                    error = providerSetupFailureMessage(requestedKeySaved)
                 }
             }
         },
@@ -306,6 +323,10 @@ private fun ApiKeySetup(
             style = MaterialTheme.typography.bodyLarge,
             color = colors.onSurfaceVariant,
         )
+        globalError?.let {
+            Spacer(Modifier.height(Spacing.m))
+            SetupError(it, onDismissError)
+        }
         Spacer(Modifier.height(Spacing.l))
         PcField(
             value = key,
@@ -337,6 +358,38 @@ private fun ApiKeySetup(
                     liveRegion = LiveRegionMode.Polite
                 },
             )
+        }
+    }
+}
+
+internal fun providerSetupFailureMessage(keySaved: Boolean): String =
+    if (keySaved) {
+        "API key saved, but PhoneCode could not activate an available model for this provider."
+    } else {
+        "PhoneCode could not save this API key in secure storage."
+    }
+
+@Composable
+private fun SetupError(message: String, onDismiss: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth()
+            .background(colors.errorContainer, MaterialTheme.shapes.medium)
+            .semantics {
+                error(message)
+                liveRegion = LiveRegionMode.Polite
+            }
+            .padding(start = Spacing.m, end = Spacing.xs, top = Spacing.xs, bottom = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onErrorContainer,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text("Dismiss", color = colors.onErrorContainer)
         }
     }
 }

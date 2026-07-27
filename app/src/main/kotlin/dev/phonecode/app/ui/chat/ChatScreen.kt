@@ -146,9 +146,11 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
@@ -156,6 +158,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
@@ -266,7 +269,7 @@ fun ChatScreen(
     var modelOpen by remember { mutableStateOf(false) }
     var pendingProviderSetup by remember { mutableStateOf<String?>(null) }
     var contextOpen by remember { mutableStateOf(false) }
-    var reportOpen by remember { mutableStateOf(false) }
+    var reportOpen by rememberSaveable { mutableStateOf(false) }
     var bottomOverlayHeight by remember { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
     val listCanScroll = listState.canScrollBackward || listState.canScrollForward
@@ -501,7 +504,8 @@ fun ChatScreen(
             Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusInset + topChromeHeight)
                 .shadow(if (!empty && listState.canScrollBackward) 2.dp else 0.dp, RectangleShape, clip = false)
                 .then(if (blurChrome) Modifier.phoneHazeEffect(hazeState, hazeStyle) else Modifier)
-                .background(if (blurChrome) colors.background.copy(alpha = 0.16f) else colors.background),
+                // Keep text legible even when platform blur is unavailable or still warming up.
+                .background(colors.background),
         )
         Box(Modifier.align(Alignment.TopStart).padding(top = statusInset + 6.dp, start = 12.dp).clip(ShapePill).background(colors.surfaceContainerHigh)) {
             // Opening the drawer clears any open overlay so Back/scrim semantics stay unambiguous.
@@ -579,8 +583,8 @@ fun ChatScreen(
         // Same gating as the top: only while content can still scroll under the composer.
         androidx.compose.animation.AnimatedVisibility(
             visible = !empty && listState.canScrollForward,
-            enter = fadeIn(tween(200)),
-            exit = fadeOut(tween(200)),
+            enter = fadeIn(tween(180, easing = PhoneEasings.easeOut)),
+            exit = fadeOut(tween(120, easing = PhoneEasings.easeOut)),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             Box(
@@ -592,6 +596,9 @@ fun ChatScreen(
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .onSizeChanged { bottomOverlayHeight = it.height }
+                // The blur treatment is enhancement, not the only readability layer. This also
+                // prevents recovery/queue controls from visually colliding with transcript text.
+                .background(colors.background)
                 // Union of ime+navbar: above the keyboard when typing, above the navbar otherwise.
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
         ) {
@@ -726,7 +733,16 @@ fun ChatScreen(
             QuestionDialog(r, onSubmit = { vm.resolveQuestion(it) }, onDismiss = { vm.resolveQuestion(emptyList()) })
         }
         if (reportOpen) {
-            AiReportFlow(onDismiss = { reportOpen = false }, onSubmit = vm::submitAiReport)
+            AiReportFlow(
+                submitting = state.reportSubmitting,
+                submission = state.reportSubmission,
+                onDismiss = {
+                    vm.clearAiReportSubmission()
+                    reportOpen = false
+                },
+                onClearResult = vm::clearAiReportSubmission,
+                onSubmit = vm::submitAiReport,
+            )
         }
     }
     }
@@ -1078,7 +1094,7 @@ private fun AssistantTurn(
                     }
                     ActionIcon(Icons.Filled.Refresh, "Redo", onRedo)
                 }
-                if (showReport) ActionIcon(Icons.Outlined.Flag, "Report AI response", onReport)
+                if (showReport) ActionIcon(Icons.Outlined.Flag, "Send safety feedback", onReport)
                 if (showActions && completedAt != null) {
                     Text(
                         formatCompletionDate(completedAt),
@@ -1107,17 +1123,18 @@ private val REPORT_CATEGORIES = listOf(
 
 @Composable
 private fun AiReportFlow(
+    submitting: Boolean,
+    submission: AiReportSubmission?,
     onDismiss: () -> Unit,
-    onSubmit: suspend (String, String) -> AiReportSubmission,
+    onClearResult: () -> Unit,
+    onSubmit: (String, String) -> Unit,
 ) {
-    var category by remember { mutableStateOf<String?>(null) }
-    var note by remember { mutableStateOf("") }
-    var submitting by remember { mutableStateOf(false) }
-    var sent by remember { mutableStateOf(false) }
-    var reference by remember { mutableStateOf<String?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var note by rememberSaveable { mutableStateOf("") }
+    val sent = submission?.accepted == true
+    val reference = submission?.reference
+    val error = submission?.error
     val reportSuccessFocus = remember { FocusRequester() }
-    val scope = rememberCoroutineScope()
     val dismissReport = { if (!submitting) onDismiss() }
     val backMotion = rememberPredictiveBackMotion(onBack = dismissReport)
     Dialog(
@@ -1138,7 +1155,7 @@ private fun AiReportFlow(
                     Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(36.dp))
                     Spacer(Modifier.height(14.dp))
                     Text(
-                        "Report sent",
+                        "Feedback sent",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.focusRequester(reportSuccessFocus).focusable().semantics {
@@ -1148,7 +1165,7 @@ private fun AiReportFlow(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Thank you. Your report will be used to improve PhoneCode's safeguards.",
+                        "Thank you. Your feedback will be used to improve PhoneCode's safeguards.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.secondary,
                     )
@@ -1157,7 +1174,12 @@ private fun AiReportFlow(
                         Text("Reference: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
                     }
                     Spacer(Modifier.height(20.dp))
-                    TextButton(onClick = onDismiss) { Text("Done") }
+                    TextButton(
+                        onClick = {
+                            onClearResult()
+                            onDismiss()
+                        },
+                    ) { Text("Done") }
                 }
             } else {
                 ReportReview(
@@ -1165,23 +1187,19 @@ private fun AiReportFlow(
                     note = note,
                     submitting = submitting,
                     error = error,
-                    onCategory = { category = it; error = null },
-                    onNote = { note = it.take(1000); error = null },
+                    onCategory = {
+                        category = it
+                        onClearResult()
+                    },
+                    onNote = {
+                        note = it.take(1000)
+                        onClearResult()
+                    },
                     onDismiss = dismissReport,
                     onSubmit = {
                         val chosen = category ?: return@ReportReview
-                        submitting = true
-                        error = null
-                        scope.launch {
-                            val result = onSubmit(chosen, note)
-                            submitting = false
-                            if (result.accepted) {
-                                reference = result.reference
-                                sent = true
-                            } else {
-                                error = result.error
-                            }
-                        }
+                        onClearResult()
+                        onSubmit(chosen, note)
                     },
                 )
             }
@@ -1210,7 +1228,7 @@ private fun ReportReview(
         ) {
             PcIconButton(Icons.Filled.Close, "Cancel report", enabled = !submitting, onClick = onDismiss)
             Text(
-                "Report AI response",
+                "Send safety feedback",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.onBackground,
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
@@ -1220,7 +1238,7 @@ private fun ReportReview(
                     if (submitting) "Sending…" else "Send",
                     modifier = if (submitting) {
                         Modifier.semantics {
-                            contentDescription = "Report submission in progress"
+                            contentDescription = "Feedback submission in progress"
                             liveRegion = LiveRegionMode.Polite
                         }
                     } else {
@@ -1494,9 +1512,11 @@ private fun ToolActivityView(line: ChatLine.ToolActivity) {
     val iconPulse = if (running) rememberNeuralBreath(1800) else null
     val interaction = remember { MutableInteractionSource() }
     val statusLabel = when (line.status) {
+        ToolStatus.AWAITING_APPROVAL -> "Awaiting approval"
         ToolStatus.RUNNING -> "Running"
         ToolStatus.DONE -> "Done"
         ToolStatus.ERROR -> "Failed"
+        ToolStatus.STOPPED -> "Stopped"
     }
     Column(
         Modifier.fillMaxWidth().pressFeedback(interaction, pressedScale = 0.99f).clip(MaterialTheme.shapes.medium)
@@ -1594,6 +1614,52 @@ private fun ToolActivityView(line: ChatLine.ToolActivity) {
 
 private fun toolAction(name: String, status: ToolStatus): String {
     val active = status == ToolStatus.RUNNING
+    val awaitingApproval = status == ToolStatus.AWAITING_APPROVAL
+    if (status == ToolStatus.ERROR) {
+        return when {
+            name == "read" -> "Read failed"
+            name == "write" -> "Write failed"
+            name == "edit" || name == "apply_patch" -> "Edit failed"
+            name == "ls" || name == "glob" -> "File browsing failed"
+            name == "grep" -> "Code search failed"
+            name == "bash" -> "Command failed"
+            name == "websearch" -> "Web search failed"
+            name == "webfetch" -> "Webpage failed to open"
+            name.startsWith("git_") -> "Git operation failed"
+            name == "question" -> "Question failed"
+            name == "task" -> "Delegated task failed"
+            name == "skill" -> "Skill failed to load"
+            name.startsWith("todo") -> "Task update failed"
+            else -> "${name.replace('_', ' ').replaceFirstChar { it.uppercase() }} failed"
+        }
+    }
+    if (status == ToolStatus.STOPPED) {
+        return when {
+            name == "read" -> "Read stopped"
+            name == "write" -> "Write stopped"
+            name == "edit" || name == "apply_patch" -> "Edit stopped"
+            name == "ls" || name == "glob" -> "File browsing stopped"
+            name == "grep" -> "Code search stopped"
+            name == "bash" -> "Command stopped"
+            name == "websearch" -> "Web search stopped"
+            name == "webfetch" -> "Webpage opening stopped"
+            name.startsWith("git_") -> "Git operation stopped"
+            name == "question" -> "Question stopped"
+            name == "task" -> "Delegated task stopped"
+            name == "skill" -> "Skill loading stopped"
+            name.startsWith("todo") -> "Task update stopped"
+            else -> "${name.replace('_', ' ').replaceFirstChar { it.uppercase() }} stopped"
+        }
+    }
+    if (awaitingApproval) {
+        return when {
+            name == "write" -> "Waiting to write file"
+            name == "edit" || name == "apply_patch" -> "Waiting to edit code"
+            name == "bash" -> "Waiting to run command"
+            name.startsWith("git_") -> "Waiting to run Git"
+            else -> "Waiting to run ${name.replace('_', ' ')}"
+        }
+    }
     return when {
         name == "read" -> if (active) "Reading file" else "Read file"
         name == "write" -> if (active) "Writing file" else "Wrote file"
@@ -2234,7 +2300,11 @@ private fun PopoverCard(modifier: Modifier = Modifier, content: @Composable Colu
 private typealias ColumnScopeAlias = androidx.compose.foundation.layout.ColumnScope
 
 internal fun questionAnswered(selected: Collection<String>, custom: String): Boolean =
-    selected.isNotEmpty() || custom.isNotBlank()
+    custom.length <= QUESTION_CUSTOM_ANSWER_MAX_CHARS &&
+        (selected.isNotEmpty() xor custom.isNotBlank())
+
+private const val QUESTION_CUSTOM_ANSWER_MAX_CHARS = 4_000
+private const val CUSTOM_ANSWER_PREFIX = "Custom: "
 
 @Composable
 private fun ContextPopover(state: ChatUiState) {
@@ -2349,14 +2419,24 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
     }
     PcDialog(
         onDismiss = { resolve(onDeny) },
-        modifier = Modifier.fillMaxHeight(0.9f),
+        modifier = Modifier.fillMaxHeight(0.9f).semantics { isTraversalGroup = true },
     ) {
-        Column(Modifier.weight(1f).contentVerticalScroll(rememberScrollState())) {
+        Column(
+            Modifier.weight(1f)
+                .contentVerticalScroll(rememberScrollState())
+                .semantics {
+                    isTraversalGroup = true
+                    traversalIndex = -1f
+                },
+        ) {
             Text(
                 "Approve agent action?",
                 style = MaterialTheme.typography.titleLarge,
                 color = colors.onBackground,
-                modifier = Modifier.semantics { heading() },
+                modifier = Modifier.testTag("approval-intro").semantics {
+                    heading()
+                    traversalIndex = 0f
+                },
             )
             Text(
                 "Review this action before it runs.",
@@ -2377,83 +2457,27 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
                 style = MaterialTheme.typography.labelMedium.copy(fontFamily = PcMono),
                 color = colors.onSurfaceVariant,
                 modifier = Modifier.padding(top = 3.dp),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(Spacing.s))
-            Text("DETAILS", style = MaterialTheme.typography.labelSmall, color = colors.tertiary)
-            if (detailsPageCount > 1) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "Section ${detailsPage + 1} of $detailsPageCount",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.onSurfaceVariant,
-                    )
-                    TextButton(
-                        onClick = {
-                            clipboard.setText(
-                                AnnotatedString(
-                                    if (fullDetails.length <= APPROVAL_CLIPBOARD_CHARS) {
-                                        fullDetails
-                                    } else {
-                                        detailsSlice
-                                    },
-                                ),
-                            )
-                        },
-                    ) {
-                        Text(
-                            if (fullDetails.length <= APPROVAL_CLIPBOARD_CHARS) {
-                                "Copy full details"
-                            } else {
-                                "Copy this section"
-                            },
-                        )
-                    }
-                }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    TextButton(
-                        enabled = detailsPage > 0,
-                        onClick = { detailsPage-- },
-                    ) {
-                        Text("Previous section")
-                    }
-                    TextButton(
-                        enabled = detailsPage < detailsPageCount - 1,
-                        onClick = { detailsPage++ },
-                    ) {
-                        Text("Next section")
-                    }
-                }
-            }
             Box(
-                Modifier.fillMaxWidth().padding(top = 5.dp)
-                    .heightIn(min = Spacing.touchTarget)
-                    .clip(MaterialTheme.shapes.medium)
-                    .background(colors.surface)
-                    .padding(Spacing.s),
-            ) {
-                SelectionContainer {
-                    Text(
-                        visibleDetails,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = PcMono),
-                        color = colors.onBackground,
-                    )
-                }
-            }
-            Box(
-                Modifier.fillMaxWidth().padding(top = Spacing.s)
+                Modifier.fillMaxWidth()
+                    .testTag("approval-risk")
+                    .semantics {
+                        isTraversalGroup = true
+                        traversalIndex = 1f
+                    }
                     .clip(MaterialTheme.shapes.medium)
                     .background(colors.surface)
                     .padding(Spacing.s),
             ) {
                 Column {
-                    Text(presentation.risk, style = MaterialTheme.typography.labelLarge, color = colors.onBackground)
+                    Text(
+                        presentation.risk,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.onBackground,
+                    )
                     Text(
                         presentation.guidance,
                         style = MaterialTheme.typography.bodySmall,
@@ -2462,9 +2486,98 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
                     )
                 }
             }
+            Spacer(Modifier.height(Spacing.s))
+            Column(
+                Modifier.fillMaxWidth()
+                    .testTag("approval-details")
+                    .semantics {
+                        isTraversalGroup = true
+                        traversalIndex = 2f
+                    },
+            ) {
+                Text(
+                    "DETAILS",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.tertiary,
+                )
+                if (detailsPageCount > 1) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Section ${detailsPage + 1} of $detailsPageCount",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.onSurfaceVariant,
+                        )
+                        TextButton(
+                            onClick = {
+                                clipboard.setText(
+                                    AnnotatedString(
+                                        if (fullDetails.length <= APPROVAL_CLIPBOARD_CHARS) {
+                                            fullDetails
+                                        } else {
+                                            detailsSlice
+                                        },
+                                    ),
+                                )
+                            },
+                        ) {
+                            Text(
+                                if (fullDetails.length <= APPROVAL_CLIPBOARD_CHARS) {
+                                    "Copy full details"
+                                } else {
+                                    "Copy this section"
+                                },
+                            )
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        TextButton(
+                            enabled = detailsPage > 0,
+                            onClick = { detailsPage-- },
+                        ) {
+                            Text("Previous section")
+                        }
+                        TextButton(
+                            enabled = detailsPage < detailsPageCount - 1,
+                            onClick = { detailsPage++ },
+                        ) {
+                            Text("Next section")
+                        }
+                    }
+                }
+                Box(
+                    Modifier.fillMaxWidth().padding(top = 5.dp)
+                        .heightIn(min = Spacing.touchTarget)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(colors.surface)
+                        .padding(Spacing.s),
+                ) {
+                    SelectionContainer {
+                        Text(
+                            visibleDetails,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = PcMono),
+                            color = colors.onBackground,
+                        )
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(Spacing.s))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        Row(
+            Modifier.fillMaxWidth()
+                .testTag("approval-actions")
+                .semantics {
+                    isTraversalGroup = true
+                    traversalIndex = 3f
+                },
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        ) {
             Box(Modifier.weight(1f)) {
                 PcButton("Deny", filled = false, enabled = !submitted) { resolve(onDeny) }
             }
@@ -2583,7 +2696,7 @@ private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>
                         fadeOut(tween(120, easing = PhoneEasings.easeOut)))
             },
             label = "questionPage",
-            modifier = Modifier.weight(1f, fill = false),
+            modifier = Modifier.weight(1f),
         ) { index ->
             val item = request.questions[index]
             Column(
@@ -2609,6 +2722,7 @@ private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>
                             }
                             .clickable {
                                 val chosen = selections[index]
+                                customAnswers[index].value = ""
                                 if (item.multiSelect) {
                                     if (selected) chosen.remove(option.label) else chosen.add(option.label)
                                 } else {
@@ -2628,7 +2742,15 @@ private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>
                         if (selected) Icon(Icons.Filled.Check, null, tint = colors.primary, modifier = Modifier.size(18.dp))
                     }
                 }
-                dev.phonecode.app.ui.components.PcField(customAnswers[index].value, { customAnswers[index].value = it }, "Something else")
+                dev.phonecode.app.ui.components.PcField(
+                    customAnswers[index].value,
+                    {
+                        val bounded = it.take(QUESTION_CUSTOM_ANSWER_MAX_CHARS)
+                        customAnswers[index].value = bounded
+                        if (bounded.isNotBlank()) selections[index].clear()
+                    },
+                    "Something else",
+                )
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -2644,7 +2766,7 @@ private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>
                     onSubmit(request.questions.mapIndexed { qi, question ->
                     val chosen = selections[qi].toMutableList()
                     val custom = customAnswers[qi].value.trim()
-                    if (custom.isNotEmpty()) chosen.add(custom)
+                    if (custom.isNotEmpty()) chosen.add(CUSTOM_ANSWER_PREFIX + custom)
                     UserAnswer(question.question, chosen)
                 })
                 }

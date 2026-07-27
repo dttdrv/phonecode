@@ -38,7 +38,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -60,6 +63,7 @@ fun OnboardingScreen(
     modelReady: Boolean = false,
     githubReady: Boolean = false,
     projectReady: Boolean = false,
+    errorMessage: String? = null,
     onDone: () -> Unit,
     onSkip: () -> Unit = onDone,
 ) {
@@ -91,6 +95,7 @@ fun OnboardingScreen(
                     modelReady = modelReady,
                     githubReady = githubReady,
                     projectReady = projectReady,
+                    errorMessage = errorMessage,
                     onDone = onDone,
                     onSkip = onSkip,
                 )
@@ -148,7 +153,7 @@ private fun Welcome(onNext: () -> Unit) {
             PcGroup {
                 FeatureRow(Icons.Outlined.Folder, "Private project workspaces", "Keep each project and its chats together")
                 FeatureRow(Icons.Outlined.AccountTree, "Local tools and Git", "Build, test, and manage source control on device")
-                FeatureRow(Icons.Outlined.Cloud, "Your choice of model", "Sign in or use your own provider keys")
+                FeatureRow(Icons.Outlined.Cloud, "Your choice of model", "Sign in or add provider access")
             }
         }
         PcButton(
@@ -169,6 +174,7 @@ private fun Connect(
     modelReady: Boolean,
     githubReady: Boolean,
     projectReady: Boolean,
+    errorMessage: String?,
     onDone: () -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -212,7 +218,7 @@ private fun Connect(
                 OptionRow(
                     icon = Icons.Outlined.Cloud,
                     title = "Connect a model",
-                    sub = if (modelReady) "Model connected · ready to use" else "Required for agent work",
+                    sub = if (modelReady) "Model configured on this device" else "Required for agent work",
                     complete = modelReady,
                     onClick = onConnectModels,
                 )
@@ -231,6 +237,19 @@ private fun Connect(
                     onClick = onConnectGitHub,
                 )
             }
+        }
+        errorMessage?.let { message ->
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.error,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)
+                    .semantics {
+                        error(message)
+                        liveRegion = LiveRegionMode.Polite
+                    },
+            )
         }
         PcButton(
             text = "Start building",

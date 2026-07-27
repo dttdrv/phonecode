@@ -12,10 +12,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.hasScrollAction
-import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.isHeading
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.phonecode.app.MainActivity
@@ -168,18 +166,34 @@ class ScreenshotTest {
         }
     }
 
+    private fun settleAnimation(durationMillis: Long = 500L) {
+        compose.mainClock.advanceTimeBy(durationMillis)
+        compose.waitForIdle()
+    }
+
     private fun shoot(name: String) {
+        settleAnimation()
         compose.onRoot().captureRoboImage("screenshots/$name.png")
     }
 
-    private fun shootScreen(name: String) {
-        compose.waitForIdle()
+    private fun shootPage(name: String, title: String) {
+        settleAnimation()
+        compose.onAllNodes(hasText(title) and isHeading()).onLast().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").assertIsDisplayed()
+        compose.onRoot().captureRoboImage("screenshots/$name.png")
+    }
+
+    private fun shootScreen(name: String, visibleText: String) {
+        settleAnimation()
+        compose.onAllNodesWithText(visibleText).onLast().assertIsDisplayed()
         captureScreenRoboImage("screenshots/$name.png")
     }
 
     /** Dialog windows can keep Espresso's global-idle probe busy even after Compose has settled. */
     private fun shootDialog(name: String) {
         compose.mainClock.advanceTimeBy(500)
+        // Each caller establishes the exact dialog state before capture. A semantics query here
+        // re-enters Espresso's global-idle probe and hangs on a separate dialog window.
         captureScreenRoboImage("screenshots/$name.png")
     }
 
@@ -189,7 +203,7 @@ class ScreenshotTest {
         shoot("01-chat-conversation")
 
         compose.onNodeWithContentDescription("Switch model").performClick()
-        shootScreen("03-model-picker")
+        shootScreen("03-model-picker", "Model & reasoning")
         compose.onAllNodesWithText("Done").onFirst().performClick()
         compose.waitForIdle()
 
@@ -205,12 +219,12 @@ class ScreenshotTest {
         shoot("07-drawer")
 
         compose.onNodeWithContentDescription("Settings").performClick()
-        shoot("08-settings-root")
+        shootPage("08-settings-root", "Settings")
         compose.onNodeWithText("Providers").performClick()
-        shoot("09-settings-providers")
+        shootPage("09-settings-providers", "Providers")
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Git").performClick()
-        shoot("10-settings-git")
+        shootPage("10-settings-git", "Git")
     }
 
     @Test
@@ -228,7 +242,7 @@ class ScreenshotTest {
         awaitConversation()
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
-        shoot("13-settings-root-dark")
+        shootPage("13-settings-root-dark", "Settings")
     }
 
     @Test
@@ -246,7 +260,7 @@ class ScreenshotTest {
                 summary = "Run ./gradlew assembleRelease in the current project",
             ),
         )
-        shootScreen("14-approval-command")
+        shootDialog("14-approval-command")
         state.value = state.value.copy(pendingPermission = null)
 
         compose.onNodeWithContentDescription("Menu").performClick()
@@ -259,7 +273,7 @@ class ScreenshotTest {
             "Export & import" to "19-settings-export-import",
         ).forEach { (page, image) ->
             compose.onNodeWithText(page).performClick()
-            shoot(image)
+            shootPage(image, page)
             compose.onNodeWithContentDescription("Back").performClick()
         }
     }
@@ -272,31 +286,31 @@ class ScreenshotTest {
 
         compose.onNodeWithText("Files & permissions").performClick()
         compose.onNodeWithText("Allow changes automatically").performClick()
-        shootScreen("20-approval-policy-confirmation")
+        shootDialog("20-approval-policy-confirmation")
         compose.onNodeWithText("Cancel").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("Providers").performClick()
         compose.onNodeWithText("Anthropic").performClick()
-        shootScreen("21-provider-key-explicit-save")
+        shootPage("21-provider-key-explicit-save", "Anthropic")
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("Agent tools").performClick()
         compose.onNodeWithContentDescription("Search tools").performTextInput("missing-production-tool")
-        shootScreen("22-tools-no-results")
+        shootPage("22-tools-no-results", "Agent tools")
         compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("MCP servers").performClick()
         compose.onNodeWithText("Add server").performClick()
         compose.onNodeWithText("Save").performClick()
-        shootScreen("23-mcp-validation")
+        shootPage("23-mcp-validation", "Add MCP server")
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("Export & import").performClick()
         compose.onNodeWithText("Import from a file").performClick()
-        shootScreen("24-import-confirmation")
+        shootDialog("24-import-confirmation")
     }
 
     @Test
@@ -327,9 +341,9 @@ class ScreenshotTest {
 
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Chat options").performClick()
-        shootScreen("26-chat-management-menu")
+        shootScreen("26-chat-management-menu", "Delete")
         compose.onNodeWithText("Delete").performClick()
-        shootScreen("27-delete-chat-confirmation")
+        shootDialog("27-delete-chat-confirmation")
     }
 
     @Test
@@ -439,16 +453,16 @@ class ScreenshotTest {
             compose.onNodeWithText("Off").assertIsDisplayed()
             compose.mainClock.advanceTimeBy(500)
             compose.waitForIdle()
-            shoot("31-mcp-server-states")
+            shootPage("31-mcp-server-states", "MCP servers")
 
             compose.onNodeWithText("Workspace Index").performClick()
             compose.onNodeWithText("Connected to Workspace Index").assertIsDisplayed()
             compose.mainClock.advanceTimeBy(500)
             compose.waitForIdle()
-            shootScreen("32-mcp-connected-editor")
+            shootPage("32-mcp-connected-editor", "Workspace Index")
             compose.onNodeWithText("Trace dependencies between project modules.").performScrollTo().assertIsDisplayed()
             compose.waitForIdle()
-            shoot("33-mcp-connected-tools")
+            shootPage("33-mcp-connected-tools", "Workspace Index")
 
             compose.onNodeWithContentDescription("Back").performClick()
             compose.mainClock.advanceTimeBy(300)
@@ -462,14 +476,14 @@ class ScreenshotTest {
             compose.onNodeWithText("code-review").assertIsDisplayed()
             compose.mainClock.advanceTimeBy(500)
             compose.waitForIdle()
-            shootScreen("34-skills-mixed-states")
+            shootPage("34-skills-mixed-states", "Skills")
 
             compose.onNodeWithText("release-pilot").performClick()
             compose.onNodeWithText("Runs a careful release-readiness pass before publishing.").assertIsDisplayed()
             compose.onNodeWithText("Edit skill").assertIsDisplayed()
             compose.mainClock.advanceTimeBy(500)
             compose.waitForIdle()
-            shootScreen("35-skill-active-detail")
+            shootPage("35-skill-active-detail", "release-pilot")
         } finally {
             state.value = original
         }
@@ -508,7 +522,7 @@ class ScreenshotTest {
         awaitConversation()
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
-        shoot("29-settings-expanded")
+        shootPage("29-settings-expanded", "Settings")
     }
 
     @Test
@@ -566,15 +580,15 @@ class ScreenshotTest {
                 ),
             )
             compose.waitForIdle()
-            shootScreen("38-chat-running-queue")
+            shootScreen("38-chat-running-queue", "Dark mode for settings")
 
             state.value = state.value.copy(
                 isRunning = false,
                 error = "The connection ended before the turn completed.",
                 turnOutcome = TurnOutcome.FAILED,
             )
-            compose.waitForIdle()
-            shootScreen("39-chat-failed-recovery")
+            check(state.value.error == "The connection ended before the turn completed.")
+            shoot("39-chat-failed-recovery")
         } finally {
             state.value = original
         }
@@ -584,17 +598,6 @@ class ScreenshotTest {
     @Config(qualifiers = "w360dp-h640dp-xxxhdpi")
     fun playListingPhoneScreenshots() {
         awaitConversation()
-        compose.onNode(
-            hasScrollAction() and hasAnyDescendant(
-                hasText("Does it follow the system setting by default?"),
-            ),
-        ).performScrollToIndex(0)
-        compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(1_000)
-        compose.onRoot().captureRoboImage(
-            "../play/0.5.0/graphics/phone/01-agent-conversation.png",
-        )
-
         val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
         val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
             isAccessible = true
@@ -602,21 +605,42 @@ class ScreenshotTest {
         @Suppress("UNCHECKED_CAST")
         val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
         state.value = state.value.copy(
+            lines = listOf(
+                ChatLine.User("Add dark mode to Settings and keep the system default."),
+                ChatLine.Assistant(
+                    "Done. Settings now supports System, Light, and Dark. System follows the " +
+                        "phone theme automatically, and your choice is preserved between launches.",
+                ),
+            ),
+        )
+        settleAnimation(1_000)
+        compose.onNodeWithText("Add dark mode to Settings and keep the system default.").assertIsDisplayed()
+        compose.onRoot().captureRoboImage(
+            "../play/0.5.0/graphics/phone/01-agent-conversation.png",
+        )
+
+        state.value = state.value.copy(
             pendingPermission = PermissionRequest(
                 tool = "bash",
                 summary = "Run ./gradlew testDebugUnitTest for the dark-mode settings change",
             ),
         )
-        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("Approve agent action?").assertIsDisplayed()
         captureScreenRoboImage("../play/0.5.0/graphics/phone/02-action-approval.png")
         state.value = state.value.copy(pendingPermission = null)
 
         compose.onNodeWithContentDescription("Menu").performClick()
+        settleAnimation()
+        compose.onNodeWithContentDescription("Settings").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
             "../play/0.5.0/graphics/phone/03-project-drawer.png",
         )
 
         compose.onNodeWithContentDescription("Settings").performClick()
+        settleAnimation()
+        compose.onNodeWithText("Settings").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
             "../play/0.5.0/graphics/phone/04-settings.png",
         )

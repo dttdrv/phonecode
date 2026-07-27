@@ -1,7 +1,9 @@
 package dev.phonecode.app.ui.settings
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -11,7 +13,9 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +35,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -42,6 +47,7 @@ import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
@@ -91,6 +97,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -104,6 +111,9 @@ import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonecode.app.agent.ChatViewModel
 import dev.phonecode.app.agent.ChatUiState
+import dev.phonecode.app.agent.mcpDeleteOperationKey
+import dev.phonecode.app.agent.providerDeleteOperationKey
+import dev.phonecode.app.agent.skillDeleteOperationKey
 import dev.phonecode.app.R
 import dev.phonecode.app.data.CustomModel
 import dev.phonecode.app.data.CustomProvider
@@ -168,12 +178,26 @@ private fun revisionOf(config: McpServerConfig): String = revisionOf(buildString
     append(config.enabled).append('\u0000').append(config.timeout)
 })
 
+internal fun openExternalUrl(context: Context, url: String): String? =
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }.fold(
+        onSuccess = { null },
+        onFailure = { "Could not open your browser. Check that a browser is installed, then try again." },
+    )
+
+internal fun customProviderDraftIsDirty(
+    name: String,
+    baseUrl: String,
+    modelsText: String,
+    anthropicFormat: Boolean,
+): Boolean = name.isNotBlank() || baseUrl.isNotBlank() || modelsText.isNotBlank() || anthropicFormat
+
 private fun ChatUiState.settingsSnapshot(): ChatUiState = copy(
     lines = emptyList(),
     streaming = "",
     streamingReasoning = "",
     isRunning = false,
-    sessionLoading = false,
     queued = emptyList(),
     pendingPermission = null,
     pendingQuestion = null,
@@ -300,7 +324,7 @@ private fun SettingsPageContent(
         "tools" -> AgentToolsPage(vm, onBack)
         "files" -> FilesPage(vm, onBack)
         "git" -> GitPage(vm, settingsVm, onBack)
-        "export" -> ExportPage(vm, settingsVm, onBack)
+        "export" -> ExportPage(vm, settingsVm, onBack, onNestedBackActive)
         "about" -> AboutPage(vm, onOpenDoc = navigate, onBack = onBack)
         "doc:terms" -> DocPage("Terms of Service", "terms.md", onBack)
         "doc:privacy" -> DocPage("Privacy Policy", "privacy.md", onBack)
@@ -323,6 +347,7 @@ private fun SettingsPageContent(
 private fun Page(
     title: String,
     onBack: () -> Unit,
+    backEnabled: Boolean = true,
     action: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
@@ -347,7 +372,12 @@ private fun Page(
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            PcIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClick = onBack)
+            PcIconButton(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                "Back",
+                enabled = backEnabled,
+                onClick = onBack,
+            )
             Text(
                 title,
                 style = MaterialTheme.typography.titleLarge,
@@ -377,14 +407,20 @@ private fun NavRow(label: String, value: String? = null, icon: ImageVector? = nu
 }
 
 @Composable
-private fun ToggleRow(label: String, sub: String? = null, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun ToggleRow(
+    label: String,
+    sub: String? = null,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onChange: (Boolean) -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
     PcRow(
         modifier = Modifier.semantics(mergeDescendants = true) {
             role = Role.Switch
             toggleableState = ToggleableState(checked)
         },
-        onClick = { onChange(!checked) },
+        onClick = if (enabled) ({ onChange(!checked) }) else null,
     ) {
         Column(Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
@@ -544,7 +580,7 @@ private fun GeneralPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
     Page("General", onBack) {
         PcSectionLabel("Default agent mode")
-        PcGroup {
+        PcGroup(Modifier.selectableGroup()) {
             AgentMode.entries.forEach { mode ->
                 CheckRow(
                     mode.name.lowercase().replaceFirstChar { it.uppercase() },
@@ -581,6 +617,22 @@ private fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
     }
     var pendingUnlinkId by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmAutomaticApproval by rememberSaveable { mutableStateOf(false) }
+    var enablingAutomaticApproval by rememberSaveable { mutableStateOf(false) }
+    var automaticApprovalError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.autoAccept, state.error, enablingAutomaticApproval) {
+        if (!enablingAutomaticApproval) return@LaunchedEffect
+        when {
+            state.autoAccept -> {
+                enablingAutomaticApproval = false
+                automaticApprovalError = null
+                confirmAutomaticApproval = false
+            }
+            state.error != null -> {
+                enablingAutomaticApproval = false
+                automaticApprovalError = state.error
+            }
+        }
+    }
     Page("Files & permissions", onBack) {
         PcSectionLabel("Workspace")
         PcGroup {
@@ -612,7 +664,7 @@ private fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
         PcButton("Link a folder", filled = false) { picker.launch(null) }
         Note("The system picker grants access only to the folder you choose. Linked access survives app restarts and can be removed here or in system settings.")
         PcSectionLabel("Approval policy")
-        PcGroup {
+        PcGroup(Modifier.selectableGroup()) {
             CheckRow(
                 "Ask before each change",
                 selected = !state.autoAccept,
@@ -657,10 +709,18 @@ private fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
             title = "Enable automatic approval?",
             message = "PhoneCode will run writes in the private workspace and linked phone folders, commands, Git operations, and mutating MCP actions without asking each time. Reads outside linked locations will still ask.",
             action = "Enable automatic approval",
-            onDismiss = { confirmAutomaticApproval = false },
+            progressAction = "Enabling…",
+            inProgress = enablingAutomaticApproval,
+            inlineError = automaticApprovalError,
+            onDismiss = {
+                automaticApprovalError = null
+                confirmAutomaticApproval = false
+            },
         ) {
+            vm.clearError()
+            automaticApprovalError = null
+            enablingAutomaticApproval = true
             vm.setAutoAccept(true)
-            confirmAutomaticApproval = false
         }
     }
 }
@@ -670,7 +730,7 @@ private fun AppearancePage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
     Page("Appearance", onBack) {
         PcSectionLabel("Color theme")
-        PcGroup {
+        PcGroup(Modifier.selectableGroup()) {
             ThemeMode.entries.forEach { mode ->
                 CheckRow(
                     mode.name.lowercase().replaceFirstChar { it.uppercase() },
@@ -690,6 +750,7 @@ private fun AppearancePage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
 private fun PersonalPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
     var text by remember(settings.customInstructions) { mutableStateOf(settings.customInstructions) }
+    val saving = text != settings.customInstructions
     // Persist on a debounce instead of per keystroke (the old onValueChange rewrote the whole settings
     // file on every character). The debounce coalesces typing; the onDispose flush below covers leaving
     // the page within the debounce window so no edit is lost.
@@ -711,6 +772,15 @@ private fun PersonalPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
             placeholder = "Tell the agent how you like to work - style, tools, conventions...",
             singleLine = false,
             minLines = 5,
+            contentDescription = "Custom instructions",
+        )
+        Text(
+            if (saving) "Saving…" else "Saved",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.fillMaxWidth().padding(top = Spacing.xs)
+                .semantics { liveRegion = LiveRegionMode.Polite },
         )
         Note("These instructions are included in new agent turns. Do not add passwords, tokens, or other secrets.")
     }
@@ -722,16 +792,26 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     var addingCustom by remember { mutableStateOf(false) }
+    var browserError by remember { mutableStateOf<String?>(null) }
     Page("Providers", onBack) {
         if (state.codexOAuthAvailable && !state.codexConnected) {
             PcSectionLabel("ChatGPT")
             PcButton("Sign in with ChatGPT (Codex)") {
                 vm.startCodexSignIn()?.let { url ->
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                    browserError = openExternalUrl(context, url)
                 }
+            }
+            browserError?.let {
+                ErrorText(it, modifier = Modifier.padding(top = Spacing.xs))
             }
             Spacer(Modifier.height(6.dp))
         }
+        PcButton(
+            "Add custom provider",
+            filled = false,
+            icon = Icons.Filled.Add,
+            enabled = state.providerConfigError == null,
+        ) { addingCustom = true }
         PcSectionLabel("Providers")
         Note(
             "Switches control which providers appear in the model picker. " +
@@ -784,11 +864,6 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
                 }
             }
         }
-        // Custom providers (round-3: "Add the option to add a custom provider") - any
-        // OpenAI-compatible or Anthropic-style endpoint, stored in providers.json (the same
-        // file the agent can edit), so both paths land in one catalog.
-        Spacer(Modifier.height(Spacing.s))
-        PcButton("Add custom provider", filled = false, icon = Icons.Filled.Add, enabled = state.providerConfigError == null) { addingCustom = true }
     }
     if (addingCustom) {
         CustomProviderDialog(
@@ -806,16 +881,39 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
 @Composable
 private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: () -> Unit) {
     val state by collectSettingsState(vm)
+    val scope = rememberCoroutineScope()
     val colors = MaterialTheme.colorScheme
     val preset = vm.allProviders().firstOrNull { it.id == providerId }
+    val deleteOperationKey = providerDeleteOperationKey(providerId)
+    val deleteOperation = state.settingsOperations[deleteOperationKey]
     var key by remember(providerId) { mutableStateOf("") }
     var hasStoredKey by remember(providerId) { mutableStateOf(vm.keyFor(providerId).isNotBlank()) }
     var pendingCodexDisconnect by rememberSaveable(providerId) { mutableStateOf(false) }
     var pendingRemoveKey by remember(providerId) { mutableStateOf(false) }
-    var pendingRemoveProvider by remember(providerId) { mutableStateOf(false) }
+    var pendingRemoveProvider by rememberSaveable(providerId) { mutableStateOf(false) }
     var keyError by remember(providerId) { mutableStateOf<String?>(null) }
     val secureStorageAvailable = !vm.secureStorageUnavailable()
+    LaunchedEffect(preset, deleteOperation, providerId) {
+        if (preset == null &&
+            deleteOperation?.running == false &&
+            deleteOperation.error == null
+        ) {
+            onBack()
+        }
+    }
     Page(preset?.displayName ?: providerId, onBack) {
+        if (vm.isCustomProvider(providerId)) {
+            PcSectionLabel("Custom provider")
+            PcGroup {
+                PcRow(onClick = { pendingRemoveProvider = true }) {
+                    Text(
+                        "Remove this provider",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.error,
+                    )
+                }
+            }
+        }
         if (providerId == "codex") {
             PcSectionLabel("Account")
             PcGroup {
@@ -898,18 +996,6 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
                 }
             }
         }
-        if (vm.isCustomProvider(providerId)) {
-            PcSectionLabel("Custom provider")
-            PcGroup {
-                PcRow(onClick = { pendingRemoveProvider = true }) {
-                    Text(
-                        "Remove this provider",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = colors.error,
-                    )
-                }
-            }
-        }
     }
     if (pendingCodexDisconnect) {
         ConfirmActionDialog(
@@ -945,11 +1031,25 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
             title = "Remove custom provider?",
             message = "This removes the provider configuration and its saved API key. Existing chats stay on this device.",
             action = "Remove provider",
-            onDismiss = { pendingRemoveProvider = false },
+            progressAction = "Removing…",
+            inProgress = deleteOperation?.running == true,
+            inlineError = deleteOperation?.error,
+            onDismiss = {
+                vm.clearSettingsOperation(deleteOperationKey)
+                pendingRemoveProvider = false
+            },
         ) {
-            vm.deleteCustomProvider(providerId)
-            pendingRemoveProvider = false
-            onBack()
+            vm.clearError()
+            vm.clearSettingsOperation(deleteOperationKey)
+            scope.launch {
+                vm.deleteCustomProviderAndWait(providerId).fold(
+                    onSuccess = {
+                        pendingRemoveProvider = false
+                        onBack()
+                    },
+                    onFailure = {},
+                )
+            }
         }
     }
 }
@@ -957,10 +1057,15 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
 @Composable
 private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (Boolean) -> Unit) {
     val state by collectSettingsState(vm)
+    val scope = rememberCoroutineScope()
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var editorDirty by rememberSaveable { mutableStateOf(false) }
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
+    var pendingToggles by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var toggleErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var reconnecting by remember { mutableStateOf(false) }
+    var reconnectError by remember { mutableStateOf<String?>(null) }
     val colors = MaterialTheme.colorScheme
     val closeEditor = {
         if (editorDirty) confirmDiscard = true else editing = null
@@ -973,6 +1078,13 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
     val visible = remember(state.mcpServers, query) {
         state.mcpServers.filter { (name, server) ->
             query.isBlank() || name.contains(query, true) || server.url.contains(query, true)
+        }
+    }
+    LaunchedEffect(editing, state.mcpServers) {
+        val selected = editing
+        if (!selected.isNullOrEmpty() && selected !in state.mcpServers) {
+            editorDirty = false
+            editing = null
         }
     }
     Box(Modifier.fillMaxSize()) {
@@ -998,14 +1110,22 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
             PcGroup {
                 visible.entries.forEach { (name, server) ->
                     val snapshot = state.mcpSnapshots[name]
+                    val pendingTarget = pendingToggles[name]
                     val status = when {
+                        pendingTarget != null -> "Updating…"
                         !server.enabled -> "Off"
                         name in state.mcpConnecting -> "Connecting"
                         snapshot?.connected == true -> "Connected · ${snapshot.tools.size} tools"
                         snapshot?.error?.isNotBlank() == true -> "Failed · ${snapshot.error}"
                         else -> "Not tested"
                     }
-                    PcRow(onClick = if (state.mcpConfigError == null) ({ editorDirty = false; editing = name }) else null) {
+                    PcRow(
+                        onClick = if (state.mcpConfigError == null && pendingTarget == null && !reconnecting) {
+                            ({ editorDirty = false; editing = name })
+                        } else {
+                            null
+                        },
+                    ) {
                         Column(Modifier.weight(1f)) {
                             Text(name, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
                             Text(
@@ -1015,8 +1135,49 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            toggleErrors[name]?.let { message ->
+                                ErrorText(
+                                    message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            }
                         }
-                        if (state.mcpConfigError == null) PcToggle(server.enabled, { vm.setMcpEnabled(name, it) }, "$name enabled")
+                        if (state.mcpConfigError == null) {
+                            PcToggle(
+                                pendingTarget ?: server.enabled,
+                                if (pendingTarget == null && !reconnecting) {
+                                    { target ->
+                                        vm.clearError()
+                                        toggleErrors = toggleErrors - name
+                                        pendingToggles = pendingToggles + (name to target)
+                                        scope.launch {
+                                            vm.setMcpEnabledAndWait(name, target).fold(
+                                                onSuccess = {
+                                                    toggleErrors = toggleErrors - name
+                                                },
+                                                onFailure = { failure ->
+                                                    toggleErrors = toggleErrors + (
+                                                        name to "Could not update $name: ${
+                                                            failure.message ?: "storage update failed"
+                                                        }"
+                                                    )
+                                                },
+                                            )
+                                            pendingToggles = pendingToggles - name
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
+                                "$name enabled",
+                                modifier = if (pendingTarget != null || reconnecting) {
+                                    Modifier.semantics { disabled() }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                        }
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(18.dp))
                     }
                 }
@@ -1024,10 +1185,30 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
         }
         if (state.mcpConfigError == null) {
             Spacer(Modifier.height(Spacing.s))
-            PcButton("Add server", filled = false, icon = Icons.Filled.Add) { editorDirty = false; editing = "" }
+            PcButton("Add server", filled = false, icon = Icons.Filled.Add, enabled = !reconnecting) {
+                editorDirty = false
+                editing = ""
+            }
             if (state.mcpServers.isNotEmpty()) {
                 Spacer(Modifier.height(Spacing.xs))
-                PcButton("Reconnect enabled servers", filled = false) { vm.reconnectMcp() }
+                PcButton(
+                    if (reconnecting) "Reconnecting…" else "Reconnect enabled servers",
+                    filled = false,
+                    enabled = !reconnecting && pendingToggles.isEmpty(),
+                ) {
+                    vm.clearError()
+                    reconnectError = null
+                    reconnecting = true
+                    scope.launch {
+                        vm.reconnectMcpAndWait().onFailure { failure ->
+                            reconnectError = failure.message ?: "MCP servers could not be reconnected"
+                        }
+                        reconnecting = false
+                    }
+                }
+                reconnectError?.let {
+                    ErrorText(it, modifier = Modifier.padding(top = Spacing.xs))
+                }
             }
         }
     }
@@ -1066,6 +1247,7 @@ private fun McpServerPage(
     onDirtyChange: (Boolean) -> Unit,
     onSaved: () -> Unit,
 ) {
+    val state by collectSettingsState(vm)
     val colors = MaterialTheme.colorScheme
     val isNew = initialName.isEmpty()
     val scope = rememberCoroutineScope()
@@ -1074,14 +1256,16 @@ private fun McpServerPage(
     var acceptedRevision by rememberSaveable(initialName) { mutableStateOf(currentRevision) }
     var name by rememberSaveable(initialName) { mutableStateOf(initialName) }
     var url by rememberSaveable(initialName) { mutableStateOf(initial.url) }
-    var headers by rememberSaveable(initialName) { mutableStateOf(initial.headers.entries.joinToString("\n") { "${it.key}: ${it.value}" }) }
+    var headers by rememberSaveable(initialName) { mutableStateOf(headersForEditor(initial.headers)) }
     var timeout by rememberSaveable(initialName) { mutableStateOf(initial.timeout.toString()) }
     var enabled by rememberSaveable(initialName) { mutableStateOf(initial.enabled) }
     var error by remember(initialName) { mutableStateOf<String?>(null) }
     var testing by remember(initialName) { mutableStateOf(false) }
     var saving by remember(initialName) { mutableStateOf(false) }
     var testResult by remember(initialName) { mutableStateOf<McpServerSnapshot?>(null) }
-    var confirmDelete by remember(initialName) { mutableStateOf(false) }
+    var confirmDelete by rememberSaveable(initialName) { mutableStateOf(false) }
+    val deleteOperationKey = mcpDeleteOperationKey(initialName)
+    val deleteOperation = state.settingsOperations[deleteOperationKey]
     val externalChange = !isNew && currentRevision != acceptedRevision
 
     fun validationMessage(): String? {
@@ -1106,11 +1290,17 @@ private fun McpServerPage(
         val finalTimeout = timeout.toLongOrNull()
         error = validationMessage()
         return if (error == null) {
-            finalName to McpServerConfig("remote", url.trim(), parseHeaders(headers), enabled, finalTimeout!!)
+            finalName to McpServerConfig(
+                "remote",
+                url.trim(),
+                parseHeaders(headers, baseline.headers),
+                enabled,
+                finalTimeout!!,
+            )
         } else null
     }
 
-    val initialHeaders = baseline.headers.entries.joinToString("\n") { "${it.key}: ${it.value}" }
+    val initialHeaders = headersForEditor(baseline.headers)
     val changed = if (isNew) {
         name.isNotBlank() || url.isNotBlank() || headers.isNotBlank() || timeout != baseline.timeout.toString() || enabled != baseline.enabled
     } else {
@@ -1128,7 +1318,7 @@ private fun McpServerPage(
             PcButton("Reload latest", filled = false) {
                 baseline = initial
                 url = initial.url
-                headers = initial.headers.entries.joinToString("\n") { "${it.key}: ${it.value}" }
+                headers = headersForEditor(initial.headers)
                 timeout = initial.timeout.toString()
                 enabled = initial.enabled
                 acceptedRevision = currentRevision
@@ -1168,7 +1358,10 @@ private fun McpServerPage(
         error?.takeIf { it.startsWith("Each header") }?.let {
             ErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
         }
-        Note("One Name: Value header per line. Values are encrypted with Android Keystore.")
+        Note(
+            "One Name: Value header per line. Saved values stay concealed; replace the dots to change one. " +
+                "Values are encrypted with Android Keystore.",
+        )
         McpFieldLabel("Connection timeout")
         PcField(
             timeout,
@@ -1249,19 +1442,42 @@ private fun McpServerPage(
         }
         if (!isNew) {
             Spacer(Modifier.height(Spacing.l))
-            PcButton("Delete server", filled = false, destructive = true) { confirmDelete = true }
+            PcButton(
+                "Delete server",
+                filled = false,
+                destructive = true,
+                enabled = deleteOperation?.running != true,
+            ) {
+                vm.clearSettingsOperation(deleteOperationKey)
+                confirmDelete = true
+            }
         }
     }
     if (confirmDelete) {
         ConfirmActionDialog(
             title = "Delete MCP server?",
-            message = "This removes $initialName and its encrypted headers. Tools from this server will no longer be available.",
+            message = "This permanently removes $initialName and its encrypted headers. Tools from this server will no longer be available. This cannot be undone.",
             action = "Delete server",
-            onDismiss = { confirmDelete = false },
+            progressAction = "Deleting…",
+            inProgress = deleteOperation?.running == true,
+            inlineError = deleteOperation?.error?.let {
+                "Could not delete $initialName: $it"
+            },
+            onDismiss = {
+                vm.clearSettingsOperation(deleteOperationKey)
+                confirmDelete = false
+            },
         ) {
-            vm.deleteMcpServer(initialName)
-            confirmDelete = false
-            onSaved()
+            vm.clearSettingsOperation(deleteOperationKey)
+            scope.launch {
+                vm.deleteMcpServerAndWait(initialName).fold(
+                    onSuccess = {
+                        confirmDelete = false
+                        onSaved()
+                    },
+                    onFailure = {},
+                )
+            }
         }
     }
 }
@@ -1305,6 +1521,9 @@ private fun ConfirmActionDialog(
     title: String,
     message: String,
     action: String,
+    progressAction: String = action,
+    inProgress: Boolean = false,
+    inlineError: String? = null,
     secondaryAction: String? = null,
     onSecondary: (() -> Unit)? = null,
     onDismiss: () -> Unit,
@@ -1314,7 +1533,7 @@ private fun ConfirmActionDialog(
         (LocalWindowInfo.current.containerSize.height.toDp() - 32.dp)
             .coerceAtLeast(Spacing.touchTarget * 3f)
     }
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = { if (!inProgress) onDismiss() }) {
         Column(
             Modifier.fillMaxWidth().heightIn(max = maxHeight)
                 .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
@@ -1330,14 +1549,30 @@ private fun ConfirmActionDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = Spacing.xs, bottom = Spacing.m),
                 )
+                inlineError?.let {
+                    ErrorText(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = Spacing.m),
+                    )
+                }
             }
-            PcButton("Cancel", onClick = onDismiss)
+            PcButton("Cancel", enabled = !inProgress, onClick = onDismiss)
             if (secondaryAction != null && onSecondary != null) {
                 Spacer(Modifier.height(Spacing.xs))
-                PcButton(secondaryAction, filled = false, onClick = onSecondary)
+                PcButton(secondaryAction, filled = false, enabled = !inProgress, onClick = onSecondary)
             }
             Spacer(Modifier.height(Spacing.xs))
-            PcButton(action, filled = false, destructive = true, onClick = onConfirm)
+            PcButton(
+                if (inProgress) progressAction else action,
+                modifier = if (inProgress) Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                } else Modifier,
+                filled = false,
+                enabled = !inProgress,
+                destructive = true,
+                onClick = onConfirm,
+            )
         }
     }
 }
@@ -1372,12 +1607,15 @@ private enum class SkillFilter { ALL, ACTIVE, OFF, ISSUES }
 @Composable
 private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (Boolean) -> Unit) {
     val state by collectSettingsState(vm)
+    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(SkillFilter.ALL) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var editorDirty by rememberSaveable { mutableStateOf(false) }
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
+    var pendingToggles by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var toggleErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val colors = MaterialTheme.colorScheme
     val selectedSkill = state.skills.firstOrNull { it.id == selectedId }
     val editorSkill = state.skills.firstOrNull { it.id == editingId }
@@ -1434,23 +1672,55 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
         } else {
             PcGroup {
                 filtered.forEach { skill ->
-                    PcRow(onClick = { selectedId = skill.id }) {
+                    val updating = skill.id in pendingToggles
+                    PcRow(onClick = if (updating) null else ({ selectedId = skill.id })) {
                         Column(Modifier.weight(1f)) {
                             Text(skill.name, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
                             Text(
-                                "${skill.scope.label()} · ${skill.status.label()}",
+                                if (updating) "Updating…" else "${skill.scope.label()} · ${skill.status.label()}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (skill.status == SkillStatus.INVALID) colors.error else colors.onSurfaceVariant,
                             )
                             skill.manifest?.description?.takeIf { it.isNotBlank() }?.let {
                                 Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
+                            toggleErrors[skill.id]?.let { message ->
+                                ErrorText(
+                                    message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            }
                         }
                         if (skill.manifest != null && skill.status != SkillStatus.SHADOWED && skill.status != SkillStatus.INVALID) {
                             PcToggle(
                                 skill.status == SkillStatus.ACTIVE,
-                                { vm.setSkillEnabled(skill.id, it) },
+                                if (updating) {
+                                    null
+                                } else {
+                                    { target ->
+                                        vm.clearError()
+                                        toggleErrors = toggleErrors - skill.id
+                                        pendingToggles = pendingToggles + skill.id
+                                        scope.launch {
+                                            vm.setSkillEnabledAndWait(skill.id, target).fold(
+                                                onSuccess = {
+                                                    toggleErrors = toggleErrors - skill.id
+                                                },
+                                                onFailure = { failure ->
+                                                    toggleErrors = toggleErrors + (
+                                                        skill.id to "Could not update ${skill.name}: ${
+                                                            failure.message ?: "storage update failed"
+                                                        }"
+                                                    )
+                                                },
+                                            )
+                                            pendingToggles = pendingToggles - skill.id
+                                        }
+                                    }
+                                },
                                 "${skill.name} enabled",
+                                modifier = if (updating) Modifier.semantics { disabled() } else Modifier,
                             )
                         }
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(18.dp))
@@ -1498,9 +1768,15 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
 
 @Composable
 private fun SkillDetailPage(vm: ChatViewModel, skill: ManagedSkill, onEdit: () -> Unit, onBack: () -> Unit) {
+    val state by collectSettingsState(vm)
+    val scope = rememberCoroutineScope()
     val colors = MaterialTheme.colorScheme
     val manifest = skill.manifest
-    var confirmDelete by remember(skill.id) { mutableStateOf(false) }
+    var confirmDelete by rememberSaveable(skill.id) { mutableStateOf(false) }
+    var toggling by remember(skill.id) { mutableStateOf(false) }
+    var toggleError by remember(skill.id) { mutableStateOf<String?>(null) }
+    val deleteOperationKey = skillDeleteOperationKey(skill.id)
+    val deleteOperation = state.settingsOperations[deleteOperationKey]
     Page(skill.name, onBack = onBack) {
         Note("${skill.scope.label()} · ${skill.status.label()}")
         skill.issue?.let { ErrorText(it) }
@@ -1510,7 +1786,24 @@ private fun SkillDetailPage(vm: ChatViewModel, skill: ManagedSkill, onEdit: () -
                 "Enabled",
                 sub = "Applies immediately to the current agent session",
                 checked = skill.status != SkillStatus.DISABLED,
-            ) { vm.setSkillEnabled(skill.id, it) }
+                enabled = !toggling && deleteOperation?.running != true,
+            ) { target ->
+                vm.clearError()
+                toggleError = null
+                toggling = true
+                scope.launch {
+                    vm.setSkillEnabledAndWait(skill.id, target).onFailure { failure ->
+                        toggleError = "Could not update ${skill.name}: ${
+                            failure.message ?: "storage update failed"
+                        }"
+                    }
+                    toggling = false
+                }
+            }
+            when {
+                toggling -> Note("Updating…", announce = true)
+                toggleError != null -> ErrorText(requireNotNull(toggleError))
+            }
         } else if (skill.status == SkillStatus.SHADOWED) {
             Note("Another skill with this name takes precedence. Disable or edit the active copy to use this one.")
         }
@@ -1544,20 +1837,49 @@ private fun SkillDetailPage(vm: ChatViewModel, skill: ManagedSkill, onEdit: () -
             }
         }
         Spacer(Modifier.height(Spacing.l))
-        PcButton("Edit skill", filled = false, onClick = onEdit)
+        PcButton(
+            "Edit skill",
+            filled = false,
+            enabled = !toggling && deleteOperation?.running != true,
+            onClick = onEdit,
+        )
         Spacer(Modifier.height(Spacing.xs))
-        PcButton("Delete skill", filled = false, destructive = true) { confirmDelete = true }
+        PcButton(
+            "Delete skill",
+            filled = false,
+            destructive = true,
+            enabled = !toggling && deleteOperation?.running != true,
+        ) {
+            vm.clearSettingsOperation(deleteOperationKey)
+            confirmDelete = true
+        }
     }
     if (confirmDelete) {
         ConfirmActionDialog(
             title = "Delete skill?",
             message = "This permanently removes ${skill.name}. There is no built-in restore or undo.",
             action = "Delete skill",
-            onDismiss = { confirmDelete = false },
+            progressAction = "Deleting…",
+            inProgress = deleteOperation?.running == true,
+            inlineError = deleteOperation?.error?.let {
+                "Could not delete ${skill.name}: $it"
+            },
+            onDismiss = {
+                vm.clearSettingsOperation(deleteOperationKey)
+                confirmDelete = false
+            },
         ) {
-            vm.deleteSkill(skill.id)
-            confirmDelete = false
-            onBack()
+            vm.clearError()
+            vm.clearSettingsOperation(deleteOperationKey)
+            scope.launch {
+                vm.deleteSkillAndWait(skill.id).fold(
+                    onSuccess = {
+                        confirmDelete = false
+                        onBack()
+                    },
+                    onFailure = {},
+                )
+            }
         }
     }
 }
@@ -1644,7 +1966,7 @@ private fun SkillEditorPage(
                 "my-skill",
                 contentDescription = "Skill name",
             )
-            PcGroup {
+            PcGroup(Modifier.selectableGroup()) {
                 CheckRow("Global", skillScope == SkillScope.GLOBAL) { skillScope = SkillScope.GLOBAL }
                 CheckRow("Current project", skillScope == SkillScope.PROJECT) { skillScope = SkillScope.PROJECT }
             }
@@ -1694,27 +2016,66 @@ private const val NEW_SKILL_ID = "__phonecode_new_skill__"
 
 @Composable
 private fun SkillFilters(selected: SkillFilter, onSelect: (SkillFilter) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        Modifier.fillMaxWidth().padding(top = Spacing.s),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        SkillFilter.entries.forEach { filter ->
-            val active = filter == selected
-            val interaction = remember(filter) { MutableInteractionSource() }
-            Box(
-                Modifier.weight(1f).heightIn(min = Spacing.touchTarget)
-                    .pressFeedback(interaction, pressedScale = 0.98f)
-                    .clip(MaterialTheme.shapes.large)
-                    .background(if (active) colors.primary else colors.surfaceContainerHigh)
-                    .semantics { this.selected = active; role = Role.Tab }
-                    .clickable(interactionSource = interaction, indication = ripple(), role = Role.Tab) { onSelect(filter) }
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                contentAlignment = Alignment.Center,
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = Spacing.s)) {
+        val wrap = maxWidth < 360.dp || LocalDensity.current.fontScale >= 1.3f
+        if (wrap) {
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                maxItemsInEachRow = 2,
             ) {
-                Text(filter.shortLabel(), style = MaterialTheme.typography.labelMedium, color = if (active) colors.onPrimary else colors.onBackground)
+                SkillFilter.entries.forEach { filter ->
+                    SkillFilterButton(
+                        filter = filter,
+                        active = filter == selected,
+                        onClick = { onSelect(filter) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        } else {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                SkillFilter.entries.forEach { filter ->
+                    SkillFilterButton(
+                        filter = filter,
+                        active = filter == selected,
+                        onClick = { onSelect(filter) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun SkillFilterButton(
+    filter: SkillFilter,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    val interaction = remember(filter) { MutableInteractionSource() }
+    Box(
+        modifier.heightIn(min = Spacing.touchTarget)
+            .pressFeedback(interaction, pressedScale = 0.98f)
+            .clip(MaterialTheme.shapes.large)
+            .background(if (active) colors.primary else colors.surfaceContainerHigh)
+            .semantics { this.selected = active; role = Role.Tab }
+            .clickable(interactionSource = interaction, indication = ripple(), role = Role.Tab, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            filter.shortLabel(),
+            style = MaterialTheme.typography.labelMedium,
+            color = if (active) colors.onPrimary else colors.onBackground,
+        )
     }
 }
 
@@ -1753,6 +2114,7 @@ private fun GitPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: ()
     var manualToken by remember { mutableStateOf("") }
     var hasSavedToken by remember { mutableStateOf(vm.keyFor("git.token").isNotBlank()) }
     var manualError by remember { mutableStateOf<String?>(null) }
+    var browserError by remember { mutableStateOf<String?>(null) }
     val secureStorageAvailable = !vm.secureStorageUnavailable()
     Page("Git", onBack) {
         PcSectionLabel("GitHub")
@@ -1773,9 +2135,10 @@ private fun GitPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: ()
                             modifier = Modifier.padding(vertical = Spacing.s),
                         )
                         PcButton("Open github.com/login/device") {
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(state.githubVerifyUri ?: "https://github.com/login/device")))
-                            }
+                            browserError = openExternalUrl(
+                                context,
+                                state.githubVerifyUri ?: "https://github.com/login/device",
+                            )
                         }
                         Spacer(Modifier.height(Spacing.xs))
                         PcButton("Cancel", filled = false) { vm.cancelGitHubSignIn() }
@@ -1805,6 +2168,9 @@ private fun GitPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: ()
                 PcButton("Sign in with GitHub") { vm.startGitHubSignIn() }
                 Spacer(Modifier.height(6.dp))
             }
+        }
+        browserError?.let {
+            ErrorText(it, modifier = Modifier.padding(top = Spacing.xs))
         }
         PcSectionLabel("Advanced")
         PcGroup {
@@ -1886,10 +2252,23 @@ private fun GitPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: ()
 }
 
 @Composable
-private fun ExportPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () -> Unit) {
+private fun ExportPage(
+    vm: ChatViewModel,
+    settingsVm: SettingsViewModel,
+    onBack: () -> Unit,
+    onNestedBackActive: (Boolean) -> Unit,
+) {
     val state by collectSettingsState(vm)
+    val importing = state.sessionLoading
     val stamp = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
     var confirmImport by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = importing) {}
+    DisposableEffect(importing) {
+        onNestedBackActive(importing)
+        onDispose {
+            if (importing) onNestedBackActive(false)
+        }
+    }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) vm.exportTo(uri)
     }
@@ -1898,14 +2277,22 @@ private fun ExportPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack:
         // theme/instructions must go live without a restart (review finding #3).
         if (uri != null) vm.importFrom(uri) { settingsVm.reload() }
     }
-    Page("Export & import", onBack) {
+    Page("Export & import", onBack, backEnabled = !importing) {
         PcSectionLabel("Your data")
+        if (importing) {
+            Note("Importing backup…", announce = true)
+            Spacer(Modifier.height(10.dp))
+        }
         Note("Exports are not encrypted. Saved provider and sign-in credentials are excluded, but chats and tool activity may contain sensitive content.")
         Note("Import replaces chats and settings with the backup. Linked phone folders, provider keys, MCP servers, and skills are not included. Approval always returns to Ask before each change.")
         Spacer(Modifier.height(10.dp))
-        PcButton("Export chats & settings") { exporter.launch("phonecode-backup-$stamp.zip") }
+        PcButton("Export chats & settings", enabled = !importing) {
+            exporter.launch("phonecode-backup-$stamp.zip")
+        }
         Spacer(Modifier.height(10.dp))
-        PcButton("Import from a file", filled = false) { confirmImport = true }
+        PcButton("Import from a file", filled = false, enabled = !importing) {
+            confirmImport = true
+        }
         state.notice?.let {
             Spacer(Modifier.height(10.dp))
             Note(it, announce = true)
@@ -1933,7 +2320,11 @@ private fun ExportPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack:
 @Composable
 private fun AboutPage(vm: ChatViewModel, onOpenDoc: (String) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val colors = MaterialTheme.colorScheme
+    val configPath = remember(vm) { vm.configDirPath() }
+    var browserError by remember { mutableStateOf<String?>(null) }
+    var copiedConfigPath by remember { mutableStateOf(false) }
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "0.1"
     }
@@ -1946,19 +2337,37 @@ private fun AboutPage(vm: ChatViewModel, onOpenDoc: (String) -> Unit, onBack: ()
         }
         PcGroup {
             PcRow(onClick = {
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://dttdrv.xyz/phonecode"))) }
+                browserError = openExternalUrl(context, "https://dttdrv.xyz/phonecode")
             }) {
                 Text("Website", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, modifier = Modifier.weight(1f))
                 Text("dttdrv.xyz/phonecode", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(20.dp))
             }
             PcRow {
-                Text("Config directory", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, modifier = Modifier.weight(1f))
-                Text(vm.configDirPath().substringAfterLast("/"), style = MaterialTheme.typography.labelSmall.copy(fontFamily = PcMono), color = colors.tertiary)
+                Column(Modifier.weight(1f)) {
+                    Text("Config directory", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
+                    Text(
+                        configPath,
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = PcMono),
+                        color = colors.tertiary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                PcIconButton(Icons.Outlined.ContentCopy, "Copy config directory path") {
+                    clipboard.setText(AnnotatedString(configPath))
+                    copiedConfigPath = true
+                }
             }
             NavRow("Terms of Service") { onOpenDoc("doc:terms") }
             NavRow("Privacy Policy") { onOpenDoc("doc:privacy") }
             NavRow("Open-source licenses") { onOpenDoc("doc:licenses") }
+        }
+        browserError?.let {
+            ErrorText(it, modifier = Modifier.padding(top = Spacing.xs))
+        }
+        if (copiedConfigPath) {
+            Note("Copied config path", announce = true)
         }
     }
 }
@@ -2042,6 +2451,7 @@ private fun CustomProviderDialog(
     var modelsText by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val id = name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
     val models = modelsText.lines().map { it.trim() }.filter { it.isNotEmpty() }
@@ -2056,11 +2466,19 @@ private fun CustomProviderDialog(
         else -> null
     }
     val hasInput = name.isNotBlank() || baseUrl.isNotBlank() || modelsText.isNotBlank()
+    val draftDirty = customProviderDraftIsDirty(name, baseUrl, modelsText, anthropicFormat)
+    val requestDismiss = {
+        when {
+            saving -> Unit
+            draftDirty -> confirmDiscard = true
+            else -> onDismiss()
+        }
+    }
     val maxHeight = with(LocalDensity.current) {
         (LocalWindowInfo.current.containerSize.height.toDp() - 32.dp)
             .coerceAtLeast(Spacing.touchTarget * 4f)
     }
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = requestDismiss) {
         Column(
             Modifier.fillMaxWidth().heightIn(max = maxHeight)
                 .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
@@ -2096,7 +2514,7 @@ private fun CustomProviderDialog(
             }
             Spacer(Modifier.height(Spacing.s))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                Box(Modifier.weight(1f)) { PcButton("Cancel", filled = false, onClick = onDismiss) }
+                Box(Modifier.weight(1f)) { PcButton("Cancel", filled = false, onClick = requestDismiss) }
                 Box(Modifier.weight(1f)) {
                     PcButton(if (saving) "Saving…" else "Save", enabled = !saving && validationError == null) {
                         if (validationError != null) return@PcButton
@@ -2117,10 +2535,35 @@ private fun CustomProviderDialog(
             }
         }
     }
+    if (confirmDiscard) {
+        ConfirmDiscardDialog(
+            message = "This custom provider has unsaved changes.",
+            onKeepEditing = { confirmDiscard = false },
+            onDiscard = {
+                confirmDiscard = false
+                onDismiss()
+            },
+        )
+    }
 }
 
-private fun parseHeaders(text: String): Map<String, String> =
+private const val PRESERVED_MCP_HEADER = "••••••••"
+
+private fun headersForEditor(headers: Map<String, String>): String =
+    headers.keys.sorted().joinToString("\n") { "$it: $PRESERVED_MCP_HEADER" }
+
+private fun parseHeaders(text: String, preserved: Map<String, String> = emptyMap()): Map<String, String> =
     text.lineSequence().mapNotNull { line ->
         val i = line.indexOf(':')
-        if (i <= 0) null else line.substring(0, i).trim() to line.substring(i + 1).trim()
+        if (i <= 0) {
+            null
+        } else {
+            val name = line.substring(0, i).trim()
+            val entered = line.substring(i + 1).trim()
+            name to if (entered == PRESERVED_MCP_HEADER && name in preserved) {
+                preserved.getValue(name)
+            } else {
+                entered
+            }
+        }
     }.filter { it.first.isNotEmpty() && it.second.isNotEmpty() }.toMap()

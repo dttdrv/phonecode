@@ -12,7 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -58,6 +60,9 @@ class PlayListingAssetTest {
             }
         }
 
+        compose.waitForIdle()
+        compose.onNodeWithText("Build real projects from your phone").assertIsDisplayed()
+        compose.onNodeWithText("Get started").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
             "../play/0.5.0/graphics/feature-graphic-source.png",
         )
@@ -97,12 +102,17 @@ class PlayListingAssetTest {
             }
         }
 
+        compose.waitForIdle()
+        compose.onNodeWithText("PhoneCode").assertIsDisplayed()
+        compose.onNodeWithText("Get started").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
             "../play/0.5.0/graphics/phone/05-welcome.png",
         )
         compose.onNodeWithText("Get started").performClick()
         compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
+        compose.onNodeWithText("Setup").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
             "../play/0.5.0/graphics/phone/06-setup.png",
         )
@@ -122,7 +132,7 @@ class PlayListingAssetTest {
         @Suppress("UNCHECKED_CAST")
         val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
         state.value = state.value.copy(
-            codexOAuthAvailable = false,
+            codexOAuthAvailable = true,
             codexConnected = false,
         )
         compose.setContent {
@@ -135,6 +145,10 @@ class PlayListingAssetTest {
             }
         }
 
+        compose.waitForIdle()
+        compose.onNodeWithText("Set up a model").assertIsDisplayed()
+        compose.onNodeWithText("Sign in with ChatGPT").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
             "../play/0.5.0/graphics/phone/07-model-providers.png",
         )

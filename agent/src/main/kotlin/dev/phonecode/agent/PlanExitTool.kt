@@ -16,7 +16,7 @@ import kotlinx.serialization.json.put
  * session to BUILD; the loop picks that up next turn and unlocks the mutating tools) and instructs the
  * model to execute; on rejection it tells the model to keep refining. Plan-only, so it is hidden in BUILD.
  */
-class PlanExitTool(private val onApproved: () -> Unit) : Tool {
+class PlanExitTool(private val onApproved: suspend () -> Boolean) : Tool {
     override val name = "plan_exit"
     override val description =
         "Call this once your plan is complete and you are ready to implement it. It asks the user to " +
@@ -45,11 +45,18 @@ class PlanExitTool(private val onApproved: () -> Unit) : Tool {
                 ),
             ),
         )
-        // Accept the "Yes" option or any free-text affirmation that starts with "yes" (the dialog invites custom text).
-        val approved = answers.firstOrNull()?.answers?.any { it.trim().startsWith("Yes", ignoreCase = true) } == true
+        // Build is an authority boundary: only the exact structured option may cross it. The app marks
+        // free-text replies as "Custom: …", so conditional or ambiguous prose can never impersonate Yes.
+        val approved = answers.firstOrNull()?.answers == listOf("Yes")
         return if (approved) {
-            onApproved()
-            ToolResult("The plan was approved. You are now in build mode and may edit files - execute the plan.")
+            if (onApproved()) {
+                ToolResult("The plan was approved. You are now in build mode and may edit files - execute the plan.")
+            } else {
+                ToolResult(
+                    "The plan was approved, but Build mode could not be saved. This chat remains in Plan mode; do not edit files.",
+                    isError = true,
+                )
+            }
         } else {
             ToolResult("The user did not approve the plan. Keep refining it; do not edit files yet.")
         }

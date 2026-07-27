@@ -159,6 +159,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 private fun formatSessionDate(value: Long) = SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(value))
+internal fun renameSaveEnabled(initial: String, value: String): Boolean {
+    val trimmed = value.trim()
+    return trimmed.isNotEmpty() && trimmed != initial.trim()
+}
+
 private enum class DrawerValue { CLOSED, OPEN }
 
 private fun ChatUiState.shellSnapshot(): ChatUiState = copy(
@@ -462,6 +467,7 @@ fun PhoneCodeApp() {
                     projectReady = chatState.projects.any { project ->
                         project.folderId != null && chatState.sharedFolders.any { it.id == project.folderId }
                     },
+                    errorMessage = chatState.error,
                     onDone = {
                         if (vm.activateConfiguredModel()) settingsVm.update { it.copy(onboarded = true) }
                     },
@@ -556,6 +562,7 @@ private fun Sidebar(
     }
     val pinned = remember(filtered) { filtered.filter { it.pinned && !it.archived && it.projectId == null } }
     val archived = remember(filtered) { filtered.filter { it.archived } }
+    val archivedVisible = archivedOpen || query.isNotBlank()
     val byProject = remember(filtered) { filtered.filter { !it.archived && it.projectId != null }.groupBy { it.projectId } }
     val loose = remember(filtered) { filtered.filter { !it.pinned && !it.archived && it.projectId == null } }
 
@@ -580,6 +587,7 @@ private fun Sidebar(
                 onMove = { vm.moveSession(meta.id, it) },
                 onArchive = { vm.setSessionArchived(meta.id, !meta.archived) },
                 onDelete = { deleteChat = meta },
+                lifecycleMutationsEnabled = meta.id != state.currentSessionId || !state.isRunning,
             )
         }
     }
@@ -633,7 +641,9 @@ private fun Sidebar(
                 }
             }
             matchingProjects.forEach { project ->
-                val open = project.id !in collapsed
+                // Search is a temporary reveal layer: matching chats remain reachable without
+                // changing the user's saved project-collapse choice.
+                val open = query.isNotBlank() || project.id !in collapsed
                 item(key = "p_${project.id}") {
                     Row(
                         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
@@ -654,11 +664,6 @@ private fun Sidebar(
                         Icon(Icons.Outlined.Folder, null, tint = colors.secondary, modifier = Modifier.size(19.dp))
                         Text(project.name, style = MaterialTheme.typography.titleSmall, color = colors.onBackground, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${byProject[project.id]?.size ?: 0}", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
-                        PcIconButton(
-                            icon = Icons.Filled.Add,
-                            contentDescription = "New chat in ${project.name}",
-                            tint = colors.secondary,
-                        ) { vm.newChat(project.id); onOpenChat() }
                         Box {
                             PcIconButton(Icons.Filled.MoreVert, "Project options", tint = colors.secondary) { projectMenu = project }
                             MorphingMenu(
@@ -672,6 +677,10 @@ private fun Sidebar(
                                 ProjectOptionsMenu(
                                     project = project,
                                     onDismiss = { projectMenu = null },
+                                    onNewChat = {
+                                        vm.newChat(project.id)
+                                        onOpenChat()
+                                    },
                                     onRequestRename = { renameProject = project },
                                     onDelete = { deleteProject = project },
                                 )
@@ -713,18 +722,18 @@ private fun Sidebar(
                 item(key = "h_archived") {
                     Row(
                         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { archivedOpen = !archivedOpen }
-                            .semantics { stateDescription = if (archivedOpen) "Expanded" else "Collapsed" }
+                            .semantics { stateDescription = if (archivedVisible) "Expanded" else "Collapsed" }
                             .heightIn(min = Spacing.touchTarget).padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        val rotation by animateFloatAsState(if (archivedOpen) 90f else 0f, PhoneSprings.standard, label = "arch")
+                        val rotation by animateFloatAsState(if (archivedVisible) 90f else 0f, PhoneSprings.standard, label = "arch")
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = rotation })
                         Text("Archived", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
                         Text("${archived.size}", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
                     }
                 }
-                if (archivedOpen) archived.forEach { meta ->
+                if (archivedVisible) archived.forEach { meta ->
                     item(key = "a_${meta.id}") {
                         SessionItem(meta, 35.dp)
                     }
@@ -845,7 +854,7 @@ private fun Sidebar(
     deleteChat?.let { meta ->
         ConfirmDeleteDialog(
             title = "Delete chat?",
-            detail = "${meta.title} will be removed from this device.",
+            detail = "${meta.title} will be permanently removed from this device. This cannot be undone.",
             onDismiss = { deleteChat = null },
         ) {
             vm.deleteSession(meta.id)
@@ -1068,22 +1077,45 @@ private fun OptionsCard(
 }
 
 @Composable
-private fun MenuActionRow(label: String, icon: ImageVector, destructive: Boolean = false, onClick: () -> Unit) {
+private fun MenuActionRow(
+    label: String,
+    icon: ImageVector,
+    destructive: Boolean = false,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+    onClick: () -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
+    val contentColor = when {
+        !enabled -> colors.tertiary
+        destructive -> colors.error
+        else -> colors.onBackground
+    }
     Row(
         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
             .pressFeedback(interaction, pressedScale = 0.97f)
-            .clickable(interactionSource = interaction, indication = ripple(), onClick = onClick)
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(),
+                enabled = enabled,
+                onClick = onClick,
+            )
+            .then(if (selected) Modifier.semantics { this.selected = true } else Modifier)
             .heightIn(min = 48.dp).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
-        Icon(icon, null, tint = if (destructive) colors.error else colors.secondary, modifier = Modifier.size(19.dp))
+        Icon(
+            icon,
+            null,
+            tint = if (enabled && !destructive) colors.secondary else contentColor,
+            modifier = Modifier.size(19.dp),
+        )
         Text(
             label,
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            color = if (destructive) colors.error else colors.onBackground,
+            color = contentColor,
             modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
     }
@@ -1099,6 +1131,7 @@ private fun ChatOptionsMenu(
     onMove: (String?) -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
+    lifecycleMutationsEnabled: Boolean,
 ) {
     var mode by remember { mutableStateOf("menu") }
     val density = LocalDensity.current
@@ -1130,10 +1163,25 @@ private fun ChatOptionsMenu(
         if (mode == "move") {
             LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
                 item(key = "unsorted") {
-                    MenuActionRow("Unsorted", Icons.Outlined.Inbox) { onMove(null); onDismiss() }
+                    val current = meta.projectId == null
+                    MenuActionRow(
+                        label = if (current) "Unsorted (current)" else "Unsorted",
+                        icon = Icons.Outlined.Inbox,
+                        enabled = !current,
+                        selected = current,
+                    ) {
+                        onMove(null)
+                        onDismiss()
+                    }
                 }
                 items(projects, key = { "project:${it.id}" }) { project ->
-                    MenuActionRow(project.name, Icons.Outlined.Folder) {
+                    val current = meta.projectId == project.id
+                    MenuActionRow(
+                        label = if (current) "${project.name} (current)" else project.name,
+                        icon = Icons.Outlined.Folder,
+                        enabled = !current,
+                        selected = current,
+                    ) {
                         onMove(project.id)
                         onDismiss()
                     }
@@ -1148,16 +1196,31 @@ private fun ChatOptionsMenu(
             ) {
                 MenuActionRow(if (meta.pinned) "Unpin" else "Pin", Icons.Outlined.PushPin) { onPin(); onDismiss() }
                 MenuActionRow("Rename", Icons.Outlined.Edit) { onDismiss(); onRequestRename() }
-                MenuActionRow("Move to…", Icons.Outlined.Folder) { mode = "move" }
-                MenuActionRow(if (meta.archived) "Unarchive" else "Archive", Icons.Outlined.Archive) { onArchive(); onDismiss() }
-                MenuActionRow("Delete", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); onDismiss() }
+                if (lifecycleMutationsEnabled) {
+                    MenuActionRow("Move to…", Icons.Outlined.Folder) { mode = "move" }
+                    MenuActionRow(if (meta.archived) "Unarchive" else "Archive", Icons.Outlined.Archive) { onArchive(); onDismiss() }
+                    MenuActionRow("Delete", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); onDismiss() }
+                } else {
+                    Text(
+                        "Stop the agent to move, archive, or delete this chat.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ProjectOptionsMenu(project: Project, onDismiss: () -> Unit, onRequestRename: () -> Unit, onDelete: () -> Unit) {
+private fun ProjectOptionsMenu(
+    project: Project,
+    onDismiss: () -> Unit,
+    onNewChat: () -> Unit,
+    onRequestRename: () -> Unit,
+    onDelete: () -> Unit,
+) {
     Column(Modifier.fillMaxWidth().padding(6.dp)) {
         Text(
             project.name,
@@ -1167,6 +1230,7 @@ private fun ProjectOptionsMenu(project: Project, onDismiss: () -> Unit, onReques
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
         )
+        MenuActionRow("New chat", Icons.Filled.Add) { onDismiss(); onNewChat() }
         MenuActionRow("Rename", Icons.Outlined.Edit) { onDismiss(); onRequestRename() }
         MenuActionRow("Delete project", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); onDismiss() }
     }
@@ -1196,6 +1260,8 @@ private fun ConfirmDeleteDialog(
 @Composable
 private fun TextPromptDialog(title: String, placeholder: String, initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var value by remember { mutableStateOf(initial) }
+    val trimmed = value.trim()
+    val saveEnabled = renameSaveEnabled(initial, value)
     OptionsCard(
         title = title,
         onDismiss = onDismiss,
@@ -1205,7 +1271,9 @@ private fun TextPromptDialog(title: String, placeholder: String, initial: String
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Box(Modifier.weight(1f)) { PcButton("Cancel", filled = false, onClick = onDismiss) }
-            Box(Modifier.weight(1f)) { PcButton("Save") { if (value.isNotBlank()) onConfirm(value.trim()) } }
+            Box(Modifier.weight(1f)) {
+                PcButton("Save", enabled = saveEnabled) { onConfirm(trimmed) }
+            }
         }
     }
 }

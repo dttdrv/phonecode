@@ -49,7 +49,7 @@ Validate these labels and steps against the exact signed AAB before pasting them
    response and file content.
 8. Open the project drawer to show the project-scoped chat, then open **Settings** and inspect
    **Skills** and **MCP servers**. MCP setup is optional and not required for the test.
-9. Under a completed AI response, confirm the flag action labeled **Report AI response** is available
+9. Under a completed AI response, confirm the flag action labeled **Send safety feedback** is available
    in-app.
    Do not submit a test report unless the review credential owner has approved that test.
 10. Use the separate foreground-service script in [`foreground-service.md`](foreground-service.md)

@@ -1,6 +1,8 @@
 package dev.phonecode.app.ui
 
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -49,9 +51,14 @@ class OnboardingScreenshotTest {
             }
         }
         compose.waitForIdle()
+        compose.onNodeWithText("PhoneCode").assertIsDisplayed()
+        compose.onNodeWithText("Get started").assertIsDisplayed()
         compose.onRoot().captureRoboImage("screenshots/15-onboarding-welcome.png")
         compose.onNodeWithText("Get started").performClick()
+        compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
+        compose.onNodeWithText("Setup").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onRoot().captureRoboImage("screenshots/16-onboarding-connect.png")
     }
 }

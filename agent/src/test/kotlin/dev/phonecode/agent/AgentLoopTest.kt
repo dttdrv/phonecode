@@ -205,6 +205,25 @@ class AgentLoopTest {
         assertTrue(events.any { it is AgentEvent.ToolFinished && it.isError && it.output.contains("permission denied") })
     }
 
+    @Test fun deniedMutatingToolNeverAppearsToStartBeforePermission() = runTest {
+        val provider = ScriptedProvider(listOf(toolTurn(Triple(0, "c", "write")), finalText))
+        val tool = RecordingTool("write", mutating = true)
+        val events = mutableListOf<AgentEvent>()
+        val context = object : ToolContext {
+            override val workspacePath = "/ws"
+            override suspend fun requestPermission(tool: String, summary: String): Boolean {
+                assertFalse(events.any { it is AgentEvent.ToolStarted })
+                return false
+            }
+        }
+
+        loop(provider, listOf(tool), context = context).run(emptyList(), "write file").collect(events::add)
+
+        assertFalse(events.any { it is AgentEvent.ToolStarted })
+        assertEquals(0, tool.executions)
+        assertTrue(events.any { it is AgentEvent.ToolFinished && it.isError })
+    }
+
     @Test fun approvalRetainsTheCompleteToolArguments() = runTest {
         val middle = "middle-path-that-must-remain-visible"
         val args = """{"patch":"${"a".repeat(400)}$middle${"z".repeat(400)}"}"""
@@ -239,7 +258,10 @@ class AgentLoopTest {
         )
         var mode = AgentMode.PLAN
         val write = RecordingTool("write", mutating = true)
-        val planExit = PlanExitTool { mode = AgentMode.BUILD }
+        val planExit = PlanExitTool {
+            mode = AgentMode.BUILD
+            true
+        }
         val approving = object : ToolContext {
             override val workspacePath = "/ws"
             override suspend fun requestPermission(tool: String, summary: String) = true

@@ -13,7 +13,7 @@ release candidate; see the [AI-Generated Content policy](https://support.google.
 | --- | --- | --- |
 | Restricted-content instruction | `SystemBasePrompt.kt` instructs the agent not to generate child sexual exploitation, non-consensual sexual content, targeted harassment, encouragement of self-harm, scams, or deceptive official documents | BLOCKED — test against every review provider/model and adversarial prompt class |
 | Tool permission boundary | **Settings > Files & permissions > Approval policy** defaults to **Ask before each change**; mutating actions then show **Approve agent action?** with **Deny** and **Approve once**. **Allow changes automatically** suppresses workspace-change prompts, while reads outside the active workspace and user-linked folders always require explicit approval. Untrusted repository, web, MCP, and tool-result text is described as data rather than authority | BLOCKED — verify both approval modes and every release tool surface on device |
-| In-app report entry | Completed assistant responses expose **Report AI response** without sending the user to a browser | BLOCKED — verify visibility and accessibility in the Play-delivered build |
+| In-app feedback entry | Completed assistant responses expose **Send safety feedback** without sending the user to a browser | BLOCKED — verify visibility and accessibility in the Play-delivered build |
 | Report categories | Hate, harassment, sexual content, violence, self-harm, illegal or malicious activity, privacy, and other | BLOCKED — verify every category can be selected and submitted |
 | Report payload | Source builds a payload containing category, optional note, app version, and `android`; the AI response, prompt, files, credentials, tool activity, chat history, provider/model, and device identifier are not added by the app | BLOCKED — confirm with a release network capture and endpoint logs |
 | Endpoint response | HTTP 202 is treated as accepted and may display a returned reference; rate limits and other errors stay in the report flow | BLOCKED — exercise success, 429, timeout, offline, and server-error paths |
@@ -47,7 +47,7 @@ keys, or full model responses into this repository.
 
 ## Required report-flow evidence
 
-1. BLOCKED — TODO: record an unedited run from a completed AI response to **Report AI response**.
+1. BLOCKED — TODO: record an unedited run from a completed AI response to **Send safety feedback**.
 2. BLOCKED — TODO: verify all categories, the 1,000-character note limit, cancel, and offline retry.
 3. BLOCKED — TODO: with approved synthetic content only, submit one test report and record its
    returned reference, timestamp, endpoint environment, and redacted server receipt.

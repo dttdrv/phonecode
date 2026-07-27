@@ -7,6 +7,7 @@ import dev.phonecode.provider.domain.FailureKind
 sealed interface AgentEvent {
     data class TextDelta(val text: String) : AgentEvent
     data class ReasoningDelta(val text: String) : AgentEvent
+    data class ToolAwaitingApproval(val id: String, val name: String, val argsJson: String) : AgentEvent
     data class ToolStarted(val id: String, val name: String, val argsJson: String) : AgentEvent
     data class ToolFinished(val id: String, val output: String, val isError: Boolean) : AgentEvent
     data class Usage(val input: Long, val output: Long) : AgentEvent

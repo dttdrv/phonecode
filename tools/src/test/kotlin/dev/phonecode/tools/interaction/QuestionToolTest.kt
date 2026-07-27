@@ -59,4 +59,48 @@ class QuestionToolTest {
         val result = QuestionTool().execute(args("""{}"""), FakeContext { emptyList() })
         assertTrue(result.isError)
     }
+
+    @Test fun rejectsTooManyQuestions() = runBlocking {
+        val questions = List(9) { """{"question":"Question $it"}""" }.joinToString(",")
+
+        val result = QuestionTool().execute(
+            args("""{"questions":[$questions]}"""),
+            FakeContext { emptyList() },
+        )
+
+        assertTrue(result.isError)
+        assertTrue(result.output.contains("at most 8 questions"))
+    }
+
+    @Test fun rejectsTooManyOptions() = runBlocking {
+        val options = List(21) { """{"label":"Option $it"}""" }.joinToString(",")
+
+        val result = QuestionTool().execute(
+            args("""{"questions":[{"question":"Choose","options":[$options]}]}"""),
+            FakeContext { emptyList() },
+        )
+
+        assertTrue(result.isError)
+        assertTrue(result.output.contains("at most 20 options"))
+    }
+
+    @Test fun rejectsOversizedQuestionFields() = runBlocking {
+        val cases = listOf(
+            """{"questions":[{"question":"${"q".repeat(1001)}"}]}""" to
+                "question text exceeds 1000 characters",
+            """{"questions":[{"question":"Choose","header":"${"h".repeat(121)}"}]}""" to
+                "header exceeds 120 characters",
+            """{"questions":[{"question":"Choose","options":[{"label":"${"l".repeat(241)}"}]}]}""" to
+                "option 1 label exceeds 240 characters",
+            """{"questions":[{"question":"Choose","options":[{"label":"One","description":"${"d".repeat(1001)}"}]}]}""" to
+                "option 1 description exceeds 1000 characters",
+        )
+
+        cases.forEach { (json, expectedMessage) ->
+            val result = QuestionTool().execute(args(json), FakeContext { emptyList() })
+
+            assertTrue("Expected rejection for $expectedMessage", result.isError)
+            assertTrue(result.output, result.output.contains(expectedMessage))
+        }
+    }
 }

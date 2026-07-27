@@ -26,7 +26,9 @@ import dev.phonecode.app.agent.ChatViewModel
 import dev.phonecode.app.ui.chat.ChatScreen
 import dev.phonecode.app.ui.onboarding.ModelSetupScreen
 import dev.phonecode.app.ui.onboarding.OnboardingScreen
+import dev.phonecode.app.ui.onboarding.providerSetupFailureMessage
 import dev.phonecode.app.ui.theme.PhoneCodeTheme
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -113,14 +115,45 @@ class OnboardingFlowTest {
                     onConnectGitHub = {},
                     onCreateProject = {},
                     modelReady = true,
+                    errorMessage = "The saved provider could not be activated.",
                     onDone = {},
                     onSkip = {},
                 )
             }
         }
 
-        compose.onNodeWithText("Model connected · ready to use").assertIsDisplayed()
+        compose.onNodeWithText("Model configured on this device").assertIsDisplayed()
+        compose.onNodeWithText("The saved provider could not be activated.").assertIsDisplayed()
         compose.onAllNodesWithText("Explore without a model").assertCountEquals(0)
+    }
+
+    @Test
+    fun modelSetupKeepsConnectionFailuresInContextUntilDismissed() {
+        val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        compose.setContent {
+            PhoneCodeTheme(darkTheme = false) {
+                ModelSetupScreen(vm = vm, onBack = {}, onConfigured = {})
+            }
+        }
+
+        vm.surfaceError("Could not open the sign-in page.")
+
+        compose.onNodeWithText("Could not open the sign-in page.").assertIsDisplayed()
+        compose.onNodeWithText("Dismiss").performClick()
+        compose.onAllNodesWithText("Could not open the sign-in page.").assertCountEquals(0)
+    }
+
+    @Test
+    fun providerSetupFailureCopyDistinguishesStorageFromActivation() {
+        assertEquals(
+            "PhoneCode could not save this API key in secure storage.",
+            providerSetupFailureMessage(keySaved = false),
+        )
+        assertEquals(
+            "API key saved, but PhoneCode could not activate an available model for this provider.",
+            providerSetupFailureMessage(keySaved = true),
+        )
     }
 }
 

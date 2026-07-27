@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -11,11 +12,13 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
@@ -46,6 +49,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Robolectric smoke tests over the REAL app composition: launch PhoneCodeApp and press everything
@@ -307,6 +311,18 @@ Original instruction.
 
         compose.onNodeWithText("Deny").assertIsDisplayed()
         compose.onNodeWithText("Approve once").assertIsDisplayed()
+        val introOrder = compose.onNodeWithTag("approval-intro")
+            .fetchSemanticsNode().config[SemanticsProperties.TraversalIndex]
+        val riskOrder = compose.onNodeWithTag("approval-risk")
+            .fetchSemanticsNode().config[SemanticsProperties.TraversalIndex]
+        val detailsOrder = compose.onNodeWithTag("approval-details")
+            .fetchSemanticsNode().config[SemanticsProperties.TraversalIndex]
+        val actionsOrder = compose.onNodeWithTag("approval-actions")
+            .fetchSemanticsNode().config[SemanticsProperties.TraversalIndex]
+        assertTrue(
+            "Approval traversal must announce context, risk, details, then actions",
+            introOrder < riskOrder && riskOrder < detailsOrder && detailsOrder < actionsOrder,
+        )
         compose.onNodeWithText("Section 1 of 2").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Next section").performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithText("Section 2 of 2").performScrollTo().assertIsDisplayed()
@@ -762,6 +778,40 @@ Original instruction.
     }
 
     @Test
+    fun stoppingWhileApprovalIsPendingMarksTheToolStopped() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            isRunning = true,
+            lines = listOf(
+                ChatLine.ToolActivity(
+                    id = "approval-cancel",
+                    name = "write",
+                    status = ToolStatus.AWAITING_APPROVAL,
+                    detail = "Write release notes",
+                ),
+            ),
+            pendingPermission = PermissionRequest(
+                tool = "write",
+                summary = "Write release notes",
+            ),
+        )
+
+        app.chatViewModel.cancel()
+        compose.waitForIdle()
+
+        compose.onNodeWithContentDescription("Write stopped, Stopped").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Waiting to write file, Awaiting approval")
+            .assertCountEquals(0)
+    }
+
+    @Test
     fun terminalAgentErrorKeepsQueuedFollowUpsRecoverable() {
         dismissOnboardingIfPresent()
         val app = androidx.test.core.app.ApplicationProvider
@@ -833,9 +883,36 @@ Original instruction.
         state.value = state.value.copy(lines = listOf(ChatLine.Assistant("A response to review.")))
         compose.waitForIdle()
 
-        compose.onNodeWithContentDescription("Report AI response").performClick()
+        compose.onNodeWithContentDescription("Send safety feedback").performClick()
         compose.onNodeWithText("Hate").performClick().assertIsSelected()
         compose.onNodeWithContentDescription("Optional report details").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Cancel report").performClick()
+    }
+
+    @Test
+    fun safetyFeedbackDraftSurvivesActivityRecreation() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(lines = listOf(ChatLine.Assistant("A response to review.")))
+        compose.waitForIdle()
+
+        compose.onNodeWithContentDescription("Send safety feedback").performClick()
+        compose.onNodeWithText("Privacy").performClick().assertIsSelected()
+        compose.onNodeWithContentDescription("Optional report details")
+            .performTextInput("The response exposed private information.")
+
+        compose.activityRule.scenario.recreate()
+
+        compose.onNodeWithText("Send safety feedback").assertIsDisplayed()
+        compose.onNodeWithText("Privacy").assertIsSelected()
+        compose.onNodeWithContentDescription("Optional report details")
+            .assertTextContains("The response exposed private information.")
         compose.onNodeWithContentDescription("Cancel report").performClick()
     }
 
@@ -863,7 +940,7 @@ Original instruction.
         )
 
         try {
-            compose.onNodeWithContentDescription("Report AI response").performClick()
+            compose.onNodeWithContentDescription("Send safety feedback").performClick()
             compose.onNodeWithText("Hate").performClick()
             compose.onNodeWithText("Send").performClick()
             compose.waitUntil(5_000) {
@@ -907,15 +984,73 @@ Original instruction.
         )
 
         try {
-            compose.onNodeWithContentDescription("Report AI response").performClick()
+            compose.onNodeWithContentDescription("Send safety feedback").performClick()
             compose.onNodeWithText("Hate").performClick()
             compose.onNodeWithText("Send").performClick()
             assertTrue(started.await(5, TimeUnit.SECONDS))
 
             compose.onNodeWithContentDescription("Cancel report").assertIsNotEnabled()
-            compose.onNodeWithText("Report AI response").assertIsDisplayed()
+            compose.onNodeWithText("Send safety feedback").assertIsDisplayed()
             compose.onNodeWithText("Sending…").assertIsDisplayed()
-            compose.onNodeWithContentDescription("Report submission in progress").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Feedback submission in progress").assertIsDisplayed()
+        } finally {
+            release.countDown()
+            restoreReportClient(vm)
+        }
+    }
+
+    @Test
+    fun inFlightSafetyFeedbackSurvivesActivityRecreationWithoutDuplicateSubmission() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(lines = listOf(ChatLine.Assistant("A response to review.")))
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val requestCount = AtomicInteger()
+        val acceptedCount = AtomicInteger()
+        replaceReportClient(
+            vm,
+            OkHttpClient.Builder().addInterceptor { chain ->
+                val requestNumber = requestCount.incrementAndGet()
+                started.countDown()
+                release.await(10, TimeUnit.SECONDS)
+                acceptedCount.incrementAndGet()
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(202)
+                    .message("Accepted")
+                    .body("""{"id":"report-$requestNumber"}""".toResponseBody())
+                    .build()
+            }.build(),
+        )
+
+        try {
+            compose.onNodeWithContentDescription("Send safety feedback").performClick()
+            compose.onNodeWithText("Hate").performClick()
+            compose.onNodeWithText("Send").performClick()
+            assertTrue(started.await(5, TimeUnit.SECONDS))
+
+            compose.activityRule.scenario.recreate()
+            compose.waitForIdle()
+
+            compose.onNodeWithText("Sending…").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Feedback submission in progress").assertIsDisplayed()
+            compose.onAllNodesWithText("Send").assertCountEquals(0)
+            assertEquals(1, requestCount.get())
+
+            release.countDown()
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithText("Feedback sent").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Feedback sent").assertIsDisplayed()
+            assertEquals(1, requestCount.get())
+            assertEquals(1, acceptedCount.get())
         } finally {
             release.countDown()
             restoreReportClient(vm)
@@ -1070,6 +1205,28 @@ Original instruction.
     }
 
     @Test
+    fun importLocksTransferControlsWhileReplacementIsInProgress() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("Export & import").performClick()
+        state.value = state.value.copy(sessionLoading = true)
+
+        compose.onNodeWithText("Importing backup…").assertIsDisplayed()
+        compose.onNodeWithText("Export chats & settings").assertIsNotEnabled()
+        compose.onNodeWithText("Import from a file").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Back").assertIsNotEnabled()
+    }
+
+    @Test
     fun skillsAndMcpExposeManagementControls() {
         dismissOnboardingIfPresent()
         compose.onNodeWithContentDescription("Menu").performClick()
@@ -1108,7 +1265,7 @@ Original instruction.
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithText("Providers").performClick()
-        compose.onNodeWithText("ChatGPT").performClick()
+        compose.onNodeWithText("ChatGPT").performScrollTo().performClick()
 
         compose.onNodeWithText("Disconnect").performClick()
         compose.onNodeWithText("Disconnect ChatGPT?").assertIsDisplayed()

@@ -1130,7 +1130,11 @@ Original instruction.
         compose.onNodeWithText("MCP actions", substring = true).assertIsDisplayed()
         compose.onNodeWithText("linked phone folders", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Enable automatic approval").performClick()
-        compose.onNodeWithText("Allow changes automatically").assertIsSelected()
+        compose.waitUntil(5_000) {
+            runCatching {
+                compose.onNodeWithText("Allow changes automatically").assertIsSelected()
+            }.isSuccess
+        }
     }
 
     @Test

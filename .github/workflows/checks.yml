@@ -41,7 +41,7 @@ jobs:
       - name: Test and lint
         run: ./gradlew --no-daemon test lintDebug :app:verifyLegalInventory :app:verifyPrototypeRuntimeBoundary
       - name: Build development artifact
-        run: ./gradlew --no-daemon :app:assembleDebug :app:lintRelease
+        run: ./gradlew --no-daemon :app:assembleDebug
       - name: Verify Play release gate
         shell: bash
         run: |

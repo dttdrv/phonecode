@@ -83,5 +83,21 @@ class ReleaseRuntimePackagingTest {
         assertTrue(build.contains("""release-evidence/0.5.1/guest/sources"""))
         assertTrue(build.contains("""play/0.5.1/submission-evidence.json"""))
         assertTrue(File(root, "play/0.5.1/README.md").isFile)
+
+        listOf(
+            "native-runtime/prepare-release-host-evidence.sh",
+            "native-runtime/stage-release-host-runtime.sh",
+            "legal/generate-android-jvm-evidence.py",
+            "legal/generate-mermaid-evidence.py",
+            "legal/release/android-jvm-SBOM.cdx.json",
+            "legal/release/mermaid-SBOM.cdx.json",
+            "guest-runtime/build-guest.sh",
+            "guest-runtime/packages.lock",
+            "guest-runtime/tests/guest-build-test.sh",
+        ).forEach { relativePath ->
+            val text = File(root, relativePath).readText()
+            assertFalse("$relativePath still contains the previous release identity", text.contains("0.5.0"))
+            assertTrue("$relativePath does not contain the 0.5.1 release identity", text.contains("0.5.1"))
+        }
     }
 }

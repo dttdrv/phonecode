@@ -22,4 +22,4 @@ ssl_client|1.37.0-r31|busybox@c3ef5d10e6ef6528852c51f0564963e2f8c1be19|UNRETAINE
 zlib|1.3.2-r0|zlib@f248b33b5943c7dc69bf691031d7612ab2e8ed93|UNRETAINED
 busybox-static|1.37.0-r31|busybox@c3ef5d10e6ef6528852c51f0564963e2f8c1be19|UNRETAINED
 linux-virt|6.18.35-r0|linux-lts@954487c7d11ef901fdf7350f9fa8638e7a45df4e|UNRETAINED
-phonecode-guestd|0.5.0-unbuilt|phonecode-source@UNBOUND|UNRETAINED
+phonecode-guestd|0.5.1-unbuilt|phonecode-source@UNBOUND|UNRETAINED

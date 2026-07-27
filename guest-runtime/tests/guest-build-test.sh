@@ -97,9 +97,9 @@ trap 'rm -rf "$FIXTURE"' EXIT HUP INT TERM
 "$BUILDER" --make-test-fixture "$FIXTURE/valid"
 "$BUILDER" --validate-release-tree "$FIXTURE/valid"
 fixture_digest=$(shasum -a 256 "$FIXTURE/valid/sources/fixture.txt" | awk '{print $1}')
-grep -qx "phonecode-guestd|0.5.0|fixture|$fixture_digest" \
+grep -qx "phonecode-guestd|0.5.1|fixture|$fixture_digest" \
   "$FIXTURE/valid/PACKAGES.lock" ||
-  fail "phonecode-guestd package contract is not release 0.5.0"
+  fail "phonecode-guestd package contract is not release 0.5.1"
 mkdir -p "$FIXTURE/cache/sha256"
 cp "$FIXTURE/valid/sources/fixture.txt" "$FIXTURE/cache/sha256/$fixture_digest"
 "$BUILDER" --verify-cache "$FIXTURE/valid" "$FIXTURE/cache"
@@ -205,7 +205,7 @@ expect_rejected "CycloneDX SBOM is invalid" \
   "$BUILDER" --validate-release-tree "$FIXTURE/wrong-sbom"
 
 cp -pR "$FIXTURE/valid" "$FIXTURE/incomplete-notice"
-sed -i.bak '/^Package: phonecode-guestd 0.5.0$/d' \
+sed -i.bak '/^Package: phonecode-guestd 0.5.1$/d' \
   "$FIXTURE/incomplete-notice/licenses/NOTICE"
 rm "$FIXTURE/incomplete-notice/licenses/NOTICE.bak"
 expect_rejected "NOTICE package coverage is not exact" \

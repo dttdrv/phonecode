@@ -5394,10 +5394,10 @@
   ],
   "metadata": {
     "component": {
-      "bom-ref": "pkg:generic/phonecode-android-runtime@0.5.0",
+      "bom-ref": "pkg:generic/phonecode-android-runtime@0.5.1",
       "name": "PhoneCode Android/JVM release runtime graph",
       "type": "application",
-      "version": "0.5.0"
+      "version": "0.5.1"
     },
     "properties": [
       {

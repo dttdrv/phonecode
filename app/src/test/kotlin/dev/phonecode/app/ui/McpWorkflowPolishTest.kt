@@ -141,6 +141,23 @@ class McpWorkflowPolishTest {
     }
 
     @Test
+    fun changingAnEnabledServerRequiresAnotherSuccessfulTestBeforeSave() {
+        stateFlow().value = stateFlow().value.copy(
+            mcpServers = mapOf(
+                "Docs" to McpServerConfig(url = "https://old.example/mcp", enabled = true),
+            ),
+        )
+        showMcp()
+        compose.onNodeWithContentDescription("Docs details").performClick()
+
+        compose.onNodeWithContentDescription("Remote URL")
+            .performTextReplacement("https://new.example/mcp")
+
+        compose.onNodeWithText("Test this changed configuration", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Save").assertIsNotEnabled()
+    }
+
+    @Test
     fun connectedServerCanRevealAndSearchItsCompleteToolInventory() {
         val tools = (1..35).map { index ->
             McpToolDef(

@@ -43,7 +43,7 @@ expected_package_version() {
     libcrypto3|libssl3) printf '3.5.7-r0\n' ;;
     linux-virt) printf '6.18.35-r0\n' ;;
     musl|musl-utils) printf '1.2.6-r2\n' ;;
-    phonecode-guestd) printf '0.5.0\n' ;;
+    phonecode-guestd) printf '0.5.1\n' ;;
     scanelf) printf '1.3.9-r1\n' ;;
     zlib) printf '1.3.2-r0\n' ;;
     *) return 1 ;;
@@ -422,7 +422,7 @@ ssl_client|1.37.0-r31
 zlib|1.3.2-r0
 busybox-static|1.37.0-r31
 linux-virt|6.18.35-r0
-phonecode-guestd|0.5.0
+phonecode-guestd|0.5.1
 EOF
   } >"$tree/PACKAGES.lock"
   {

@@ -9,6 +9,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -361,6 +362,7 @@ class SettingsUsabilityTest {
         try {
             showSettings("skills")
             compose.onNodeWithText("Create skill").performClick()
+            compose.onNodeWithText("Save").assertIsNotEnabled()
             compose.onNodeWithContentDescription("Skill name").performTextReplacement("release-guardian")
             compose.onNodeWithContentDescription("When to use this skill")
                 .performTextReplacement("Checks a release before it is published.")

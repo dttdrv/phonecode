@@ -91,6 +91,8 @@ class OnboardingFlowTest {
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("screenshots/25-model-setup.png")
         compose.onNodeWithText("OpenAI").performClick()
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
         compose.onNodeWithText("Save and continue").assertIsNotEnabled()
         compose.onNodeWithContentDescription("Show OpenAI API key").assertIsDisplayed()
         compose.onRoot().captureRoboImage("screenshots/27-model-setup-api-key.png")

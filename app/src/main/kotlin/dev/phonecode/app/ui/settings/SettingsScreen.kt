@@ -598,7 +598,9 @@ private fun AgentToolsPage(vm: ChatViewModel, onBack: () -> Unit) {
     val state by collectSettingsState(vm)
     var query by rememberSaveable { mutableStateOf("") }
     var accessFilter by rememberSaveable { mutableStateOf(AgentToolAccessFilter.ALL) }
-    val inventory = remember(state.mcpToolCount, state.skills.size) { vm.availableTools() }
+    // Recompute from the current registry: tool identities can change while MCP/skill counts stay
+    // constant (for example, reconnecting a different server with the same number of tools).
+    val inventory = vm.availableTools()
     val summary = remember(inventory) { agentToolInventorySummary(inventory) }
     val tools = remember(inventory, query, accessFilter) {
         filterAgentTools(inventory, query, accessFilter)
@@ -1540,9 +1542,17 @@ private fun McpServerPage(
     } else {
         url != baseline.url || headers != initialHeaders || timeout != baseline.timeout.toString() || enabled != baseline.enabled
     }
+    val connectionChanged = if (isNew) {
+        name.isNotBlank() || url.isNotBlank() || headers.isNotBlank() || timeout != baseline.timeout.toString()
+    } else {
+        url != baseline.url || headers != initialHeaders || timeout != baseline.timeout.toString()
+    }
     val validationError = validationMessage()
     val canTest = !testing && !saving && !externalChange
-    val canSave = canTest && changed && validationError == null
+    val enabledDraftNeedsReview = enabled && (isNew || !baseline.enabled || connectionChanged)
+    val reviewedCurrentDraft = testResult?.connected == true
+    val canSave =
+        canTest && changed && validationError == null && (!enabledDraftNeedsReview || reviewedCurrentDraft)
     // Turning a server off is always available. Turning one on requires a successful probe for
     // this exact draft, including servers that were previously saved in the Off state.
     val canEnable = enabled || testResult?.connected == true
@@ -1651,14 +1661,19 @@ private fun McpServerPage(
             ErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
         }
         Spacer(Modifier.height(Spacing.xs))
-        ToggleRow(
-            "Enabled",
-            sub = if (!canEnable) "Test successfully before enabling" else null,
-            checked = enabled,
-            enabled = canEnable,
-        ) {
-            enabled = it
-            error = null
+        PcGroup {
+            ToggleRow(
+                "Enabled",
+                sub = if (!canEnable) "Test successfully before enabling" else null,
+                checked = enabled,
+                enabled = canEnable,
+            ) {
+                enabled = it
+                error = null
+            }
+        }
+        if (enabledDraftNeedsReview && !reviewedCurrentDraft) {
+            Note("Test this changed configuration successfully before saving it enabled.")
         }
         if (isNew) {
             Note(
@@ -2218,22 +2233,24 @@ private fun SkillDetailPage(vm: ChatViewModel, skill: ManagedSkill, onEdit: () -
         skill.issue?.let { ErrorText(it) }
         manifest?.description?.takeIf { it.isNotBlank() }?.let { Note(it) }
         if (manifest != null && skill.status != SkillStatus.SHADOWED && skill.status != SkillStatus.INVALID) {
-            ToggleRow(
-                "Enabled",
-                sub = "Applies immediately to the current agent session",
-                checked = skill.status != SkillStatus.DISABLED,
-                enabled = !toggling && deleteOperation?.running != true,
-            ) { target ->
-                vm.clearError()
-                toggleError = null
-                toggling = true
-                scope.launch {
-                    vm.setSkillEnabledAndWait(skill.id, target).onFailure { failure ->
-                        toggleError = "Could not update ${skill.name}: ${
-                            failure.message ?: "storage update failed"
-                        }"
+            PcGroup {
+                ToggleRow(
+                    "Enabled",
+                    sub = "Applies immediately to the current agent session",
+                    checked = skill.status != SkillStatus.DISABLED,
+                    enabled = !toggling && deleteOperation?.running != true,
+                ) { target ->
+                    vm.clearError()
+                    toggleError = null
+                    toggling = true
+                    scope.launch {
+                        vm.setSkillEnabledAndWait(skill.id, target).onFailure { failure ->
+                            toggleError = "Could not update ${skill.name}: ${
+                                failure.message ?: "storage update failed"
+                            }"
+                        }
+                        toggling = false
                     }
-                    toggling = false
                 }
             }
             when {
@@ -2505,9 +2522,18 @@ private fun SkillEditorPage(
         }
         error?.let { ErrorText(it, style = MaterialTheme.typography.bodySmall) }
         Spacer(Modifier.height(Spacing.s))
+        val parsedDraft = parseSkillMarkdown(content)
+        val draftIsValid = if (advancedSource) {
+            parsedDraft != null &&
+                parsedDraft.name == name &&
+                parsedDraft.description.isNotBlank() &&
+                parsedDraft.body.isNotBlank()
+        } else {
+            name.isNotBlank() && description.isNotBlank() && instructions.isNotBlank()
+        }
         PcButton(
             if (saving) "Saving…" else "Save",
-            enabled = !loading && !saving && !unavailable && !conflict && baselineReady && name.isNotBlank() && content.isNotBlank(),
+            enabled = !loading && !saving && !unavailable && !conflict && baselineReady && draftIsValid,
         ) {
             val parsed = parseSkillMarkdown(content)
             if (parsed == null || parsed.name != name || parsed.description.isBlank() || parsed.body.isBlank()) {

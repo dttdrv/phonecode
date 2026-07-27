@@ -80,7 +80,7 @@ internal class ExtensionConfigWriteTool(
     private val projectDirectory: () -> File,
 ) : Tool {
     override val name = "extension_write"
-    override val description = "Add, update, enable, disable, or remove an MCP server, or write and remove bounded global or project skill files."
+    override val description = "Add, update, disable, or remove an MCP server, or write and remove bounded global or project skill files. MCP servers must be tested and enabled in Settings."
     override val promptSnippet = "manage MCP servers and global or project skill files"
     override val mutating = true
     override val parameters = buildJsonObject {
@@ -107,8 +107,14 @@ internal class ExtensionConfigWriteTool(
         "set_mcp_enabled" -> {
             val name = args.requiredName() ?: return ToolResult("extension_write: name is required", true)
             val enabled = args.boolean("enabled") ?: return ToolResult("extension_write: enabled is required", true)
+            if (enabled) {
+                return ToolResult(
+                    "extension_write: test and enable MCP servers from Settings after reviewing their tools",
+                    true,
+                )
+            }
             repository.setMcpEnabled(name, enabled)
-                .fold({ ToolResult("MCP server ${if (enabled) "enabled" else "disabled"}") }, { ToolResult("extension_write: ${it.message}", true) })
+                .fold({ ToolResult("MCP server disabled") }, { ToolResult("extension_write: ${it.message}", true) })
         }
         "reset_mcp_config" -> repository.replaceMcpConfig("""{"mcp":{}}""")
             .fold({ ToolResult("MCP configuration reset") }, { ToolResult("extension_write: ${it.message}", true) })
@@ -130,6 +136,12 @@ internal class ExtensionConfigWriteTool(
 
     private fun upsertMcp(args: JsonObject): ToolResult {
         if ("headers" in args) return ToolResult("extension_write: set MCP header values in Settings", true)
+        if (args.boolean("enabled") == true) {
+            return ToolResult(
+                "extension_write: test and enable MCP servers from Settings after reviewing their tools",
+                true,
+            )
+        }
         val name = args.requiredName() ?: return ToolResult("extension_write: name is required", true)
         val loaded = repository.loadMcpConfigState()
         if (loaded is McpConfigLoad.Invalid) return ToolResult("extension_write: ${loaded.message}", true)
@@ -143,13 +155,16 @@ internal class ExtensionConfigWriteTool(
         val server = McpServerConfig(
             url = url,
             headers = current?.headers.orEmpty(),
-            // New remote servers stay out of the runtime until their discovered tools have been
-            // reviewed. Existing servers preserve their state and callers may explicitly enable.
-            enabled = args.boolean("enabled") ?: current?.enabled ?: false,
+            // Agent-authored connection changes always leave the server out of the runtime. The
+            // Settings review flow owns probing the exact draft and enabling it.
+            enabled = false,
             timeout = timeout,
         )
         return repository.upsertMcpServer(original, name, server)
-            .fold({ ToolResult("MCP server saved") }, { ToolResult("extension_write: ${it.message}", true) })
+            .fold(
+                { ToolResult("MCP server saved disabled; test and enable it from Settings") },
+                { ToolResult("extension_write: ${it.message}", true) },
+            )
     }
 }
 

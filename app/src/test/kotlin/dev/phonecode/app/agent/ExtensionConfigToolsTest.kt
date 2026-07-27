@@ -111,6 +111,57 @@ class ExtensionConfigToolsTest {
         assertFalse(repository.loadMcpConfig().mcp.getValue("docs").enabled)
     }
 
+    @Test fun writeToolCannotEnableOrReconfigureAnEnabledMcpWithoutReview() = withTools { repository, project ->
+        repository.replaceMcpConfig(
+            """{"mcp":{"docs":{"type":"remote","url":"https://old.example/mcp","enabled":true}}}""",
+        ).getOrThrow()
+        val tool = ExtensionConfigWriteTool(repository) { project }
+
+        val directEnable = runBlocking {
+            tool.execute(
+                buildJsonObject {
+                    put("action", "set_mcp_enabled")
+                    put("name", "docs")
+                    put("enabled", true)
+                },
+                Context,
+            )
+        }
+        val changedEndpoint = runBlocking {
+            tool.execute(
+                buildJsonObject {
+                    put("action", "upsert_mcp")
+                    put("name", "docs")
+                    put("url", "https://new.example/mcp")
+                },
+                Context,
+            )
+        }
+
+        assertTrue(directEnable.isError)
+        assertTrue(directEnable.output.contains("Settings"))
+        assertFalse(changedEndpoint.isError)
+        assertFalse(repository.loadMcpConfig().mcp.getValue("docs").enabled)
+    }
+
+    @Test fun writeToolRejectsEnabledUpsertInsteadOfBypassingToolReview() = withTools { repository, project ->
+        val result = runBlocking {
+            ExtensionConfigWriteTool(repository) { project }.execute(
+                buildJsonObject {
+                    put("action", "upsert_mcp")
+                    put("name", "docs")
+                    put("url", "https://example.com/mcp")
+                    put("enabled", true)
+                },
+                Context,
+            )
+        }
+
+        assertTrue(result.isError)
+        assertTrue(result.output.contains("Settings"))
+        assertTrue(repository.loadMcpConfig().mcp.isEmpty())
+    }
+
     private fun withTools(block: (McpSkillRepository, java.io.File) -> Unit) {
         val root = Files.createTempDirectory("phonecode-extension-tools").toFile()
         try {

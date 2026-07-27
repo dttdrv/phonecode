@@ -661,9 +661,9 @@ def main() -> None:
         "metadata": {
             "component": {
                 "type": "application",
-                "bom-ref": "pkg:generic/phonecode-android-runtime@0.5.0",
+                "bom-ref": "pkg:generic/phonecode-android-runtime@0.5.1",
                 "name": "PhoneCode Android/JVM release runtime graph",
-                "version": "0.5.0",
+                "version": "0.5.1",
             },
             "properties": [
                 {"name": "phonecode:configuration", "value": "releaseRuntimeClasspath"},

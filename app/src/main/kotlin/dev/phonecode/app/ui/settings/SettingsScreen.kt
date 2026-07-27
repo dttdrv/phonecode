@@ -7,11 +7,17 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -29,6 +35,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
@@ -166,6 +173,39 @@ private fun depthOf(page: String): Int = when {
     else -> 1
 }
 
+private enum class SettingsNestedPage(val depth: Int) {
+    LIST(0),
+    DETAIL(1),
+    EDITOR(2),
+}
+
+private fun nestedSettingsTransition(
+    initial: SettingsNestedPage,
+    target: SettingsNestedPage,
+    predictiveCommit: Boolean,
+): ContentTransform {
+    if (predictiveCommit) return EnterTransition.None togetherWith ExitTransition.None
+
+    val pop = target.depth < initial.depth
+    return (if (pop) {
+        (
+            slideInHorizontally(tween(260, easing = PhoneEasings.easeOut)) { -it / 4 } +
+                fadeIn(tween(160, easing = PhoneEasings.easeOut))
+            ) togetherWith (
+            slideOutHorizontally(tween(220, easing = PhoneEasings.easeOut)) { it } +
+                fadeOut(tween(120, easing = PhoneEasings.easeOut))
+            )
+    } else {
+        (
+            slideInHorizontally(tween(260, easing = PhoneEasings.easeOut)) { it } +
+                fadeIn(tween(160, easing = PhoneEasings.easeOut))
+            ) togetherWith (
+            slideOutHorizontally(tween(220, easing = PhoneEasings.easeInOut)) { -it / 4 } +
+                fadeOut(tween(120, easing = PhoneEasings.easeOut))
+            )
+    }).apply { targetContentZIndex = if (pop) -1f else 1f }
+}
+
 private fun revisionOf(value: String): String = MessageDigest.getInstance("SHA-256")
     .digest(value.toByteArray(Charsets.UTF_8))
     .joinToString("") { "%02x".format(it) }
@@ -259,10 +299,10 @@ fun SettingsScreen(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () 
                     } else {
                         val pop = depthOf(targetState) < depthOf(initialState)
                         (if (pop) {
-                            (slideInHorizontally(tween(260, easing = PhoneEasings.easeInOut)) { -it / 4 }) togetherWith
+                            (slideInHorizontally(tween(260, easing = PhoneEasings.easeOut)) { -it / 4 }) togetherWith
                                 slideOutHorizontally(tween(220, easing = PhoneEasings.easeInOut)) { it }
                         } else {
-                            (slideInHorizontally(tween(260, easing = PhoneEasings.easeInOut)) { it }) togetherWith
+                            (slideInHorizontally(tween(260, easing = PhoneEasings.easeOut)) { it }) togetherWith
                                 slideOutHorizontally(tween(220, easing = PhoneEasings.easeInOut)) { -it / 4 }
                         }).apply { targetContentZIndex = if (pop) -1f else 1f }
                     }
@@ -354,19 +394,26 @@ private fun Page(
     val colors = MaterialTheme.colorScheme
     val scrollState = rememberScrollState()
     val scrolled by remember { derivedStateOf { scrollState.value > 0 } }
-    Box(Modifier.fillMaxSize().background(colors.background).statusBarsPadding()) {
+    val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val bottomInset = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+    Box(Modifier.fillMaxSize().background(colors.background)) {
         Column(
             Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight()
                 .contentVerticalScroll(scrollState)
                 .background(colors.background)
-                .padding(start = Spacing.m, end = Spacing.m, top = Spacing.navBarHeight + 4.dp)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+                .padding(
+                    start = Spacing.m,
+                    end = Spacing.m,
+                    top = statusInset + Spacing.navBarHeight + 4.dp,
+                ),
         ) {
             content()
-            Spacer(Modifier.height(Spacing.xxl))
+            Spacer(Modifier.height(Spacing.xxl + bottomInset))
         }
         Row(
-            Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth().height(Spacing.navBarHeight)
+            Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth()
+                .statusBarsPadding()
+                .height(Spacing.navBarHeight)
                 .shadow(if (scrolled) 2.dp else 0.dp, RectangleShape, clip = false)
                 .background(colors.background)
                 .padding(horizontal = 8.dp),
@@ -1185,11 +1232,18 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
     var toggleErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var reconnecting by remember { mutableStateOf(false) }
     var reconnectError by remember { mutableStateOf<String?>(null) }
+    var predictiveCommit by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     val closeEditor = {
         if (editorDirty) confirmDiscard = true else editing = null
     }
-    val detailBackMotion = rememberPredictiveBackMotion(enabled = editing != null && !confirmDiscard) { closeEditor() }
+    val detailBackMotion = rememberPredictiveBackMotion(enabled = editing != null && !confirmDiscard) {
+        predictiveCommit = true
+        closeEditor()
+    }
+    LaunchedEffect(editing) {
+        predictiveCommit = false
+    }
     DisposableEffect(editing) {
         onNestedBackActive(editing != null)
         onDispose { onNestedBackActive(false) }
@@ -1332,18 +1386,31 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
         }
     }
     }
-    editing?.let { initialName ->
-        Box(Modifier.fillMaxSize().predictiveBackTransform(detailBackMotion).background(colors.background)) {
-            McpServerPage(
-                vm = vm,
-                initialName = initialName,
-                initial = state.mcpServers[initialName] ?: McpServerConfig(),
-                existingNames = state.mcpServers.keys,
-                snapshot = state.mcpSnapshots[initialName],
-                onBack = closeEditor,
-                onDirtyChange = { editorDirty = it },
-                onSaved = { editorDirty = false; editing = null },
+    AnimatedContent(
+        targetState = editing,
+        transitionSpec = {
+            nestedSettingsTransition(
+                initial = if (initialState == null) SettingsNestedPage.LIST else SettingsNestedPage.EDITOR,
+                target = if (targetState == null) SettingsNestedPage.LIST else SettingsNestedPage.EDITOR,
+                predictiveCommit = predictiveCommit,
             )
+        },
+        label = "mcpNestedPage",
+        modifier = Modifier.fillMaxSize(),
+    ) { initialName ->
+        if (initialName != null) {
+            Box(Modifier.fillMaxSize().predictiveBackTransform(detailBackMotion).background(colors.background)) {
+                McpServerPage(
+                    vm = vm,
+                    initialName = initialName,
+                    initial = state.mcpServers[initialName] ?: McpServerConfig(),
+                    existingNames = state.mcpServers.keys,
+                    snapshot = state.mcpSnapshots[initialName],
+                    onBack = closeEditor,
+                    onDirtyChange = { editorDirty = it },
+                    onSaved = { editorDirty = false; editing = null },
+                )
+            }
         }
     }
     if (confirmDiscard) {
@@ -1735,10 +1802,14 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     var pendingToggles by remember { mutableStateOf<Set<String>>(emptySet()) }
     var toggleErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var predictiveCommit by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
-    val selectedSkill = state.skills.firstOrNull { it.id == selectedId }
-    val editorSkill = state.skills.firstOrNull { it.id == editingId }
-    val nested = selectedSkill != null || editingId != null
+    val nestedTarget = when {
+        editingId != null -> SettingsNestedPage.EDITOR to editingId
+        selectedId != null -> SettingsNestedPage.DETAIL to selectedId
+        else -> SettingsNestedPage.LIST to null
+    }
+    val nested = nestedTarget.first != SettingsNestedPage.LIST
     val closeNested = {
         if (editingId != null) {
             if (editorDirty) confirmDiscard = true else editingId = null
@@ -1746,7 +1817,13 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
             selectedId = null
         }
     }
-    val detailBackMotion = rememberPredictiveBackMotion(enabled = nested && !confirmDiscard) { closeNested() }
+    val detailBackMotion = rememberPredictiveBackMotion(enabled = nested && !confirmDiscard) {
+        predictiveCommit = true
+        closeNested()
+    }
+    LaunchedEffect(nestedTarget) {
+        predictiveCommit = false
+    }
     DisposableEffect(nested) {
         onNestedBackActive(nested)
         onDispose { onNestedBackActive(false) }
@@ -1851,28 +1928,71 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
         Note("Skill files reload automatically. The agent can create and edit global or project skills with your permission.")
     }
     }
-    selectedSkill?.let { skill ->
-        val modifier = if (editingId == null) Modifier.predictiveBackTransform(detailBackMotion) else Modifier
-        Box(Modifier.fillMaxSize().then(modifier).background(colors.background)) {
-            SkillDetailPage(
-                vm,
-                skill,
-                onEdit = { editorDirty = false; editingId = skill.id },
-                onBack = { selectedId = null },
-            )
+    if (detailBackMotion.active && nestedTarget.first == SettingsNestedPage.EDITOR) {
+        state.skills.firstOrNull { it.id == selectedId }?.let { parentSkill ->
+            Box(
+                Modifier.fillMaxSize()
+                    .clearAndSetSemantics {}
+                    .background(colors.background),
+            ) {
+                SkillDetailPage(
+                    vm = vm,
+                    skill = parentSkill,
+                    onEdit = {},
+                    onBack = {},
+                )
+            }
         }
     }
-    editingId?.let { id ->
-        Box(Modifier.fillMaxSize().predictiveBackTransform(detailBackMotion).background(colors.background)) {
-            SkillEditorPage(
-                vm = vm,
-                skillId = id.takeUnless { it == NEW_SKILL_ID },
-                skill = editorSkill,
-                isNew = id == NEW_SKILL_ID,
-                onDirtyChange = { editorDirty = it },
-                onBack = closeNested,
-                onSaved = { editorDirty = false; editingId = null },
+    AnimatedContent(
+        targetState = nestedTarget,
+        transitionSpec = {
+            nestedSettingsTransition(
+                initial = initialState.first,
+                target = targetState.first,
+                predictiveCommit = predictiveCommit,
             )
+        },
+        label = "skillNestedPage",
+        modifier = Modifier.fillMaxSize(),
+    ) { target ->
+        val id = target.second
+        when (target.first) {
+            SettingsNestedPage.LIST -> Unit
+            SettingsNestedPage.DETAIL -> {
+                val skill = state.skills.firstOrNull { it.id == id } ?: return@AnimatedContent
+                Box(
+                    Modifier.fillMaxSize()
+                        .predictiveBackTransform(detailBackMotion)
+                        .background(colors.background),
+                ) {
+                    SkillDetailPage(
+                        vm,
+                        skill,
+                        onEdit = { editorDirty = false; editingId = skill.id },
+                        onBack = { selectedId = null },
+                    )
+                }
+            }
+            SettingsNestedPage.EDITOR -> {
+                val skillId = id ?: return@AnimatedContent
+                val editorSkill = state.skills.firstOrNull { it.id == skillId }
+                Box(
+                    Modifier.fillMaxSize()
+                        .predictiveBackTransform(detailBackMotion)
+                        .background(colors.background),
+                ) {
+                    SkillEditorPage(
+                        vm = vm,
+                        skillId = skillId.takeUnless { it == NEW_SKILL_ID },
+                        skill = editorSkill,
+                        isNew = skillId == NEW_SKILL_ID,
+                        onDirtyChange = { editorDirty = it },
+                        onBack = closeNested,
+                        onSaved = { editorDirty = false; editingId = null },
+                    )
+                }
+            }
         }
     }
     if (confirmDiscard) {

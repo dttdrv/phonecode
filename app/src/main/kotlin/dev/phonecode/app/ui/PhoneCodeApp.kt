@@ -28,6 +28,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -37,10 +38,13 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -553,6 +557,8 @@ private fun Sidebar(
     val listCanScroll by remember { derivedStateOf { listState.canScrollBackward || listState.canScrollForward } }
     val blurChrome = listCanScroll && !searchExpanded
     val listOverscroll = rememberContentOverscroll()
+    val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navigationInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     fun closeSearch() {
         query = ""
@@ -616,7 +622,7 @@ private fun Sidebar(
     Box(
         Modifier.width(width).fillMaxSize().background(colors.background)
             .semantics { paneTitle = "Navigation drawer" }
-            .windowInsetsPadding(WindowInsets.systemBars).clipToBounds(),
+            .clipToBounds(),
     ) {
         Box(
             Modifier.fillMaxSize().shortContentVerticalOverscroll(
@@ -629,7 +635,10 @@ private fun Sidebar(
                 modifier = Modifier.fillMaxSize()
                     .then(if (blurChrome) Modifier.hazeSource(hazeState) else Modifier)
                     .padding(horizontal = 10.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 112.dp, bottom = 132.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    top = statusInset + 112.dp,
+                    bottom = navigationInset + 132.dp,
+                ),
                 overscrollEffect = listOverscroll.takeIf { listCanScroll },
                 userScrollEnabled = listCanScroll,
             ) {
@@ -765,6 +774,7 @@ private fun Sidebar(
 
         Row(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .navigationBarsPadding()
                 .shadow(2.dp, RectangleShape, clip = false)
                 .then(if (blurChrome) Modifier.phoneHazeEffect(hazeState, hazeStyle) else Modifier)
                 .background(if (blurChrome) colors.background.copy(alpha = 0.35f) else colors.background)
@@ -805,6 +815,7 @@ private fun Sidebar(
 
         Column(
             Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                .statusBarsPadding()
                 .shadow(if (listScrolled) 2.dp else 0.dp, RectangleShape, clip = false)
                 .then(if (blurChrome) Modifier.phoneHazeEffect(hazeState, hazeStyle) else Modifier)
                 .background(if (blurChrome) colors.background.copy(alpha = 0.35f) else colors.background),

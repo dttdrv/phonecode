@@ -17,9 +17,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -70,7 +71,7 @@ fun OnboardingScreen(
     val colors = MaterialTheme.colorScheme
     androidx.activity.compose.BackHandler(enabled = step > 0) { onStepChange(0) }
 
-    Box(Modifier.fillMaxSize().background(colors.background).systemBarsPadding()) {
+    Box(Modifier.fillMaxSize().background(colors.background)) {
         AnimatedContent(
             targetState = step,
             transitionSpec = {
@@ -108,7 +109,10 @@ fun OnboardingScreen(
 private fun Welcome(onNext: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 20.dp),
+        Modifier.fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(
@@ -179,7 +183,11 @@ private fun Connect(
     onSkip: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        Modifier.fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,

@@ -596,9 +596,6 @@ fun ChatScreen(
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .onSizeChanged { bottomOverlayHeight = it.height }
-                // The blur treatment is enhancement, not the only readability layer. This also
-                // prevents recovery/queue controls from visually colliding with transcript text.
-                .background(colors.background)
                 // Union of ime+navbar: above the keyboard when typing, above the navbar otherwise.
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
         ) {

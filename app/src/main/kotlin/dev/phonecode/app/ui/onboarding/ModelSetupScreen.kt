@@ -89,8 +89,6 @@ fun ModelSetupScreen(
     Box(
         Modifier.fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-            .navigationBarsPadding()
             .imePadding(),
     ) {
         AnimatedContent(
@@ -407,7 +405,11 @@ private fun SetupPage(
     content: @Composable () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        Modifier.fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,

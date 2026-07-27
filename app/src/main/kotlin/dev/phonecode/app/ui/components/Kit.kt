@@ -55,9 +55,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -220,7 +224,12 @@ fun PcToggle(
     Switch(
         checked = checked,
         onCheckedChange = onChange,
-        modifier = modifier.semantics { this.contentDescription = contentDescription },
+        modifier = modifier.semantics(mergeDescendants = true) {
+            this.contentDescription = contentDescription
+            role = Role.Switch
+            toggleableState = ToggleableState(checked)
+            if (onChange == null) disabled()
+        },
     )
 }
 

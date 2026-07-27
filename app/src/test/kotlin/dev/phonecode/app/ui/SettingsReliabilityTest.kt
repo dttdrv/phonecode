@@ -155,7 +155,7 @@ class SettingsReliabilityTest {
             compose.onNodeWithContentDescription("Menu").performClick()
             compose.onNodeWithContentDescription("Settings").performClick()
             compose.onNodeWithText("MCP servers").performClick()
-            compose.onNodeWithText("fragile-server").performClick()
+            compose.onNodeWithContentDescription("fragile-server details").performClick()
             compose.onNodeWithText("Delete server").performClick()
             compose.onAllNodesWithText("Delete server").onLast().performClick()
 
@@ -186,7 +186,7 @@ class SettingsReliabilityTest {
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithText("MCP servers").performClick()
-        compose.onNodeWithText("temporary-server").performClick()
+        compose.onNodeWithContentDescription("temporary-server details").performClick()
         compose.onNodeWithText("Delete server").performClick()
 
         compose.onNodeWithText("cannot be undone", substring = true, ignoreCase = true)
@@ -202,7 +202,7 @@ class SettingsReliabilityTest {
         runBlocking {
             vm.saveMcpServerAndWait(
                 "pending-server",
-                McpServerConfig(url = "http://127.0.0.1:1/mcp", enabled = false, timeout = 1_000),
+                McpServerConfig(url = "http://127.0.0.1:1/mcp", enabled = true, timeout = 1_000),
             ).getOrThrow()
         }
         val repoField = vm.javaClass.getDeclaredField("repo").apply { isAccessible = true }
@@ -222,7 +222,7 @@ class SettingsReliabilityTest {
 
         try {
             openSettingsPage("MCP servers")
-            compose.onNodeWithContentDescription("pending-server enabled").assertIsOff().performClick()
+            compose.onNodeWithContentDescription("pending-server enabled").assertIsOn().performClick()
             assertTrue(started.await(5, TimeUnit.SECONDS))
 
             compose.onNodeWithText("Updating…").assertIsDisplayed()
@@ -235,7 +235,7 @@ class SettingsReliabilityTest {
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText("Updating…").fetchSemanticsNodes().isEmpty()
         }
-        compose.onNodeWithContentDescription("pending-server enabled").assertIsOn()
+        compose.onNodeWithContentDescription("pending-server enabled").assertIsOff()
     }
 
     @Test
@@ -247,7 +247,7 @@ class SettingsReliabilityTest {
         runBlocking {
             vm.saveMcpServerAndWait(
                 "fragile-toggle",
-                McpServerConfig(url = "http://127.0.0.1:1/mcp", enabled = false, timeout = 1_000),
+                McpServerConfig(url = "http://127.0.0.1:1/mcp", enabled = true, timeout = 1_000),
             ).getOrThrow()
         }
         val repoField = vm.javaClass.getDeclaredField("repo").apply { isAccessible = true }
@@ -269,7 +269,7 @@ class SettingsReliabilityTest {
                     .fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNodeWithText("Could not update fragile-toggle", substring = true).assertIsDisplayed()
-            compose.onNodeWithContentDescription("fragile-toggle enabled").assertIsOff()
+            compose.onNodeWithContentDescription("fragile-toggle enabled").assertIsOn()
         } finally {
             repoField.set(vm, originalRepo)
         }
@@ -544,8 +544,8 @@ class SettingsReliabilityTest {
         val repo = repoField.get(vm) as McpSkillRepository
 
         openSettingsPage("MCP servers")
-        compose.onNodeWithText("secret-server").performClick()
-        val exposedHeaders = compose.onNodeWithContentDescription("HTTP headers")
+        compose.onNodeWithContentDescription("secret-server details").performClick()
+        val exposedHeaders = compose.onNodeWithContentDescription("Header value 1")
             .fetchSemanticsNode().config.toString()
         assertFalse(exposedHeaders.contains("top-secret"))
         compose.onNodeWithContentDescription("Connection timeout in milliseconds")
@@ -556,9 +556,9 @@ class SettingsReliabilityTest {
         }
         assertTrue(repo.loadMcpConfig().mcp.getValue("secret-server").headers["Authorization"] == "Bearer top-secret")
 
-        compose.onNodeWithText("secret-server").performClick()
-        compose.onNodeWithContentDescription("HTTP headers")
-            .performTextReplacement("Authorization: Bearer replacement")
+        compose.onNodeWithContentDescription("secret-server details").performClick()
+        compose.onNodeWithContentDescription("Header value 1")
+            .performTextReplacement("Bearer replacement")
         compose.onNodeWithText("Save").performClick()
         compose.waitUntil(5_000) {
             repo.loadMcpConfig().mcp.getValue("secret-server").headers["Authorization"] == "Bearer replacement"

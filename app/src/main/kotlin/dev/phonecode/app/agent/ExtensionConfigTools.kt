@@ -143,7 +143,9 @@ internal class ExtensionConfigWriteTool(
         val server = McpServerConfig(
             url = url,
             headers = current?.headers.orEmpty(),
-            enabled = args.boolean("enabled") ?: current?.enabled ?: true,
+            // New remote servers stay out of the runtime until their discovered tools have been
+            // reviewed. Existing servers preserve their state and callers may explicitly enable.
+            enabled = args.boolean("enabled") ?: current?.enabled ?: false,
             timeout = timeout,
         )
         return repository.upsertMcpServer(original, name, server)

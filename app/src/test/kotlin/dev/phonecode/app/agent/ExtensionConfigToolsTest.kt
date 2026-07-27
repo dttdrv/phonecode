@@ -95,6 +95,22 @@ class ExtensionConfigToolsTest {
         assertTrue(repository.loadMcpConfig().mcp.containsKey("local"))
     }
 
+    @Test fun writeToolCreatesNewMcpServersDisabledUntilReviewed() = withTools { repository, project ->
+        val result = runBlocking {
+            ExtensionConfigWriteTool(repository) { project }.execute(
+                buildJsonObject {
+                    put("action", "upsert_mcp")
+                    put("name", "docs")
+                    put("url", "https://example.com/mcp")
+                },
+                Context,
+            )
+        }
+
+        assertFalse(result.isError)
+        assertFalse(repository.loadMcpConfig().mcp.getValue("docs").enabled)
+    }
+
     private fun withTools(block: (McpSkillRepository, java.io.File) -> Unit) {
         val root = Files.createTempDirectory("phonecode-extension-tools").toFile()
         try {

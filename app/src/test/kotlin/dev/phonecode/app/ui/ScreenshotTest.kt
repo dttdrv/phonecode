@@ -180,7 +180,10 @@ class ScreenshotTest {
         settleAnimation()
         compose.onAllNodes(hasText(title) and isHeading()).onLast().assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
-        compose.onRoot().captureRoboImage("screenshots/$name.png")
+        // Capture the window, not the current semantics root. After a long settings scroll the
+        // root crop could start inside the content column and omit the fixed app bar even though
+        // it remained visible and passed the bounds assertion above.
+        captureScreenRoboImage("screenshots/$name.png")
     }
 
     private fun shootScreen(name: String, visibleText: String) {
@@ -304,7 +307,7 @@ class ScreenshotTest {
 
         compose.onNodeWithText("MCP servers").performClick()
         compose.onNodeWithText("Add server").performClick()
-        compose.onNodeWithText("Save").performClick()
+        compose.onNodeWithText("Test").performClick()
         shootPage("23-mcp-validation", "Add MCP server")
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
@@ -448,15 +451,15 @@ class ScreenshotTest {
             compose.onNodeWithText("MCP servers").performClick()
 
             compose.onNodeWithText("Workspace Index").assertIsDisplayed()
-            compose.onNodeWithText("Connected · 3 tools").assertIsDisplayed()
-            compose.onNodeWithText("Failed · Authentication required").assertIsDisplayed()
+            compose.onNodeWithText("Connected · 3 reported tools").assertIsDisplayed()
+            compose.onNodeWithText("Needs attention · Authentication required").assertIsDisplayed()
             compose.onNodeWithText("Connecting").assertIsDisplayed()
-            compose.onNodeWithText("Inactive").assertIsDisplayed()
+            compose.onNodeWithText("Off · Test to enable").assertIsDisplayed()
             compose.mainClock.advanceTimeBy(500)
             compose.waitForIdle()
             shootPage("31-mcp-server-states", "MCP servers")
 
-            compose.onNodeWithText("Workspace Index").performClick()
+            compose.onNodeWithContentDescription("Workspace Index details").performClick()
             compose.onNodeWithText("Connected to Workspace Index").assertIsDisplayed()
             compose.mainClock.advanceTimeBy(500)
             compose.waitForIdle()

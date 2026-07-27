@@ -240,6 +240,7 @@ data class ChatUiState(
     val mcpToolCount: Int = 0,
     val mcpConnecting: Set<String> = emptySet(),
     val mcpConfigError: String? = null,
+    val mcpOperationError: String? = null,
     val providerConfigError: String? = null,
     val skills: List<ManagedSkill> = emptyList(),
     val sessions: List<SessionMeta> = emptyList(),
@@ -1472,12 +1473,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val original = trimmed.takeIf { it in _state.value.mcpServers }
         repo.upsertMcpServer(original, trimmed, server, expectedServer).fold(
             onSuccess = { updated ->
-                _state.update { it.copy(mcpServers = updated.mcp, mcpConfigError = null) }
+                _state.update {
+                    it.copy(
+                        mcpServers = updated.mcp,
+                        mcpConfigError = null,
+                        mcpOperationError = null,
+                    )
+                }
                 reconnectMcpNow(force = true)
                 Result.success(Unit)
             },
             onFailure = { failure ->
-                _state.update { it.copy(mcpConfigError = failure.message ?: "MCP configuration could not be saved") }
+                _state.update {
+                    it.copy(
+                        mcpOperationError = failure.message ?: "MCP configuration could not be saved",
+                    )
+                }
                 Result.failure(failure)
             },
         )
@@ -1495,7 +1506,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         runSettingsOperation(mcpDeleteOperationKey(name)) {
             repo.removeMcpServer(name).fold(
                 onSuccess = { updated ->
-                    _state.update { it.copy(mcpServers = updated.mcp, mcpConfigError = null) }
+                    _state.update {
+                        it.copy(
+                            mcpServers = updated.mcp,
+                            mcpConfigError = null,
+                            mcpOperationError = null,
+                        )
+                    }
                     reconnectMcp()
                     Result.success(Unit)
                 },
@@ -1515,7 +1532,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         withContext(Dispatchers.IO) {
             repo.setMcpEnabled(name, enabled).fold(
                 onSuccess = { updated ->
-                    _state.update { it.copy(mcpServers = updated.mcp, mcpConfigError = null) }
+                    _state.update {
+                        it.copy(
+                            mcpServers = updated.mcp,
+                            mcpConfigError = null,
+                            mcpOperationError = null,
+                        )
+                    }
                     reconnectMcpNow(force = true)
                     Result.success(Unit)
                 },
@@ -1530,7 +1553,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             reconnectMcpAndWait().onFailure { failure ->
                 if (failure !is kotlinx.coroutines.CancellationException) {
                     _state.update {
-                        it.copy(mcpConfigError = failure.message ?: "MCP servers could not be reconnected")
+                        it.copy(mcpOperationError = failure.message ?: "MCP servers could not be reconnected")
                     }
                 }
             }
@@ -1555,6 +1578,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     mcpSnapshots = emptyMap(),
                     mcpToolCount = 0,
                     mcpConfigError = loaded.message,
+                    mcpOperationError = null,
                 )
             }
             return@withLock
@@ -1565,6 +1589,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 mcpServers = config.mcp,
                 mcpConnecting = config.mcp.filterValues { server -> server.enabled }.keys,
                 mcpConfigError = null,
+                mcpOperationError = null,
             )
         }
         val connected = runCatching {
@@ -1584,6 +1609,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 mcpToolCount = connected.tools.size,
                 mcpConnecting = emptySet(),
                 mcpConfigError = null,
+                mcpOperationError = null,
             )
         }
     }

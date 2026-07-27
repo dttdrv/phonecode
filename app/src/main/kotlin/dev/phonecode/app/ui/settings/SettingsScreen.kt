@@ -100,11 +100,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
@@ -416,6 +418,7 @@ private fun Page(
             Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth()
                 .statusBarsPadding()
                 .height(Spacing.navBarHeight)
+                .zIndex(1f)
                 .shadow(if (scrolled) 2.dp else 0.dp, RectangleShape, clip = false)
                 .background(colors.background)
                 .padding(horizontal = 8.dp),
@@ -1271,10 +1274,17 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
     ) {
     Page("MCP servers", onBack) {
         val connected = state.mcpSnapshots.count { it.value.connected }
-        Note("$connected connected · ${state.mcpServers.count { it.value.enabled }} enabled · ${state.mcpToolCount} tools")
+        Note(
+            "$connected connected · ${state.mcpServers.count { it.value.enabled }} enabled · " +
+                "${state.mcpToolCount} available tools",
+        )
         state.mcpConfigError?.let {
             ErrorText(it)
             Note("The existing opencode.json has been preserved. Fix it before changing MCP servers here.")
+        }
+        state.mcpOperationError?.let {
+            ErrorText(it)
+            Note("Your saved server list is still available. Review the affected server and try again.")
         }
         if (state.mcpServers.isNotEmpty()) PcField(query, { query = it }, "Search servers")
         PcSectionLabel("Servers")
@@ -1289,40 +1299,67 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
                     val pendingTarget = pendingToggles[name]
                     val status = when {
                         pendingTarget != null -> "Updating…"
-                        !server.enabled -> "Off"
+                        !server.enabled -> "Off · Test to enable"
                         name in state.mcpConnecting -> "Connecting"
-                        snapshot?.connected == true -> "Connected · ${snapshot.tools.size} tools"
-                        snapshot?.error?.isNotBlank() == true -> "Failed · ${snapshot.error}"
+                        snapshot?.connected == true -> "Connected · ${snapshot.tools.size} reported tools"
+                        snapshot?.error?.isNotBlank() == true -> "Needs attention · ${snapshot.error}"
                         else -> "Not tested"
                     }
-                    PcRow(
-                        onClick = if (state.mcpConfigError == null && pendingTarget == null && !reconnecting) {
-                            ({ editorDirty = false; editing = name })
-                        } else {
-                            null
-                        },
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(name, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                            Text(
-                                status,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (snapshot?.connected == true) colors.primary else colors.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            toggleErrors[name]?.let { message ->
-                                ErrorText(
-                                    message,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(top = 2.dp),
+                    PcRow {
+                        val detailsEnabled =
+                            state.mcpConfigError == null && pendingTarget == null && !reconnecting
+                        Row(
+                            Modifier.weight(1f)
+                                .clip(MaterialTheme.shapes.small)
+                                .clickable(
+                                    enabled = detailsEnabled,
+                                    role = Role.Button,
+                                ) {
+                                    editorDirty = false
+                                    editing = name
+                                }
+                                .semantics {
+                                    contentDescription = "$name details"
+                                    if (!detailsEnabled) disabled()
+                                }
+                                .padding(vertical = Spacing.xs),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(name, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
+                                Text(
+                                    status,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = when {
+                                        snapshot?.error?.isNotBlank() == true -> colors.error
+                                        snapshot?.connected == true -> colors.primary
+                                        else -> colors.onSurfaceVariant
+                                    },
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
+                                toggleErrors[name]?.let { message ->
+                                    ErrorText(
+                                        message,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(top = 2.dp),
+                                    )
+                                }
                             }
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                null,
+                                tint = colors.tertiary,
+                                modifier = Modifier.size(18.dp),
+                            )
                         }
                         if (state.mcpConfigError == null) {
+                            val toggleEnabled =
+                                pendingTarget == null && !reconnecting && server.enabled
                             PcToggle(
                                 pendingTarget ?: server.enabled,
-                                if (pendingTarget == null && !reconnecting) {
+                                if (toggleEnabled) {
                                     { target ->
                                         vm.clearError()
                                         toggleErrors = toggleErrors - name
@@ -1347,14 +1384,13 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
                                     null
                                 },
                                 "$name enabled",
-                                modifier = if (pendingTarget != null || reconnecting) {
+                                modifier = if (!toggleEnabled) {
                                     Modifier.semantics { disabled() }
                                 } else {
                                     Modifier
                                 },
                             )
                         }
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -1406,7 +1442,7 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
                 McpServerPage(
                     vm = vm,
                     initialName = initialName,
-                    initial = state.mcpServers[initialName] ?: McpServerConfig(),
+                    initial = state.mcpServers[initialName] ?: McpServerConfig(enabled = false),
                     existingNames = state.mcpServers.keys,
                     snapshot = state.mcpSnapshots[initialName],
                     onBack = closeEditor,
@@ -1452,6 +1488,8 @@ private fun McpServerPage(
     var testing by remember(initialName) { mutableStateOf(false) }
     var saving by remember(initialName) { mutableStateOf(false) }
     var testResult by remember(initialName) { mutableStateOf<McpServerSnapshot?>(null) }
+    var toolQuery by rememberSaveable(initialName) { mutableStateOf("") }
+    var showAllTools by rememberSaveable(initialName) { mutableStateOf(false) }
     var confirmDelete by rememberSaveable(initialName) { mutableStateOf(false) }
     val deleteOperationKey = mcpDeleteOperationKey(initialName)
     val deleteOperation = state.settingsOperations[deleteOperationKey]
@@ -1460,15 +1498,22 @@ private fun McpServerPage(
     fun validationMessage(): String? {
         val finalName = if (isNew) name.trim() else initialName
         val finalTimeout = timeout.toLongOrNull()
-        val invalidHeader = headers.lineSequence().filter { it.isNotBlank() }.firstOrNull { line ->
+        val headerLines = headers.lineSequence().filter { it.isNotBlank() }.toList()
+        val invalidHeader = headerLines.firstOrNull { line ->
             val separator = line.indexOf(':')
-            separator <= 0 || line.substring(0, separator).isBlank() || line.substring(separator + 1).isBlank()
+            separator <= 0 ||
+                !MCP_HEADER_NAME.matches(line.substring(0, separator).trim()) ||
+                line.substring(separator + 1).isBlank() ||
+                line.substring(separator + 1).trim().length > 8_192
         }
         return when {
             finalName.isBlank() -> "Name is required"
+            finalName.length > 80 || !MCP_SERVER_NAME.matches(finalName) ->
+                "Use letters, numbers, spaces, dots, underscores, or hyphens"
             !isSafeMcpEndpoint(url.trim()) -> "Use HTTPS, or HTTP only for localhost"
             isNew && finalName in existingNames -> "A server named $finalName already exists"
-            invalidHeader != null -> "Each header must use Name: Value"
+            headerLines.size > 32 -> "Use no more than 32 headers"
+            invalidHeader != null -> "Each header needs a valid name and value"
             finalTimeout == null || finalTimeout !in 1_000L..60_000L -> "Timeout must be between 1000 and 60000 ms"
             else -> null
         }
@@ -1495,9 +1540,12 @@ private fun McpServerPage(
     } else {
         url != baseline.url || headers != initialHeaders || timeout != baseline.timeout.toString() || enabled != baseline.enabled
     }
-    // Keep the actions available while a draft is invalid so tapping one can reveal the exact
-    // field error. Disabled buttons with no explanation are a dead end, especially for TalkBack.
-    val canAttemptSubmit = !testing && !saving && !externalChange
+    val validationError = validationMessage()
+    val canTest = !testing && !saving && !externalChange
+    val canSave = canTest && changed && validationError == null
+    // Turning a server off is always available. Turning one on requires a successful probe for
+    // this exact draft, including servers that were previously saved in the Off state.
+    val canEnable = enabled || testResult?.connected == true
     LaunchedEffect(changed) { onDirtyChange(changed) }
     val shownSnapshot = testResult ?: snapshot.takeUnless { changed }
     Page(if (isNew) "Add MCP server" else initialName, onBack) {
@@ -1525,31 +1573,72 @@ private fun McpServerPage(
         PcSectionLabel("Connection")
         if (isNew) {
             McpFieldLabel("Server name")
-            PcField(name, { name = it; error = null; testResult = null }, "context7", contentDescription = "Server name")
-            error?.takeIf { it == "Name is required" || it.startsWith("A server named ") }?.let {
+            PcField(name, { name = it; error = null; testResult = null }, "e.g. context7", contentDescription = "Server name")
+            error?.takeIf {
+                it == "Name is required" || it.startsWith("A server named ") ||
+                    it.startsWith("Use letters")
+            }?.let {
                 ErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
             }
         }
         McpFieldLabel("Remote URL")
-        PcField(url, { url = it; error = null; testResult = null }, "https://host/mcp", contentDescription = "Remote URL")
+        PcField(url, { url = it; error = null; testResult = null }, "e.g. https://host/mcp", contentDescription = "Remote URL")
         error?.takeIf { it.startsWith("Use HTTPS") }?.let {
             ErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
         }
         McpFieldLabel("HTTP headers")
-        PcField(
-            headers,
-            { headers = it; error = null; testResult = null },
-            "Authorization: Bearer …",
-            singleLine = false,
-            minLines = 2,
-            contentDescription = "HTTP headers",
-        )
-        error?.takeIf { it.startsWith("Each header") }?.let {
+        val headerRows = headerRowsFromEditor(headers)
+        headerRows.forEachIndexed { index, header ->
+            PcGroup(Modifier.padding(bottom = Spacing.xs)) {
+                PcRow {
+                    Box(Modifier.weight(1f)) {
+                        PcField(
+                            header.first,
+                            {
+                                headers = updateHeaderRow(headers, index, name = it)
+                                error = null
+                                testResult = null
+                            },
+                            "e.g. Authorization",
+                            contentDescription = "Header name ${index + 1}",
+                        )
+                    }
+                    PcIconButton(
+                        Icons.Filled.Delete,
+                        "Remove header ${index + 1}",
+                    ) {
+                        headers = removeHeaderRow(headers, index)
+                        error = null
+                        testResult = null
+                    }
+                }
+                PcRow {
+                    PcField(
+                        header.second,
+                        {
+                            headers = updateHeaderRow(headers, index, value = it)
+                            error = null
+                            testResult = null
+                        },
+                        "Secret value",
+                        password = true,
+                        contentDescription = "Header value ${index + 1}",
+                    )
+                }
+            }
+        }
+        PcButton("Add header", filled = false, icon = Icons.Filled.Add) {
+            headers = addHeaderRow(headers)
+            error = null
+            testResult = null
+        }
+        error?.takeIf {
+            it.startsWith("Each header") || it.startsWith("Use no more")
+        }?.let {
             ErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
         }
         Note(
-            "One Name: Value header per line. Saved values stay concealed; replace the dots to change one. " +
-                "Values are encrypted with Android Keystore.",
+            "Header values are concealed after saving and encrypted with Android Keystore.",
         )
         McpFieldLabel("Connection timeout")
         PcField(
@@ -1562,7 +1651,21 @@ private fun McpServerPage(
             ErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
         }
         Spacer(Modifier.height(Spacing.xs))
-        ToggleRow("Enabled", checked = enabled) { enabled = it; error = null; testResult = null }
+        ToggleRow(
+            "Enabled",
+            sub = if (!canEnable) "Test successfully before enabling" else null,
+            checked = enabled,
+            enabled = canEnable,
+        ) {
+            enabled = it
+            error = null
+        }
+        if (isNew) {
+            Note(
+                "MCP servers receive tool inputs from the agent. Review the reported tools before " +
+                    "enabling; mutating actions follow your approval setting.",
+            )
+        }
         error?.takeUnless { message ->
             message == "Name is required" || message.startsWith("A server named ") ||
                 message.startsWith("Use HTTPS") || message.startsWith("Each header") ||
@@ -1577,7 +1680,7 @@ private fun McpServerPage(
         Spacer(Modifier.height(Spacing.s))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Box(Modifier.weight(1f)) {
-                PcButton(if (testing) "Testing…" else "Test", filled = false, enabled = canAttemptSubmit) {
+                PcButton(if (testing) "Testing…" else "Test", filled = false, enabled = canTest) {
                     if (!testing) draft()?.let { (draftName, server) ->
                         scope.launch {
                             testing = true
@@ -1588,7 +1691,7 @@ private fun McpServerPage(
                 }
             }
             Box(Modifier.weight(1f)) {
-                PcButton(if (saving) "Saving…" else "Save", enabled = canAttemptSubmit) {
+                PcButton(if (saving) "Saving…" else "Save", enabled = canSave) {
                     draft()?.let { (draftName, server) ->
                         scope.launch {
                             saving = true
@@ -1608,7 +1711,14 @@ private fun McpServerPage(
                 McpValueRow("Name", connectedSnapshot.serverTitle.ifBlank { connectedSnapshot.serverName }.ifBlank { name })
                 McpValueRow("Version", connectedSnapshot.serverVersion.ifBlank { "Unknown" })
                 McpValueRow("Protocol", connectedSnapshot.protocolVersion)
-                McpValueRow("Capabilities", connectedSnapshot.capabilities.sorted().joinToString().ifBlank { "None" })
+                McpValueRow(
+                    "Advertised capabilities",
+                    connectedSnapshot.capabilities.sorted().joinToString().ifBlank { "None" },
+                )
+                McpValueRow(
+                    "Available in PhoneCode",
+                    if (connectedSnapshot.tools.isEmpty()) "No tool calls" else "Tool calls",
+                )
             }
             if (connectedSnapshot.instructions.isNotBlank()) {
                 PcSectionLabel("Instructions")
@@ -1616,17 +1726,56 @@ private fun McpServerPage(
             }
             PcSectionLabel("Tools")
             if (connectedSnapshot.tools.isEmpty()) Note("This server exposes no tools.") else {
+                if (connectedSnapshot.tools.size > 6) {
+                    PcField(
+                        toolQuery,
+                        {
+                            toolQuery = it
+                            if (it.isNotBlank()) showAllTools = true
+                        },
+                        "Search tools",
+                        contentDescription = "Search server tools",
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                }
+                val matchingTools = connectedSnapshot.tools.filter { tool ->
+                    toolQuery.isBlank() ||
+                        tool.title.contains(toolQuery, ignoreCase = true) ||
+                        tool.name.contains(toolQuery, ignoreCase = true) ||
+                        tool.description.contains(toolQuery, ignoreCase = true)
+                }
+                val visibleTools =
+                    if (showAllTools || toolQuery.isNotBlank()) matchingTools else matchingTools.take(8)
                 PcGroup {
-                    connectedSnapshot.tools.take(30).forEach { tool ->
+                    visibleTools.forEach { tool ->
                         PcRow {
                             Column {
                                 Text(tool.title.ifBlank { tool.name }, style = MaterialTheme.typography.bodyMedium, color = colors.onBackground)
+                                if (tool.title.isNotBlank() && tool.title != tool.name) {
+                                    Text(
+                                        tool.name,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = PcMono),
+                                        color = colors.tertiary,
+                                    )
+                                }
                                 if (tool.description.isNotBlank()) Text(tool.description, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                             }
                         }
                     }
                 }
-                if (connectedSnapshot.tools.size > 30) Note("${connectedSnapshot.tools.size - 30} more tools")
+                if (matchingTools.isEmpty()) {
+                    Note("No tools match “${toolQuery.trim()}”.")
+                } else if (!showAllTools && toolQuery.isBlank() && connectedSnapshot.tools.size > 8) {
+                    Spacer(Modifier.height(Spacing.xs))
+                    PcButton("Show all ${connectedSnapshot.tools.size} tools", filled = false) {
+                        showAllTools = true
+                    }
+                } else if (showAllTools && toolQuery.isBlank() && connectedSnapshot.tools.size > 8) {
+                    Spacer(Modifier.height(Spacing.xs))
+                    PcButton("Show fewer tools", filled = false) {
+                        showAllTools = false
+                    }
+                }
             }
         }
         if (!isNew) {
@@ -2952,9 +3101,43 @@ private fun CustomProviderDialog(
 }
 
 private const val PRESERVED_MCP_HEADER = "••••••••"
+private val MCP_SERVER_NAME = Regex("^[a-zA-Z0-9][a-zA-Z0-9 ._-]*$")
+private val MCP_HEADER_NAME = Regex("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
 private fun headersForEditor(headers: Map<String, String>): String =
     headers.keys.sorted().joinToString("\n") { "$it: $PRESERVED_MCP_HEADER" }
+
+private fun headerRowsFromEditor(text: String): List<Pair<String, String>> =
+    text.lineSequence().filter { it.isNotBlank() }.map { line ->
+        val separator = line.indexOf(':')
+        if (separator < 0) {
+            line to ""
+        } else {
+            line.substring(0, separator).trim() to line.substring(separator + 1).trim()
+        }
+    }.toList()
+
+private fun headerRowsToEditor(rows: List<Pair<String, String>>): String =
+    rows.joinToString("\n") { (name, value) -> "$name: $value" }
+
+private fun addHeaderRow(text: String): String =
+    headerRowsToEditor(headerRowsFromEditor(text) + ("" to ""))
+
+private fun updateHeaderRow(
+    text: String,
+    index: Int,
+    name: String? = null,
+    value: String? = null,
+): String {
+    val rows = headerRowsFromEditor(text).toMutableList()
+    val current = rows.getOrNull(index) ?: return text
+    rows[index] = (name ?: current.first).replace("\n", "") to
+        (value ?: current.second).replace("\n", "")
+    return headerRowsToEditor(rows)
+}
+
+private fun removeHeaderRow(text: String, index: Int): String =
+    headerRowsToEditor(headerRowsFromEditor(text).filterIndexed { rowIndex, _ -> rowIndex != index })
 
 private fun parseHeaders(text: String, preserved: Map<String, String> = emptyMap()): Map<String, String> =
     text.lineSequence().mapNotNull { line ->

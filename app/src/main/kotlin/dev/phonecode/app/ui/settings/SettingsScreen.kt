@@ -55,6 +55,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
@@ -151,6 +152,7 @@ import dev.phonecode.app.ui.theme.Spacing
 import dev.phonecode.agent.AgentMode
 import dev.phonecode.tools.mcp.McpServerConfig
 import dev.phonecode.tools.mcp.McpServerSnapshot
+import dev.phonecode.tools.skills.parseSkillMarkdown
 import java.text.SimpleDateFormat
 import java.security.MessageDigest
 import java.util.Date
@@ -466,6 +468,7 @@ private fun ToggleRow(
         modifier = Modifier.semantics(mergeDescendants = true) {
             role = Role.Switch
             toggleableState = ToggleableState(checked)
+            if (!enabled) disabled()
         },
         onClick = if (enabled) ({ onChange(!checked) }) else null,
     ) {
@@ -1793,7 +1796,6 @@ private enum class SkillFilter { ALL, ACTIVE, OFF, ISSUES }
 @Composable
 private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (Boolean) -> Unit) {
     val state by collectSettingsState(vm)
-    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(SkillFilter.ALL) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1859,73 +1861,108 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
     ) {
         val active = state.skills.count { it.status == SkillStatus.ACTIVE }
         val issues = state.skills.count { it.status == SkillStatus.INVALID }
-        Note("$active active · ${state.skills.size} discovered${if (issues > 0) " · $issues need attention" else ""}")
-        PcField(query, { query = it }, "Search skills")
-        SkillFilters(filter) { filter = it }
-        PcSectionLabel(filter.label())
-        if (filtered.isEmpty()) {
-            Note("No matching skills.")
+        if (state.skills.isEmpty()) {
+            PcSectionLabel("Your skills")
+            Text(
+                "No skills yet",
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.onBackground,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = Spacing.xs),
+            )
+            Note("Create one to give the agent a reusable workflow or set of instructions.")
+            Spacer(Modifier.height(Spacing.s))
+            PcButton("Create skill", icon = Icons.Filled.Add) {
+                editorDirty = false
+                editingId = NEW_SKILL_ID
+            }
         } else {
-            PcGroup {
-                filtered.forEach { skill ->
-                    val updating = skill.id in pendingToggles
-                    PcRow(onClick = if (updating) null else ({ selectedId = skill.id })) {
-                        Column(Modifier.weight(1f)) {
-                            Text(skill.name, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                            Text(
-                                if (updating) "Updating…" else "${skill.scope.label()} · ${skill.status.label()}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (skill.status == SkillStatus.INVALID) colors.error else colors.onSurfaceVariant,
-                            )
-                            skill.manifest?.description?.takeIf { it.isNotBlank() }?.let {
-                                Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            }
-                            toggleErrors[skill.id]?.let { message ->
-                                ErrorText(
-                                    message,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(top = 2.dp),
-                                )
-                            }
-                        }
-                        if (skill.manifest != null && skill.status != SkillStatus.SHADOWED && skill.status != SkillStatus.INVALID) {
-                            PcToggle(
-                                skill.status == SkillStatus.ACTIVE,
-                                if (updating) {
-                                    null
-                                } else {
-                                    { target ->
-                                        vm.clearError()
-                                        toggleErrors = toggleErrors - skill.id
-                                        pendingToggles = pendingToggles + skill.id
-                                        scope.launch {
-                                            vm.setSkillEnabledAndWait(skill.id, target).fold(
-                                                onSuccess = {
-                                                    toggleErrors = toggleErrors - skill.id
-                                                },
-                                                onFailure = { failure ->
-                                                    toggleErrors = toggleErrors + (
-                                                        skill.id to "Could not update ${skill.name}: ${
-                                                            failure.message ?: "storage update failed"
-                                                        }"
-                                                    )
-                                                },
-                                            )
-                                            pendingToggles = pendingToggles - skill.id
-                                        }
-                                    }
-                                },
-                                "${skill.name} enabled",
-                                modifier = if (updating) Modifier.semantics { disabled() } else Modifier,
-                            )
-                        }
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(18.dp))
-                    }
+            Row(
+                Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = Spacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+            ) {
+                Text(
+                    "$active active · ${state.skills.size} discovered",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                if (issues > 0) {
+                    Text(
+                        "$issues skill${if (issues == 1) "" else "s"} ${if (issues == 1) "needs" else "need"} attention",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.error,
+                    )
                 }
             }
+            if (state.skills.size >= 6 || query.isNotBlank()) {
+                Spacer(Modifier.height(Spacing.s))
+                PcField(query, { query = it }, "Search skills", contentDescription = "Search skills")
+            }
+            if (state.skills.size > 1) {
+                SkillFilters(filter) { filter = it }
+            }
+            PcSectionLabel(filter.label())
+            when {
+                filtered.isNotEmpty() -> PcGroup {
+                    filtered.forEach { skill ->
+                        PcRow(onClick = { selectedId = skill.id }) {
+                            Column(Modifier.weight(1f)) {
+                                Text(skill.name, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
+                                Text(
+                                    "${skill.scope.label()} · ${skill.status.label()}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (skill.status == SkillStatus.INVALID) colors.error else colors.onSurfaceVariant,
+                                )
+                                skill.issue?.takeIf { it.isNotBlank() }?.let { issue ->
+                                    ErrorText(
+                                        issue,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(top = 2.dp),
+                                    )
+                                }
+                                skill.manifest?.description?.takeIf { it.isNotBlank() }?.let {
+                                    Text(
+                                        it,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                null,
+                                tint = colors.tertiary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
+                query.isNotBlank() -> {
+                    Note("No skills match “${query.trim()}”.")
+                    Spacer(Modifier.height(Spacing.xs))
+                    PcButton("Clear search", filled = false) { query = "" }
+                }
+                filter == SkillFilter.ISSUES -> {
+                    Note("No skills need attention.")
+                    Spacer(Modifier.height(Spacing.xs))
+                    PcButton("Show all skills", filled = false) { filter = SkillFilter.ALL }
+                }
+                filter == SkillFilter.ACTIVE -> {
+                    Note("No active skills.")
+                    Spacer(Modifier.height(Spacing.xs))
+                    PcButton("Show all skills", filled = false) { filter = SkillFilter.ALL }
+                }
+                else -> {
+                    Note("No inactive or overridden skills.")
+                    Spacer(Modifier.height(Spacing.xs))
+                    PcButton("Show all skills", filled = false) { filter = SkillFilter.ALL }
+                }
+            }
+            Spacer(Modifier.height(Spacing.xs))
+            Note("Skill files reload automatically. The agent can create and edit global or project skills with your permission.")
         }
-        Spacer(Modifier.height(Spacing.xs))
-        Note("Skill files reload automatically. The agent can create and edit global or project skills with your permission.")
     }
     }
     if (detailBackMotion.active && nestedTarget.first == SettingsNestedPage.EDITOR) {
@@ -2016,7 +2053,18 @@ private fun SkillDetailPage(vm: ChatViewModel, skill: ManagedSkill, onEdit: () -
     var toggleError by remember(skill.id) { mutableStateOf<String?>(null) }
     val deleteOperationKey = skillDeleteOperationKey(skill.id)
     val deleteOperation = state.settingsOperations[deleteOperationKey]
-    Page(skill.name, onBack = onBack) {
+    Page(
+        skill.name,
+        onBack = onBack,
+        action = {
+            PcIconButton(
+                Icons.Outlined.Edit,
+                "Edit skill",
+                enabled = !toggling && deleteOperation?.running != true,
+                onClick = onEdit,
+            )
+        },
+    ) {
         Note("${skill.scope.label()} · ${skill.status.label()}")
         skill.issue?.let { ErrorText(it) }
         manifest?.description?.takeIf { it.isNotBlank() }?.let { Note(it) }
@@ -2075,22 +2123,28 @@ private fun SkillDetailPage(vm: ChatViewModel, skill: ManagedSkill, onEdit: () -
                 }
             }
         }
-        Spacer(Modifier.height(Spacing.l))
-        PcButton(
-            "Edit skill",
-            filled = false,
-            enabled = !toggling && deleteOperation?.running != true,
-            onClick = onEdit,
-        )
-        Spacer(Modifier.height(Spacing.xs))
-        PcButton(
-            "Delete skill",
-            filled = false,
-            destructive = true,
-            enabled = !toggling && deleteOperation?.running != true,
-        ) {
-            vm.clearSettingsOperation(deleteOperationKey)
-            confirmDelete = true
+        PcSectionLabel("Danger zone")
+        PcGroup {
+            PcRow(
+                onClick = if (!toggling && deleteOperation?.running != true) {
+                    {
+                        vm.clearSettingsOperation(deleteOperationKey)
+                        confirmDelete = true
+                    }
+                } else {
+                    null
+                },
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Delete skill", style = MaterialTheme.typography.bodyLarge, color = colors.error)
+                    Text(
+                        "Permanently remove this skill",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.error, modifier = Modifier.size(18.dp))
+            }
         }
     }
     if (confirmDelete) {
@@ -2136,10 +2190,17 @@ private fun SkillEditorPage(
     val scope = rememberCoroutineScope()
     val editorKey = skillId ?: NEW_SKILL_ID
     val initialName = skill?.name ?: skillId?.substringBeforeLast('/')?.substringAfterLast('/') ?: "new-skill"
-    val initialContent = remember(editorKey) { if (isNew) newSkillTemplate(initialName) else "" }
+    val initialDescription = skill?.manifest?.description.orEmpty()
+    val initialInstructions = skill?.manifest?.body.orEmpty()
+    val initialContent = remember(editorKey) {
+        if (isNew) newSkillTemplate(initialName) else ""
+    }
     val clipboard = LocalClipboardManager.current
     var name by rememberSaveable(editorKey) { mutableStateOf(initialName) }
     var skillScope by rememberSaveable(editorKey) { mutableStateOf(skill?.scope ?: SkillScope.GLOBAL) }
+    var description by rememberSaveable(editorKey) { mutableStateOf(initialDescription) }
+    var instructions by rememberSaveable(editorKey) { mutableStateOf(initialInstructions) }
+    var advancedSource by rememberSaveable(editorKey) { mutableStateOf(false) }
     var baselineRevision by rememberSaveable(editorKey) { mutableStateOf(if (isNew) revisionOf(initialContent) else "") }
     var content by rememberSaveable(editorKey) { mutableStateOf(initialContent) }
     var loaded by rememberSaveable(editorKey) { mutableStateOf(isNew) }
@@ -2165,9 +2226,15 @@ private fun SkillEditorPage(
                 val latestRevision = revisionOf(latest)
                 unavailable = false
                 if (!loaded) {
+                    val parsed = parseSkillMarkdown(latest)
                     baseline = latest
                     baselineRevision = latestRevision
                     content = latest
+                    if (parsed != null) {
+                        name = parsed.name
+                        description = parsed.description
+                        instructions = parsed.body
+                    }
                     loaded = true
                     baselineReady = true
                     conflict = false
@@ -2190,6 +2257,19 @@ private fun SkillEditorPage(
     }
     val changed = !loading && (content != baseline || isNew && (name != "new-skill" || skillScope != SkillScope.GLOBAL))
     LaunchedEffect(changed, loading) { if (!loading) onDirtyChange(changed) }
+
+    fun updateStructured(
+        nextName: String = name,
+        nextDescription: String = description,
+        nextInstructions: String = instructions,
+    ) {
+        name = nextName
+        description = nextDescription
+        instructions = nextInstructions
+        content = structuredSkillMarkdown(content, nextName, nextDescription, nextInstructions)
+        error = null
+    }
+
     Page(if (isNew) "New skill" else "Edit $name", onBack) {
         if (isNew) {
             PcSectionLabel("Identity")
@@ -2198,9 +2278,7 @@ private fun SkillEditorPage(
                 name,
                 { value ->
                     val next = value.lowercase().replace(Regex("[^a-z0-9-]"), "")
-                    content = content.replaceFirst(Regex("(?m)^name:.*$"), "name: $next")
-                    name = next
-                    error = null
+                    updateStructured(nextName = next)
                 },
                 "my-skill",
                 contentDescription = "Skill name",
@@ -2221,21 +2299,72 @@ private fun SkillEditorPage(
         } else if (conflict) {
             ErrorText("This skill changed elsewhere. Your draft is preserved; reopen the editor to load the latest file.")
         }
-        PcSectionLabel("SKILL.md")
-        PcField(
-            content,
-            { content = it; error = null },
-            if (loading) "Loading…" else "Skill instructions",
-            singleLine = false,
-            minLines = 12,
-            contentDescription = "Skill instructions",
-        )
+        if (advancedSource) {
+            PcSectionLabel("SKILL.md source")
+            PcField(
+                content,
+                { content = it; error = null },
+                if (loading) "Loading…" else "Complete SKILL.md source",
+                singleLine = false,
+                minLines = 14,
+                contentDescription = "Skill source",
+            )
+            Note("Advanced source includes frontmatter and instructions. Keep the name aligned with the skill folder.")
+        } else {
+            PcSectionLabel("When to use")
+            McpFieldLabel("When should the agent use this skill?")
+            PcField(
+                description,
+                { updateStructured(nextDescription = it) },
+                "Describe the tasks or situations that should activate this skill",
+                singleLine = false,
+                minLines = 2,
+                contentDescription = "When to use this skill",
+            )
+            PcSectionLabel("Instructions")
+            PcField(
+                instructions,
+                { updateStructured(nextInstructions = it) },
+                if (loading) "Loading…" else "Give the agent clear, actionable steps",
+                singleLine = false,
+                minLines = 10,
+                contentDescription = "Skill instructions",
+            )
+        }
+        PcSectionLabel("Advanced")
+        PcGroup {
+            ToggleRow(
+                "Advanced source",
+                "Edit the complete SKILL.md file",
+                checked = advancedSource,
+            ) { target ->
+                if (target) {
+                    advancedSource = true
+                    error = null
+                } else {
+                    val parsed = parseSkillMarkdown(content)
+                    if (parsed == null || parsed.name != name) {
+                        error = "Fix the SKILL.md source before returning to the guided editor."
+                    } else {
+                        description = parsed.description
+                        instructions = parsed.body
+                        advancedSource = false
+                        error = null
+                    }
+                }
+            }
+        }
         error?.let { ErrorText(it, style = MaterialTheme.typography.bodySmall) }
         Spacer(Modifier.height(Spacing.s))
         PcButton(
             if (saving) "Saving…" else "Save",
             enabled = !loading && !saving && !unavailable && !conflict && baselineReady && name.isNotBlank() && content.isNotBlank(),
         ) {
+            val parsed = parseSkillMarkdown(content)
+            if (parsed == null || parsed.name != name || parsed.description.isBlank() || parsed.body.isBlank()) {
+                error = "Add a valid name, when-to-use description, and instructions before saving."
+                return@PcButton
+            }
             scope.launch {
                 saving = true
                 vm.saveSkillAndWait(skillId, skillScope, name, content, baseline.takeUnless { isNew }).fold(
@@ -2248,14 +2377,50 @@ private fun SkillEditorPage(
     }
 }
 
+internal fun structuredSkillMarkdown(
+    source: String,
+    name: String,
+    description: String,
+    instructions: String,
+): String {
+    val normalized = source.replace("\r\n", "\n").trimStart()
+    val frontmatter = Regex("^---\\s*\\n(.*?)\\n---", RegexOption.DOT_MATCHES_ALL)
+        .find(normalized)
+        ?.groupValues
+        ?.get(1)
+        ?.lines()
+        ?.toMutableList()
+        ?: mutableListOf("license: Apache-2.0")
+
+    fun replaceOrAdd(key: String, value: String) {
+        val index = frontmatter.indexOfFirst { it.matches(Regex("^${Regex.escape(key)}:\\s*.*$")) }
+        val line = "$key: ${value.replace('\n', ' ').trim()}"
+        if (index >= 0) frontmatter[index] = line else frontmatter.add(0, line)
+    }
+
+    replaceOrAdd("name", name)
+    replaceOrAdd("description", description)
+    return buildString {
+        append("---\n")
+        append(frontmatter.joinToString("\n"))
+        append("\n---\n\n")
+        append(instructions.trim())
+    }
+}
+
 private fun newSkillTemplate(name: String): String =
-    "---\nname: $name\ndescription: Describe when the agent should use this skill.\nlicense: Apache-2.0\n---\n\nWrite concise, actionable instructions here."
+    structuredSkillMarkdown(
+        source = "---\nlicense: Apache-2.0\n---",
+        name = name,
+        description = "",
+        instructions = "",
+    )
 
 private const val NEW_SKILL_ID = "__phonecode_new_skill__"
 
 @Composable
 private fun SkillFilters(selected: SkillFilter, onSelect: (SkillFilter) -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = Spacing.s)) {
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = Spacing.s).selectableGroup()) {
         val wrap = maxWidth < 360.dp || LocalDensity.current.fontScale >= 1.3f
         if (wrap) {
             FlowRow(

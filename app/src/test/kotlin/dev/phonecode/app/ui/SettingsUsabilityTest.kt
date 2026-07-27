@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -21,10 +22,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.agent.ChatUiState
+import dev.phonecode.app.data.ManagedSkill
+import dev.phonecode.app.data.SkillScope
+import dev.phonecode.app.data.SkillStatus
 import dev.phonecode.app.ui.settings.SettingsScreen
 import dev.phonecode.app.ui.settings.customProviderDraftIsDirty
 import dev.phonecode.app.ui.settings.openExternalUrl
 import dev.phonecode.app.ui.theme.PhoneCodeTheme
+import dev.phonecode.tools.skills.SkillManifest
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -86,6 +91,29 @@ class SettingsUsabilityTest {
             throw ActivityNotFoundException("No browser installed")
         }
     }
+
+    private fun skill(
+        name: String,
+        status: SkillStatus = SkillStatus.ACTIVE,
+        issue: String? = null,
+    ) = ManagedSkill(
+        id = "global/$name",
+        name = name,
+        manifest = if (status == SkillStatus.INVALID) {
+            null
+        } else {
+            SkillManifest(
+                name = name,
+                description = "Helps with $name work.",
+                body = "Follow the $name workflow.",
+                license = "Apache-2.0",
+            )
+        },
+        location = "/skills/$name/SKILL.md",
+        scope = SkillScope.GLOBAL,
+        status = status,
+        issue = issue,
+    )
 
     @Test
     fun addCustomProviderIsAvailableBeforeTheProviderCatalog() {
@@ -177,6 +205,180 @@ class SettingsUsabilityTest {
         compose.onNodeWithText(vm.configDirPath()).assertIsDisplayed()
         compose.onNodeWithContentDescription("Copy config directory path").performClick()
         compose.onNodeWithText("Copied config path").assertIsDisplayed()
+    }
+
+    @Test
+    fun skillInventoryRowsNavigateWithoutDuplicatingTheEnableSwitch() {
+        val vm = app().chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val original = state.value
+        state.value = original.copy(skills = listOf(skill("release-pilot")))
+
+        try {
+            showSettings("skills")
+
+            compose.onNodeWithText("release-pilot").assertIsDisplayed()
+            assertTrue(
+                compose.onAllNodesWithContentDescription("release-pilot enabled")
+                    .fetchSemanticsNodes().isEmpty(),
+            )
+        } finally {
+            state.value = original
+        }
+    }
+
+    @Test
+    fun invalidSkillExplainsItsIssueInTheInventory() {
+        val vm = app().chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val original = state.value
+        state.value = original.copy(
+            skills = listOf(
+                skill(
+                    name = "legacy-deploy",
+                    status = SkillStatus.INVALID,
+                    issue = "Invalid SKILL.md frontmatter",
+                ),
+            ),
+        )
+
+        try {
+            showSettings("skills")
+
+            compose.onNodeWithText("Invalid SKILL.md frontmatter").assertIsDisplayed()
+            compose.onNodeWithText("1 skill needs attention").assertIsDisplayed()
+        } finally {
+            state.value = original
+        }
+    }
+
+    @Test
+    fun emptySkillInventoryOffersAUsefulCreateAction() {
+        val vm = app().chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val original = state.value
+        state.value = original.copy(skills = emptyList())
+
+        try {
+            showSettings("skills")
+
+            compose.onNodeWithText("No skills yet").assertIsDisplayed()
+            compose.onNodeWithText("Create skill").assertIsDisplayed()
+            assertTrue(compose.onAllNodesWithText("Search skills").fetchSemanticsNodes().isEmpty())
+        } finally {
+            state.value = original
+        }
+    }
+
+    @Test
+    fun skillSearchAndFiltersOfferDifferentRecoveryActions() {
+        val vm = app().chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val original = state.value
+        state.value = original.copy(skills = (1..6).map { skill("skill-$it") })
+
+        try {
+            showSettings("skills")
+            compose.onNodeWithContentDescription("Search skills").performTextReplacement("missing")
+
+            compose.onNodeWithText("No skills match “missing”.").assertIsDisplayed()
+            compose.onNodeWithText("Clear search").performClick()
+            compose.onNodeWithText("Issues").performClick()
+            compose.onNodeWithText("No skills need attention.").assertIsDisplayed()
+            compose.onNodeWithText("Show all skills").assertIsDisplayed()
+        } finally {
+            state.value = original
+        }
+    }
+
+    @Test
+    fun skillFiltersExposeASelectableGroup() {
+        val vm = app().chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val original = state.value
+        state.value = original.copy(skills = listOf(skill("release-pilot"), skill("disabled", SkillStatus.DISABLED)))
+
+        try {
+            showSettings("skills")
+            val all = compose.onNodeWithText("All", useUnmergedTree = true).fetchSemanticsNode()
+
+            assertTrue(
+                generateSequence(all.parent) { it.parent }
+                    .any { SemanticsProperties.SelectableGroup in it.config },
+            )
+        } finally {
+            state.value = original
+        }
+    }
+
+    @Test
+    fun skillDetailKeepsEditProminentAndEditorSemanticallyIsolated() {
+        val vm = app().chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val original = state.value
+        state.value = original.copy(skills = listOf(skill("release-pilot")))
+
+        try {
+            showSettings("skills")
+            compose.onNodeWithText("release-pilot").performClick()
+
+            compose.onNodeWithContentDescription("Edit skill").assertIsDisplayed()
+            compose.onNodeWithText("Danger zone").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Edit skill").performClick()
+
+            compose.onNodeWithContentDescription("When to use this skill").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Skill instructions").assertIsDisplayed()
+            compose.onNodeWithText("Advanced source").assertIsDisplayed()
+            assertTrue(compose.onAllNodesWithText("Enabled").fetchSemanticsNodes().isEmpty())
+        } finally {
+            state.value = original
+        }
+    }
+
+    @Test
+    fun structuredSkillEditorGeneratesAValidSkillFile() {
+        val vm = app().chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val original = state.value
+        val skillDir = java.io.File(app().filesDir, "config/skills/release-guardian")
+        skillDir.deleteRecursively()
+        state.value = original.copy(skills = emptyList())
+
+        try {
+            showSettings("skills")
+            compose.onNodeWithText("Create skill").performClick()
+            compose.onNodeWithContentDescription("Skill name").performTextReplacement("release-guardian")
+            compose.onNodeWithContentDescription("When to use this skill")
+                .performTextReplacement("Checks a release before it is published.")
+            compose.onNodeWithContentDescription("Skill instructions")
+                .performTextReplacement("Verify the build, metadata, and release evidence.")
+            compose.onNodeWithText("Save").performClick()
+
+            compose.waitUntil(5_000) { java.io.File(skillDir, "SKILL.md").isFile }
+            val source = java.io.File(skillDir, "SKILL.md").readText()
+            assertTrue(source.contains("name: release-guardian"))
+            assertTrue(source.contains("description: Checks a release before it is published."))
+            assertTrue(source.contains("Verify the build, metadata, and release evidence."))
+            assertTrue(source.contains("license: Apache-2.0"))
+        } finally {
+            skillDir.deleteRecursively()
+            state.value = original
+            vm.refreshSkills()
+        }
     }
 }
 

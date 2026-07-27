@@ -196,11 +196,11 @@ Original instruction.
         compose.onNodeWithText("Skills").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("hot-skill").fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithText("hot-skill").onFirst().performClick()
-        compose.onNodeWithText("Edit skill").performClick()
+        compose.onNodeWithContentDescription("Edit skill").performClick()
         compose.waitUntil(5_000) {
             compose.onAllNodesWithContentDescription("Skill instructions").fetchSemanticsNodes().isNotEmpty()
         }
-        val draft = skillFixture.replace("Original instruction.", "Unsaved instruction.")
+        val draft = "Unsaved instruction."
         compose.onNodeWithContentDescription("Skill instructions").performTextReplacement(draft)
 
         compose.activityRule.scenario.recreate()

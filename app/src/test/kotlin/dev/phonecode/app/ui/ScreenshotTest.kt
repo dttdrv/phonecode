@@ -481,10 +481,18 @@ class ScreenshotTest {
 
             compose.onNodeWithText("release-pilot").performClick()
             compose.onNodeWithText("Runs a careful release-readiness pass before publishing.").assertIsDisplayed()
-            compose.onNodeWithText("Edit skill").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Edit skill").assertIsDisplayed()
             compose.mainClock.advanceTimeBy(500)
             compose.waitForIdle()
             shootPage("35-skill-active-detail", "release-pilot")
+
+            compose.onNodeWithContentDescription("Back").performClick()
+            compose.mainClock.advanceTimeBy(300)
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("New skill").performClick()
+            compose.onNodeWithContentDescription("When to use this skill").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Skill instructions").assertIsDisplayed()
+            shootPage("40-skill-guided-editor", "New skill")
         } finally {
             state.value = original
         }

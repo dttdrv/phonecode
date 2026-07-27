@@ -326,9 +326,10 @@ class SettingsReliabilityTest {
         assertTrue(acquired.await(5, TimeUnit.SECONDS))
 
         try {
-            compose.onNodeWithContentDescription("hot-skill enabled").assertIsOn().performClick()
+            compose.onAllNodesWithText("hot-skill").onLast().performClick()
+            compose.onNodeWithText("Enabled").assertIsOn().performClick()
             compose.onNodeWithText("Updating…").assertIsDisplayed()
-            compose.onNodeWithContentDescription("hot-skill enabled").assertIsNotEnabled()
+            compose.onNodeWithText("Enabled").assertIsNotEnabled()
         } finally {
             release.countDown()
             holder.join(5_000)
@@ -336,7 +337,7 @@ class SettingsReliabilityTest {
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText("Updating…").fetchSemanticsNodes().isEmpty()
         }
-        compose.onNodeWithContentDescription("hot-skill enabled").assertIsOff()
+        compose.onNodeWithText("Enabled").assertIsOff()
     }
 
     @Test

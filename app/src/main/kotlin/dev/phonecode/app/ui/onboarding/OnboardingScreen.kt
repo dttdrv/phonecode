@@ -139,15 +139,15 @@ private fun Welcome(onNext: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                "Run an AI coding agent inside folders you choose, with the models and tools you trust.",
+                "Run an AI coding agent in a private local workspace, with the models and tools you trust and access to phone folders you choose.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(28.dp))
             PcGroup {
-                FeatureRow(Icons.Outlined.Folder, "Real project folders", "Keep chats and files together")
-                FeatureRow(Icons.Outlined.AccountTree, "A complete local workspace", "Run tools and manage source control")
+                FeatureRow(Icons.Outlined.Folder, "Private project workspaces", "Keep each project and its chats together")
+                FeatureRow(Icons.Outlined.AccountTree, "Local tools and Git", "Build, test, and manage source control on device")
                 FeatureRow(Icons.Outlined.Cloud, "Your choice of model", "Sign in or use your own provider keys")
             }
         }
@@ -203,7 +203,7 @@ private fun Connect(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Connect a model to start. Add a project folder and GitHub when you need them.",
+                "Connect a model to start. Link a phone folder and GitHub when you need them.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
             )
@@ -212,21 +212,21 @@ private fun Connect(
                 OptionRow(
                     icon = Icons.Outlined.Cloud,
                     title = "Connect a model",
-                    sub = if (modelReady) "Ready to use" else "Required for agent work",
+                    sub = if (modelReady) "Model connected · ready to use" else "Required for agent work",
                     complete = modelReady,
                     onClick = onConnectModels,
                 )
                 OptionRow(
                     icon = Icons.Outlined.Folder,
-                    title = "Choose a project folder",
-                    sub = if (projectReady) "Project folder ready" else "Recommended for project work",
+                    title = "Link a phone folder",
+                    sub = if (projectReady) "Folder linked for shared file access" else "Optional access to files already on your phone",
                     complete = projectReady,
                     onClick = onCreateProject,
                 )
                 OptionRow(
                     icon = Icons.Outlined.AccountTree,
                     title = "Connect GitHub",
-                    sub = if (githubReady) "Repository sync ready" else "Optional for repository sync",
+                    sub = if (githubReady) "GitHub account connected" else "Optional for repository sync",
                     complete = githubReady,
                     onClick = onConnectGitHub,
                 )
@@ -247,11 +247,13 @@ private fun Connect(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
             )
         }
-        TextButton(
-            onClick = onSkip,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 20.dp),
-        ) {
-            Text("Skip setup for now")
+        if (!modelReady) {
+            TextButton(
+                onClick = onSkip,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 20.dp),
+            ) {
+                Text("Explore without a model")
+            }
         }
         Spacer(Modifier.height(16.dp))
     }

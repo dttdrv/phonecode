@@ -21,6 +21,9 @@ data class AppSettings(
     val mode: ThemeMode get() = runCatching { ThemeMode.valueOf(themeMode) }.getOrDefault(ThemeMode.SYSTEM)
 }
 
+/** Restoring a backup must never silently elevate the authority granted to the agent. */
+fun AppSettings.safeAfterRestore(): AppSettings = copy(autoAccept = false)
+
 /**
  * App-level preferences (theme, custom instructions, toggles), persisted as one small JSON file.
  * All access serializes on a process-wide lock so multiple store instances over the same file

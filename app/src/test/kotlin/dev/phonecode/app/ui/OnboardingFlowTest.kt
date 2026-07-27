@@ -60,7 +60,7 @@ class OnboardingFlowTest {
 
         compose.onNodeWithText("Get started").performClick()
         compose.onNodeWithText("Required for agent work").assertIsDisplayed()
-        compose.onNodeWithText("Recommended for project work").assertIsDisplayed()
+        compose.onNodeWithText("Optional access to files already on your phone").assertIsDisplayed()
         compose.onNodeWithText("Optional for repository sync").assertIsDisplayed()
         compose.onNodeWithText("Connect a model").performClick()
 
@@ -72,7 +72,7 @@ class OnboardingFlowTest {
         compose.onAllNodesWithText("Add custom provider").assertCountEquals(0)
 
         compose.onNodeWithContentDescription("Back").performClick()
-        compose.onNodeWithText("Skip setup for now").performClick()
+        compose.onNodeWithText("Explore without a model").performClick()
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText("Connect a model to start").fetchSemanticsNodes().isNotEmpty()
         }
@@ -100,6 +100,27 @@ class OnboardingFlowTest {
             compose.onAllNodesWithText("What should we build?").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithContentDescription("Message").assertIsEnabled()
+    }
+
+    @Test
+    fun configuredModelUsesNeutralReadyCopyAndHidesModelSkip() {
+        compose.setContent {
+            PhoneCodeTheme(darkTheme = false) {
+                OnboardingScreen(
+                    step = 1,
+                    onStepChange = {},
+                    onConnectModels = {},
+                    onConnectGitHub = {},
+                    onCreateProject = {},
+                    modelReady = true,
+                    onDone = {},
+                    onSkip = {},
+                )
+            }
+        }
+
+        compose.onNodeWithText("Model connected · ready to use").assertIsDisplayed()
+        compose.onAllNodesWithText("Explore without a model").assertCountEquals(0)
     }
 }
 

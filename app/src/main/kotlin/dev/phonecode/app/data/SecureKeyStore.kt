@@ -19,8 +19,14 @@ class SecureKeyStore(context: Context) : SecretValueStore {
     override fun get(name: String): String? = prefs?.getString(name, null)
 
     override fun put(name: String, value: String) {
-        val editor = prefs?.edit() ?: return
-        if (value.isBlank()) editor.remove(name) else editor.putString(name, value)
+        putAll(mapOf(name to value))
+    }
+
+    fun putAll(values: Map<String, String>) {
+        val editor = checkNotNull(prefs) { "Secure storage is unavailable on this device" }.edit()
+        values.forEach { (name, value) ->
+            if (value.isBlank()) editor.remove(name) else editor.putString(name, value)
+        }
         check(editor.commit()) { "Secure storage update failed" }
     }
 

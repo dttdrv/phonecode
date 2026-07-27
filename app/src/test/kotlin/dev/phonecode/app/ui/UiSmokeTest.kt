@@ -3,6 +3,7 @@ package dev.phonecode.app.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -12,16 +13,19 @@ import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.agent.ChatUiState
+import dev.phonecode.app.agent.ChatLine
 import dev.phonecode.app.agent.PermissionRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assert.assertEquals
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -72,7 +76,7 @@ Original instruction.
     private fun dismissOnboardingIfPresent() {
         if (compose.onAllNodesWithText("Get started").fetchSemanticsNodes().isEmpty()) return
         compose.onNodeWithText("Get started").performClick()
-        compose.onNodeWithText("Skip setup for now").performClick()
+        compose.onNodeWithText("Explore without a model").performClick()
         compose.waitForIdle()
     }
 
@@ -86,8 +90,10 @@ Original instruction.
         compose.onNodeWithContentDescription("Switch model").performClick()
         compose.onNodeWithText("Model & reasoning").assertIsDisplayed()
         compose.onNodeWithText("Agent mode").assertIsDisplayed()
-        compose.onAllNodesWithText("Build").onLast().assertIsDisplayed()
+        compose.onAllNodesWithText("Build").onLast().assertIsDisplayed().assertIsSelected()
         compose.onNodeWithText("Plan").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Search models").performTextInput("definitely-no-such-model")
+        compose.onNodeWithText("No models match", substring = true).assertIsDisplayed()
         val done = compose.onAllNodesWithText("Done")
         if (done.fetchSemanticsNodes().isNotEmpty()) done.onFirst().performClick()
         compose.waitForIdle()
@@ -107,6 +113,7 @@ Original instruction.
     fun drawerOpensAndSettingsGearWorks() {
         dismissOnboardingIfPresent()
         compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onAllNodesWithContentDescription("Message").assertCountEquals(0)
         compose.onNodeWithText("Skills").assertIsDisplayed()
         compose.onNodeWithText("MCP").assertIsDisplayed()
         compose.onNodeWithContentDescription("Settings").performClick()
@@ -251,6 +258,17 @@ Original instruction.
         compose.onNodeWithText("Approve once").performClick().assertIsNotEnabled()
         compose.onNodeWithText("Deny").assertIsNotEnabled()
         state.value = state.value.copy(pendingPermission = null)
+        compose.waitForIdle()
+        state.value = state.value.copy(
+            pendingPermission = PermissionRequest(
+                tool = "mcp_issue_tracker_delete_issue",
+                summary = "Delete issue 184 from the connected tracker",
+            ),
+        )
+        compose.waitForIdle()
+        compose.onNodeWithText("Run an MCP server action").assertIsDisplayed()
+        compose.onNodeWithText("external service", substring = true).assertIsDisplayed()
+        state.value = state.value.copy(pendingPermission = null)
     }
 
     @Test
@@ -295,6 +313,25 @@ Original instruction.
     }
 
     @Test
+    fun reportSelectionsExposeTheirState() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(lines = listOf(ChatLine.Assistant("A response to review.")))
+        compose.waitForIdle()
+
+        compose.onNodeWithContentDescription("Report AI response").performClick()
+        compose.onNodeWithText("Hate").performClick().assertIsSelected()
+        compose.onNodeWithContentDescription("Optional report details").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Cancel report").performClick()
+    }
+
+    @Test
     fun settingsSeparateAgentDefaultsFromApprovalPolicy() {
         dismissOnboardingIfPresent()
         compose.onNodeWithContentDescription("Menu").performClick()
@@ -311,7 +348,84 @@ Original instruction.
         compose.onNodeWithText("Approval policy").assertIsDisplayed()
         compose.onNodeWithText("Ask before each change").assertIsDisplayed().assertIsSelected()
         compose.onNodeWithText("Allow changes automatically").assertIsDisplayed()
-        compose.onNodeWithText("writes, commands, and Git operations", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("writes, commands, Git operations", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("enabled MCP servers", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Allow changes automatically").performClick()
+        compose.onNodeWithText("Enable automatic approval?").assertIsDisplayed()
+        compose.onNodeWithText("MCP actions", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Enable automatic approval").performClick()
+        compose.onNodeWithText("Allow changes automatically").assertIsSelected()
+    }
+
+    @Test
+    fun consequentialSettingsExplainEmptyAndInvalidStates() {
+        dismissOnboardingIfPresent()
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+
+        compose.onNodeWithText("Agent tools").performClick()
+        compose.onNodeWithContentDescription("Search tools").performTextInput("definitely-no-such-tool")
+        compose.onNodeWithText("No tools match", substring = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").performClick()
+
+        compose.onNodeWithText("MCP servers").performClick()
+        compose.onNodeWithText("Add server").performClick()
+        compose.onNodeWithText("Save").performClick()
+        compose.onNodeWithText("Name is required").assertIsDisplayed()
+    }
+
+    @Test
+    fun manualGitCredentialsCollectBothRequiredValues() {
+        dismissOnboardingIfPresent()
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+
+        compose.onNodeWithText("Git").performClick()
+        compose.onNodeWithText("Advanced Git settings").performClick()
+        compose.onNodeWithText("Git username").assertIsDisplayed()
+        compose.onNodeWithText("Manual access token").assertIsDisplayed()
+        compose.onNodeWithText("Save manual credentials").assertIsDisplayed()
+    }
+
+    @Test
+    fun providerKeysChangeOnlyAfterExplicitSave() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("Providers").performClick()
+        compose.onNodeWithText("Anthropic").performClick()
+
+        compose.onNodeWithContentDescription("Anthropic API key").performTextInput("replacement-key")
+        assertEquals("ui-smoke-key", app.chatViewModel.keyFor("anthropic"))
+        compose.onNodeWithText("Save key").performClick()
+        assertEquals("replacement-key", app.chatViewModel.keyFor("anthropic"))
+    }
+
+    @Test
+    fun importExplainsReplacementAndRequiresConfirmation() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(error = "Import failed: damaged backup")
+
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+
+        compose.onNodeWithText("Export & import").performClick()
+        compose.onNodeWithText("Import failed: damaged backup").assertIsDisplayed()
+        compose.onNodeWithText("Import replaces chats and settings", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Import from a file").performClick()
+        compose.onNodeWithText("Replace chats and settings?").assertIsDisplayed()
+        compose.onNodeWithText("approval returns to Ask", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Export first").assertIsDisplayed()
+        compose.onNodeWithText("Choose backup file").assertIsDisplayed()
     }
 
     @Test

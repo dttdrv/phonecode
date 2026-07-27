@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /** App-level settings (theme mode, custom instructions, toggles) for the root theme + settings pages. */
@@ -18,6 +21,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
+    private val updateMutex = Mutex()
 
     // True once the on-disk settings have actually been read - gates first-run UI (onboarding)
     // so the unloaded default (onboarded=false) never flashes the overlay for existing users.
@@ -32,7 +36,18 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun update(transform: (AppSettings) -> AppSettings) {
-        viewModelScope.launch(Dispatchers.IO) { _settings.value = store.update(transform) }
+        val previous = _settings.value
+        val updated = transform(previous)
+        _settings.value = updated
+        viewModelScope.launch {
+            updateMutex.withLock {
+                runCatching {
+                    withContext(Dispatchers.IO) { store.save(updated) }
+                }.onFailure {
+                    _settings.compareAndSet(updated, previous)
+                }
+            }
+        }
     }
 
     /** Re-reads settings from disk - called after a backup import overwrites app_settings.json. */

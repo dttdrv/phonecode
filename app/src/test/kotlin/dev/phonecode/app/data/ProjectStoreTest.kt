@@ -5,6 +5,28 @@ import org.junit.Test
 import java.nio.file.Files
 
 class ProjectStoreTest {
+    @Test fun restoredProjectsDropFolderReferencesWithoutAGrant() {
+        val projects = listOf(
+            Project("one", "One", "still-linked"),
+            Project("two", "Two", "missing-grant"),
+            Project("three", "Three"),
+        )
+
+        assertEquals(
+            listOf(
+                Project("one", "One", "still-linked"),
+                Project("two", "Two"),
+                Project("three", "Three"),
+            ),
+            projects.safeAfterRestore(setOf("still-linked")),
+        )
+    }
+
+    @Test fun restoredChatsWithUnknownProjectsBecomeUnsorted() {
+        assertEquals("known", "known".safeProjectAfterRestore(setOf("known")))
+        assertEquals(null, "missing".safeProjectAfterRestore(setOf("known")))
+    }
+
     @Test fun replaceRestoresTheExactProjectSnapshot() {
         val dir = Files.createTempDirectory("project-store-test").toFile()
         try {

@@ -20,6 +20,8 @@ import dev.phonecode.app.BuildConfig
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.data.AppSettings
 import dev.phonecode.app.data.AppSettingsStore
+import dev.phonecode.app.data.safeAfterRestore
+import dev.phonecode.app.data.safeProjectAfterRestore
 import dev.phonecode.app.data.CustomProviderRepository
 import dev.phonecode.app.data.customProviderSecretName
 import dev.phonecode.app.data.FileCatalogCache
@@ -1310,12 +1312,25 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (providerId in customPresets) customProviderSecretName(providerId) else providerId
 
     fun keyFor(providerId: String): String = keyStore.get(providerSecretName(providerId)).orEmpty()
-    fun setKey(providerId: String, key: String) = keyStore.put(providerSecretName(providerId), key.trim())
+    fun setKey(providerId: String, key: String): Boolean {
+        val trimmed = key.trim()
+        return runCatching {
+            keyStore.put(providerSecretName(providerId), trimmed)
+            keyFor(providerId) == trimmed
+        }.getOrDefault(false)
+    }
+
+    fun setKeys(values: Map<String, String>): Boolean = runCatching {
+        val stored = values.map { (providerId, value) ->
+            providerSecretName(providerId) to value.trim()
+        }.toMap()
+        keyStore.putAll(stored)
+        stored.all { (name, value) -> keyStore.get(name).orEmpty() == value }
+    }.getOrDefault(false)
     fun configureProviderKey(providerId: String, key: String): Boolean {
         val trimmed = key.trim()
         if (trimmed.isEmpty()) return false
-        setKey(providerId, trimmed)
-        if (keyFor(providerId) != trimmed) return false
+        if (!setKey(providerId, trimmed)) return false
         return activateProvider(providerId)
     }
     fun activateProvider(providerId: String): Boolean {
@@ -1528,35 +1543,64 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             val result = runCatching {
                 val restoreWriteBoundary = sessionWriteOrder.incrementAndGet()
+                lateinit var normalizedRestore: BackupRestore
                 val count = sessionStore.reconcileExternalRestore(restoreWriteBoundary) {
                     getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
-                        TransferBundle.import(getApplication<Application>().filesDir, input)
+                        TransferBundle.import(getApplication<Application>().filesDir, input) {
+                            // Keep normalization inside the durable import transaction. Any failed
+                            // project/session/settings write restores the complete previous tree.
+                            val linkedFolderIds = sharedFolderStore.list().map { it.id }.toSet()
+                            val importedProjects = projectStore.list()
+                            val restoredProjects = importedProjects.safeAfterRestore(linkedFolderIds)
+                            if (restoredProjects != importedProjects) projectStore.replace(restoredProjects)
+                            val restoredProjectIds = restoredProjects.map { it.id }.toSet()
+                            sessionStore.list().forEach { meta ->
+                                val safeProject = meta.projectId.safeProjectAfterRestore(restoredProjectIds)
+                                if (safeProject != meta.projectId) {
+                                    sessionStore.load(meta.id)?.let { session ->
+                                        sessionStore.save(session.copy(projectId = safeProject))
+                                    }
+                                }
+                            }
+                            val saved = appSettings.load().safeAfterRestore()
+                            val loaded = saved.activeSessionId?.let(sessionStore::load) ?: sessionStore.loadLatest()
+                            val restored = loaded ?: PersistedSession(
+                                newSessionId(),
+                                "New chat",
+                                System.currentTimeMillis(),
+                                emptyList(),
+                            )
+                            val safeProjectId = restored.projectId?.takeIf(PROJECT_ID::matches)
+                            val repaired = restored.messages.map { it.toDomain() }.let {
+                                if (restored.activeTurn) repairInterruptedHistory(it) else it
+                            }
+                            val normalized = restored.copy(
+                                messages = repaired.map { it.toPersisted() },
+                                projectId = safeProjectId,
+                                activeTurn = false,
+                            )
+                            if (loaded == null) {
+                                sessionStore.create(normalized)
+                            } else if (normalized != restored) {
+                                sessionStore.save(normalized)
+                            }
+                            val normalizedSettings = saved.copy(activeSessionId = normalized.id)
+                            appSettings.save(normalizedSettings)
+                            normalizedRestore = BackupRestore(
+                                0,
+                                normalizedSettings,
+                                normalized,
+                                repaired,
+                                modelPrefs.favourites(),
+                                modelPrefs.hiddenModels(),
+                                modelPrefs.disabledProviders(),
+                                sessionStore.list(),
+                                restoredProjects,
+                            )
+                        }
                     } ?: error("could not open file")
                 }
-                val saved = appSettings.load()
-                val loaded = saved.activeSessionId?.let(sessionStore::load) ?: sessionStore.loadLatest()
-                val restored = loaded ?: PersistedSession(newSessionId(), "New chat", System.currentTimeMillis(), emptyList())
-                val safeProjectId = restored.projectId?.takeIf(PROJECT_ID::matches)
-                val repaired = restored.messages.map { it.toDomain() }.let {
-                    if (restored.activeTurn) repairInterruptedHistory(it) else it
-                }
-                val normalized = restored.copy(
-                    messages = repaired.map { it.toPersisted() },
-                    projectId = safeProjectId,
-                    activeTurn = false,
-                )
-                if (loaded == null) sessionStore.create(normalized) else if (normalized != restored) sessionStore.save(normalized)
-                BackupRestore(
-                    count,
-                    saved,
-                    normalized,
-                    repaired,
-                    modelPrefs.favourites(),
-                    modelPrefs.hiddenModels(),
-                    modelPrefs.disabledProviders(),
-                    sessionStore.list(),
-                    projectStore.list(),
-                )
+                normalizedRestore.copy(count = count)
             }
             result.fold(
                 onSuccess = { restored ->
@@ -1566,7 +1610,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         sessionId = restored.session.id
                         val activeProjectId = setActiveProject(restored.session.projectId)
                         todoStore.replace(restored.session.todos)
-                        appSettings.update { restored.settings.copy(activeSessionId = restored.session.id) }
                         _state.update {
                             it.copy(
                                 favourites = restored.favourites,

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.phonecode.app.MainActivity
@@ -119,7 +120,7 @@ class ScreenshotTest {
     private fun dismissOnboardingIfPresent() {
         if (compose.onAllNodesWithText("Get started").fetchSemanticsNodes().isEmpty()) return
         compose.onNodeWithText("Get started").performClick()
-        compose.onNodeWithText("Skip setup for now").performClick()
+        compose.onNodeWithText("Explore without a model").performClick()
         compose.waitForIdle()
     }
 
@@ -235,6 +236,41 @@ class ScreenshotTest {
             shoot(image)
             compose.onNodeWithContentDescription("Back").performClick()
         }
+    }
+
+    @Test
+    fun consequentialWorkflowStates() {
+        awaitConversation()
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+
+        compose.onNodeWithText("Files & permissions").performClick()
+        compose.onNodeWithText("Allow changes automatically").performClick()
+        shootScreen("20-approval-policy-confirmation")
+        compose.onNodeWithText("Cancel").performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
+
+        compose.onNodeWithText("Providers").performClick()
+        compose.onNodeWithText("Anthropic").performClick()
+        shootScreen("21-provider-key-explicit-save")
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
+
+        compose.onNodeWithText("Agent tools").performClick()
+        compose.onNodeWithContentDescription("Search tools").performTextInput("missing-production-tool")
+        shootScreen("22-tools-no-results")
+        compose.onNodeWithContentDescription("Back").performClick()
+
+        compose.onNodeWithText("MCP servers").performClick()
+        compose.onNodeWithText("Add server").performClick()
+        compose.onNodeWithText("Save").performClick()
+        shootScreen("23-mcp-validation")
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
+
+        compose.onNodeWithText("Export & import").performClick()
+        compose.onNodeWithText("Import from a file").performClick()
+        shootScreen("24-import-confirmation")
     }
 
     @Test

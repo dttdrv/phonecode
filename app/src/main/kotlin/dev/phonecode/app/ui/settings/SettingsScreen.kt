@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -52,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,6 +64,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -80,15 +85,21 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.material3.ripple
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonecode.app.agent.ChatViewModel
+import dev.phonecode.app.agent.ChatUiState
 import dev.phonecode.app.R
 import dev.phonecode.app.data.CustomModel
 import dev.phonecode.app.data.CustomProvider
@@ -153,10 +164,40 @@ private fun revisionOf(config: McpServerConfig): String = revisionOf(buildString
     append(config.enabled).append('\u0000').append(config.timeout)
 })
 
+private fun ChatUiState.settingsSnapshot(): ChatUiState = copy(
+    lines = emptyList(),
+    streaming = "",
+    streamingReasoning = "",
+    isRunning = false,
+    sessionLoading = false,
+    queued = emptyList(),
+    pendingPermission = null,
+    pendingQuestion = null,
+    retry = null,
+    todos = emptyList(),
+    timelineEpoch = 0,
+    usageInput = 0,
+    usageOutput = 0,
+    contextLimit = null,
+    lastCompletedAt = null,
+    interruptedTurn = false,
+)
+
+@Composable
+private fun collectSettingsState(vm: ChatViewModel): State<ChatUiState> {
+    val flow = remember(vm) {
+        vm.state.map(ChatUiState::settingsSnapshot).distinctUntilChanged()
+    }
+    return flow.collectAsStateWithLifecycle(initialValue = ChatUiState().settingsSnapshot())
+}
+
 /** Settings: a home list + every sub-page, navigated with an iOS-style slide.
  *  [initialPage] lets callers (onboarding) deep-link straight to a sub-page. */
 @Composable
 fun SettingsScreen(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () -> Unit, initialPage: String = "home") {
+    val errorMessage by remember(vm) {
+        vm.state.map { it.error }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = null)
     var page by rememberSaveable(initialPage) { mutableStateOf(initialPage) }
     var predictiveCommit by remember { mutableStateOf(false) }
     var nestedBackActive by remember { mutableStateOf(false) }
@@ -174,7 +215,7 @@ fun SettingsScreen(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () 
     }
 
     Box(Modifier.fillMaxSize()) {
-        if (backMotion.progress > 0f) {
+        if (backMotion.active) {
             Box(Modifier.fillMaxSize()) {
                 SettingsPageContent(parentOf(page), vm, settingsVm, onBack = {}, navigate = {}, onNestedBackActive = {})
             }
@@ -202,6 +243,34 @@ fun SettingsScreen(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () 
                 Box(Modifier.fillMaxSize()) {
                     SettingsPageContent(p, vm, settingsVm, navigateBack, { page = it }) { nestedBackActive = it }
                 }
+            }
+        }
+        errorMessage?.let { message ->
+            Row(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    .padding(Spacing.m)
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .semantics {
+                        error(message)
+                        liveRegion = LiveRegionMode.Polite
+                    }
+                    .padding(start = Spacing.m, top = Spacing.xs, bottom = Spacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.weight(1f),
+                )
+                PcIconButton(
+                    Icons.Filled.Close,
+                    "Dismiss error",
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                    onClick = vm::clearError,
+                )
             }
         }
     }
@@ -305,12 +374,23 @@ private fun NavRow(label: String, value: String? = null, icon: ImageVector? = nu
 @Composable
 private fun ToggleRow(label: String, sub: String? = null, checked: Boolean, onChange: (Boolean) -> Unit) {
     val colors = MaterialTheme.colorScheme
-    PcRow(onClick = { onChange(!checked) }) {
+    PcRow(
+        modifier = Modifier.semantics(mergeDescendants = true) {
+            role = Role.Switch
+            toggleableState = ToggleableState(checked)
+        },
+        onClick = { onChange(!checked) },
+    ) {
         Column(Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
             if (sub != null) Text(sub, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 1.dp))
         }
-        PcToggle(checked, onChange, "$label ${if (checked) "on" else "off"}")
+        PcToggle(
+            checked,
+            onChange = null,
+            contentDescription = label,
+            modifier = Modifier.clearAndSetSemantics {},
+        )
     }
 }
 
@@ -340,12 +420,31 @@ private fun CheckRow(label: String, selected: Boolean, sub: String? = null, onCl
 }
 
 @Composable
-private fun Note(text: String) {
+private fun Note(text: String, announce: Boolean = false) {
     val colors = MaterialTheme.colorScheme
     Box(
         Modifier.fillMaxWidth().padding(top = Spacing.xs).clip(MaterialTheme.shapes.medium)
-            .background(colors.surface).padding(Spacing.m),
+            .background(colors.surface)
+            .then(if (announce) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier)
+            .padding(Spacing.m),
     ) { Text(text, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant) }
+}
+
+@Composable
+private fun ErrorText(
+    text: String,
+    modifier: Modifier = Modifier,
+    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
+) {
+    Text(
+        text,
+        style = style,
+        color = MaterialTheme.colorScheme.error,
+        modifier = modifier.semantics {
+            error(text)
+            liveRegion = LiveRegionMode.Polite
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -354,7 +453,7 @@ private fun Note(text: String) {
 
 @Composable
 private fun HomePage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () -> Unit, onOpen: (String) -> Unit) {
-    val state by vm.state.collectAsStateWithLifecycle()
+    val state by collectSettingsState(vm)
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
     Page("Settings", onBack) {
         // The first group carries no label - an unlabeled lead group is the platform convention
@@ -402,7 +501,7 @@ private fun HomePage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: (
 
 @Composable
 private fun AgentToolsPage(vm: ChatViewModel, onBack: () -> Unit) {
-    val state by vm.state.collectAsStateWithLifecycle()
+    val state by collectSettingsState(vm)
     var query by rememberSaveable { mutableStateOf("") }
     val inventory = remember(state.mcpToolCount, state.skills.size) { vm.availableTools() }
     val tools = remember(inventory, query) {
@@ -413,17 +512,21 @@ private fun AgentToolsPage(vm: ChatViewModel, onBack: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Page("Agent tools", onBack) {
         Note("${inventory.size} available · read-only tools work in Plan mode · mutating actions follow your approval setting")
-        PcField(query, { query = it }, "Search tools")
-        tools.groupBy { it.source }.forEach { (source, entries) ->
-            PcSectionLabel(source)
-            PcGroup {
-                entries.forEach { tool ->
-                    PcRow {
-                        Column(Modifier.weight(1f)) {
-                            Text(tool.name, style = MaterialTheme.typography.bodyLarge.copy(fontFamily = PcMono), color = colors.onBackground)
-                            Text(tool.description, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        PcField(query, { query = it }, "Search tools", contentDescription = "Search tools")
+        if (tools.isEmpty()) {
+            Note("No tools match “${query.trim()}”. Try a shorter name or description.")
+        } else {
+            tools.groupBy { it.source }.forEach { (source, entries) ->
+                PcSectionLabel(source)
+                PcGroup {
+                    entries.forEach { tool ->
+                        PcRow {
+                            Column(Modifier.weight(1f)) {
+                                Text(tool.name, style = MaterialTheme.typography.bodyLarge.copy(fontFamily = PcMono), color = colors.onBackground)
+                                Text(tool.description, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                            Text(tool.access, style = MaterialTheme.typography.labelSmall, color = colors.tertiary)
                         }
-                        Text(tool.access, style = MaterialTheme.typography.labelSmall, color = colors.tertiary)
                     }
                 }
             }
@@ -467,12 +570,13 @@ private fun GeneralPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
 
 @Composable
 private fun FilesPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () -> Unit) {
-    val state by vm.state.collectAsStateWithLifecycle()
+    val state by collectSettingsState(vm)
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) vm.linkSharedFolder(uri)
     }
     var pendingUnlinkId by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmAutomaticApproval by rememberSaveable { mutableStateOf(false) }
     Page("Files & permissions", onBack) {
         PcSectionLabel("Workspace")
         PcGroup {
@@ -518,20 +622,14 @@ private fun FilesPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: 
                 selected = settings.autoAccept,
                 sub = "Run workspace changes without approval prompts",
             ) {
-                settingsVm.update { it.copy(autoAccept = true) }
-                vm.setAutoAccept(true)
+                if (!settings.autoAccept) confirmAutomaticApproval = true
             }
         }
-        Note("Reading the active workspace and linked folders is always allowed. Reads outside those locations always ask. Automatic approval controls writes, commands, and Git operations that can change data.")
+        Note("Reading the active workspace and linked folders is always allowed. Reads outside those locations always ask. Automatic approval controls writes, commands, Git operations, and actions from enabled MCP servers that can change data.")
         state.notice?.let {
             Spacer(Modifier.height(10.dp))
-            Note(it)
+            Note(it, announce = true)
             LaunchedEffect(it) { delay(3000); vm.clearNotice() }
-        }
-        state.error?.let {
-            Spacer(Modifier.height(10.dp))
-            Note(it)
-            LaunchedEffect(it) { delay(5000); vm.clearError() }
         }
     }
     pendingUnlinkId?.let { folderId ->
@@ -549,6 +647,18 @@ private fun FilesPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: 
         ) {
             vm.unlinkSharedFolder(folderId)
             pendingUnlinkId = null
+        }
+    }
+    if (confirmAutomaticApproval) {
+        ConfirmActionDialog(
+            title = "Enable automatic approval?",
+            message = "PhoneCode will run workspace writes, commands, Git operations, and mutating MCP actions without asking each time. Reads outside linked locations will still ask.",
+            action = "Enable automatic approval",
+            onDismiss = { confirmAutomaticApproval = false },
+        ) {
+            settingsVm.update { it.copy(autoAccept = true) }
+            vm.setAutoAccept(true)
+            confirmAutomaticApproval = false
         }
     }
 }
@@ -606,7 +716,7 @@ private fun PersonalPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
 
 @Composable
 private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, onBack: () -> Unit) {
-    val state by vm.state.collectAsStateWithLifecycle()
+    val state by collectSettingsState(vm)
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     var addingCustom by remember { mutableStateOf(false) }
@@ -622,15 +732,13 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
         }
         PcSectionLabel("Providers")
         if (vm.secureStorageUnavailable()) {
-            Text(
+            ErrorText(
                 "Secure storage is unavailable on this device. PhoneCode will not save API keys or sign-in credentials.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.error,
                 modifier = Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
             )
         }
         state.providerConfigError?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.error)
+            ErrorText(it)
             Note("The existing providers.json was preserved. Fix it before changing custom providers here.")
         }
         // Hoist the provider list and the key lookup out of per-recomposition work: keyFor() decrypts from
@@ -670,6 +778,10 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
         CustomProviderDialog(
             existingIds = vm.allProviders().map { it.id }.toSet(),
             onSave = vm::saveCustomProvider,
+            onSaved = { id ->
+                addingCustom = false
+                onOpenProvider(id)
+            },
             onDismiss = { addingCustom = false },
         )
     }
@@ -677,11 +789,15 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
 
 @Composable
 private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: () -> Unit) {
-    val state by vm.state.collectAsStateWithLifecycle()
+    val state by collectSettingsState(vm)
     val colors = MaterialTheme.colorScheme
     val preset = vm.allProviders().firstOrNull { it.id == providerId }
-    var key by remember(providerId) { mutableStateOf(vm.keyFor(providerId)) }
-    var confirmRemove by remember(providerId) { mutableStateOf(false) }
+    var key by remember(providerId) { mutableStateOf("") }
+    var hasStoredKey by remember(providerId) { mutableStateOf(vm.keyFor(providerId).isNotBlank()) }
+    var pendingRemoveKey by remember(providerId) { mutableStateOf(false) }
+    var pendingRemoveProvider by remember(providerId) { mutableStateOf(false) }
+    var keyError by remember(providerId) { mutableStateOf<String?>(null) }
+    val secureStorageAvailable = !vm.secureStorageUnavailable()
     Page(preset?.displayName ?: providerId, onBack) {
         if (providerId == "codex") {
             PcSectionLabel("Account")
@@ -696,7 +812,41 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
             }
         } else {
             PcSectionLabel("API key")
-            PcField(key, { key = it; vm.setKey(providerId, it) }, "API key", password = true)
+            PcField(
+                key,
+                { key = it },
+                if (hasStoredKey) "New API key" else "API key",
+                password = true,
+                contentDescription = "${preset?.displayName ?: providerId} API key",
+                enabled = secureStorageAvailable,
+            )
+            Note(
+                if (hasStoredKey) {
+                    "A key is saved securely. Enter a replacement and save it explicitly."
+                } else {
+                    "Keys are saved in Android secure storage and excluded from exports."
+                },
+            )
+            if (!secureStorageAvailable) {
+                ErrorText("Secure storage is unavailable on this device, so PhoneCode cannot change this key.")
+            }
+            keyError?.let { ErrorText(it, modifier = Modifier.padding(top = Spacing.xs)) }
+            Spacer(Modifier.height(Spacing.xs))
+            PcButton("Save key", enabled = key.isNotBlank() && secureStorageAvailable) {
+                if (vm.setKey(providerId, key)) {
+                    key = ""
+                    hasStoredKey = true
+                    keyError = null
+                } else {
+                    keyError = "The API key could not be saved securely."
+                }
+            }
+            if (hasStoredKey) {
+                Spacer(Modifier.height(Spacing.xs))
+                PcButton("Remove saved key", filled = false, destructive = true, enabled = secureStorageAvailable) {
+                    pendingRemoveKey = true
+                }
+            }
         }
         val models = state.models.filter { it.providerId == providerId }
         PcSectionLabel("Models · ${models.size}")
@@ -734,16 +884,9 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
         if (vm.isCustomProvider(providerId)) {
             PcSectionLabel("Custom provider")
             PcGroup {
-                PcRow(onClick = {
-                    if (confirmRemove) {
-                        vm.deleteCustomProvider(providerId)
-                        onBack()
-                    } else {
-                        confirmRemove = true
-                    }
-                }) {
+                PcRow(onClick = { pendingRemoveProvider = true }) {
                     Text(
-                        if (confirmRemove) "Tap again to remove provider" else "Remove this provider",
+                        "Remove this provider",
                         style = MaterialTheme.typography.bodyLarge,
                         color = colors.error,
                     )
@@ -751,11 +894,40 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
             }
         }
     }
+    if (pendingRemoveKey) {
+        ConfirmActionDialog(
+            title = "Remove saved API key?",
+            message = "${preset?.displayName ?: providerId} will stop working until you save another key.",
+            action = "Remove key",
+            onDismiss = { pendingRemoveKey = false },
+        ) {
+            if (vm.setKey(providerId, "")) {
+                hasStoredKey = false
+                pendingRemoveKey = false
+                keyError = null
+            } else {
+                pendingRemoveKey = false
+                keyError = "The saved API key could not be removed."
+            }
+        }
+    }
+    if (pendingRemoveProvider) {
+        ConfirmActionDialog(
+            title = "Remove custom provider?",
+            message = "This removes the provider configuration and its saved API key. Existing chats stay on this device.",
+            action = "Remove provider",
+            onDismiss = { pendingRemoveProvider = false },
+        ) {
+            vm.deleteCustomProvider(providerId)
+            pendingRemoveProvider = false
+            onBack()
+        }
+    }
 }
 
 @Composable
 private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (Boolean) -> Unit) {
-    val state by vm.state.collectAsStateWithLifecycle()
+    val state by collectSettingsState(vm)
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var editorDirty by rememberSaveable { mutableStateOf(false) }
@@ -784,13 +956,15 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
         val connected = state.mcpSnapshots.count { it.value.connected }
         Note("$connected connected · ${state.mcpServers.count { it.value.enabled }} enabled · ${state.mcpToolCount} tools")
         state.mcpConfigError?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.error)
+            ErrorText(it)
             Note("The existing opencode.json has been preserved. Fix it before changing MCP servers here.")
         }
         if (state.mcpServers.isNotEmpty()) PcField(query, { query = it }, "Search servers")
         PcSectionLabel("Servers")
         if (state.mcpServers.isEmpty()) {
             Note("No MCP servers configured. Add one over HTTPS, or use local HTTP for a server on this device.")
+        } else if (visible.isEmpty()) {
+            Note("No servers match “${query.trim()}”.")
         } else {
             PcGroup {
                 visible.entries.forEach { (name, server) ->
@@ -913,16 +1087,14 @@ private fun McpServerPage(
     } else {
         url != baseline.url || headers != initialHeaders || timeout != baseline.timeout.toString() || enabled != baseline.enabled
     }
-    val canSubmit = validationMessage() == null && !testing && !saving && !externalChange
+    // Keep the actions available while a draft is invalid so tapping one can reveal the exact
+    // field error. Disabled buttons with no explanation are a dead end, especially for TalkBack.
+    val canAttemptSubmit = !testing && !saving && !externalChange
     LaunchedEffect(changed) { onDirtyChange(changed) }
     val shownSnapshot = testResult ?: snapshot.takeUnless { changed }
     Page(if (isNew) "Add MCP server" else initialName, onBack) {
         if (externalChange) {
-            Text(
-                "This server changed elsewhere. Reload before saving.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.error,
-            )
+            ErrorText("This server changed elsewhere. Reload before saving.")
             Spacer(Modifier.height(Spacing.xs))
             PcButton("Reload latest", filled = false) {
                 baseline = initial
@@ -939,16 +1111,22 @@ private fun McpServerPage(
         when {
             testing -> Note("Testing this configuration…")
             shownSnapshot?.connected == true -> Note("Connected to ${shownSnapshot.serverTitle.ifBlank { shownSnapshot.serverName }.ifBlank { name }}")
-            shownSnapshot?.error?.isNotBlank() == true -> Text(shownSnapshot.error, style = MaterialTheme.typography.bodyMedium, color = colors.error)
+            shownSnapshot?.error?.isNotBlank() == true -> ErrorText(shownSnapshot.error)
             !isNew && !changed -> Note(if (enabled) "Not tested" else "Off")
         }
         PcSectionLabel("Connection")
         if (isNew) {
             McpFieldLabel("Server name")
             PcField(name, { name = it; error = null; testResult = null }, "context7", contentDescription = "Server name")
+            error?.takeIf { it == "Name is required" || it.startsWith("A server named ") }?.let {
+                ErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
+            }
         }
         McpFieldLabel("Remote URL")
         PcField(url, { url = it; error = null; testResult = null }, "https://host/mcp", contentDescription = "Remote URL")
+        error?.takeIf { it.startsWith("Use HTTPS") }?.let {
+            ErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
+        }
         McpFieldLabel("HTTP headers")
         PcField(
             headers,
@@ -958,6 +1136,9 @@ private fun McpServerPage(
             minLines = 2,
             contentDescription = "HTTP headers",
         )
+        error?.takeIf { it.startsWith("Each header") }?.let {
+            ErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
+        }
         Note("One Name: Value header per line. Values are encrypted with Android Keystore.")
         McpFieldLabel("Connection timeout")
         PcField(
@@ -966,13 +1147,26 @@ private fun McpServerPage(
             "5000 milliseconds",
             contentDescription = "Connection timeout in milliseconds",
         )
+        error?.takeIf { it.startsWith("Timeout") }?.let {
+            ErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
+        }
         Spacer(Modifier.height(Spacing.xs))
         ToggleRow("Enabled", checked = enabled) { enabled = it; error = null; testResult = null }
-        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.error, modifier = Modifier.padding(top = Spacing.xs)) }
+        error?.takeUnless { message ->
+            message == "Name is required" || message.startsWith("A server named ") ||
+                message.startsWith("Use HTTPS") || message.startsWith("Each header") ||
+                message.startsWith("Timeout")
+        }?.let { message ->
+            ErrorText(
+                message,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = Spacing.xs),
+            )
+        }
         Spacer(Modifier.height(Spacing.s))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Box(Modifier.weight(1f)) {
-                PcButton(if (testing) "Testing…" else "Test", filled = false, enabled = canSubmit) {
+                PcButton(if (testing) "Testing…" else "Test", filled = false, enabled = canAttemptSubmit) {
                     if (!testing) draft()?.let { (draftName, server) ->
                         scope.launch {
                             testing = true
@@ -983,7 +1177,7 @@ private fun McpServerPage(
                 }
             }
             Box(Modifier.weight(1f)) {
-                PcButton(if (saving) "Saving…" else "Save", enabled = canSubmit) {
+                PcButton(if (saving) "Saving…" else "Save", enabled = canAttemptSubmit) {
                     draft()?.let { (draftName, server) ->
                         scope.launch {
                             saving = true
@@ -1026,14 +1220,19 @@ private fun McpServerPage(
         }
         if (!isNew) {
             Spacer(Modifier.height(Spacing.l))
-            PcButton(if (confirmDelete) "Confirm delete" else "Delete server", filled = false, destructive = true) {
-                if (confirmDelete) {
-                    vm.deleteMcpServer(initialName)
-                    onSaved()
-                } else {
-                    confirmDelete = true
-                }
-            }
+            PcButton("Delete server", filled = false, destructive = true) { confirmDelete = true }
+        }
+    }
+    if (confirmDelete) {
+        ConfirmActionDialog(
+            title = "Delete MCP server?",
+            message = "This removes $initialName and its encrypted headers. Tools from this server will no longer be available.",
+            action = "Delete server",
+            onDismiss = { confirmDelete = false },
+        ) {
+            vm.deleteMcpServer(initialName)
+            confirmDelete = false
+            onSaved()
         }
     }
 }
@@ -1069,6 +1268,8 @@ private fun ConfirmActionDialog(
     title: String,
     message: String,
     action: String,
+    secondaryAction: String? = null,
+    onSecondary: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -1086,6 +1287,10 @@ private fun ConfirmActionDialog(
                 modifier = Modifier.padding(top = Spacing.xs, bottom = Spacing.m),
             )
             PcButton("Cancel", onClick = onDismiss)
+            if (secondaryAction != null && onSecondary != null) {
+                Spacer(Modifier.height(Spacing.xs))
+                PcButton(secondaryAction, filled = false, onClick = onSecondary)
+            }
             Spacer(Modifier.height(Spacing.xs))
             PcButton(action, filled = false, destructive = true, onClick = onConfirm)
         }
@@ -1121,7 +1326,7 @@ private enum class SkillFilter { ALL, ACTIVE, OFF, ISSUES }
 
 @Composable
 private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (Boolean) -> Unit) {
-    val state by vm.state.collectAsStateWithLifecycle()
+    val state by collectSettingsState(vm)
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(SkillFilter.ALL) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1253,7 +1458,7 @@ private fun SkillDetailPage(vm: ChatViewModel, skill: ManagedSkill, onEdit: () -
     var confirmDelete by remember(skill.id) { mutableStateOf(false) }
     Page(skill.name, onBack = onBack) {
         Note("${skill.scope.label()} · ${skill.status.label()}")
-        skill.issue?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.error) }
+        skill.issue?.let { ErrorText(it) }
         manifest?.description?.takeIf { it.isNotBlank() }?.let { Note(it) }
         if (manifest != null && skill.status != SkillStatus.SHADOWED && skill.status != SkillStatus.INVALID) {
             ToggleRow(
@@ -1296,13 +1501,18 @@ private fun SkillDetailPage(vm: ChatViewModel, skill: ManagedSkill, onEdit: () -
         Spacer(Modifier.height(Spacing.l))
         PcButton("Edit skill", filled = false, onClick = onEdit)
         Spacer(Modifier.height(Spacing.xs))
-        PcButton(if (confirmDelete) "Confirm delete" else "Delete skill", filled = false, destructive = true) {
-            if (confirmDelete) {
-                vm.deleteSkill(skill.id)
-                onBack()
-            } else {
-                confirmDelete = true
-            }
+        PcButton("Delete skill", filled = false, destructive = true) { confirmDelete = true }
+    }
+    if (confirmDelete) {
+        ConfirmActionDialog(
+            title = "Delete skill?",
+            message = "This permanently removes ${skill.name}. There is no built-in restore or undo.",
+            action = "Delete skill",
+            onDismiss = { confirmDelete = false },
+        ) {
+            vm.deleteSkill(skill.id)
+            confirmDelete = false
+            onBack()
         }
     }
 }
@@ -1397,21 +1607,13 @@ private fun SkillEditorPage(
             Note("${skillScope.label()} · changes reload into the current session")
         }
         if (unavailable) {
-            Text(
-                "This skill was removed or renamed. Your draft is preserved here.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
+            ErrorText("This skill was removed or renamed. Your draft is preserved here.")
             if (content.isNotEmpty()) {
                 Spacer(Modifier.height(Spacing.xs))
                 PcButton("Copy draft", filled = false) { clipboard.setText(AnnotatedString(content)) }
             }
         } else if (conflict) {
-            Text(
-                "This skill changed elsewhere. Your draft is preserved; reopen the editor to load the latest file.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
+            ErrorText("This skill changed elsewhere. Your draft is preserved; reopen the editor to load the latest file.")
         }
         PcSectionLabel("SKILL.md")
         PcField(
@@ -1422,7 +1624,7 @@ private fun SkillEditorPage(
             minLines = 12,
             contentDescription = "Skill instructions",
         )
-        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+        error?.let { ErrorText(it, style = MaterialTheme.typography.bodySmall) }
         Spacer(Modifier.height(Spacing.s))
         PcButton(
             if (saving) "Saving…" else "Save",
@@ -1496,11 +1698,17 @@ private fun SkillFilter.shortLabel() = when (this) {
 
 @Composable
 private fun GitPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () -> Unit) {
-    val state by vm.state.collectAsStateWithLifecycle()
+    val state by collectSettingsState(vm)
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     var advanced by rememberSaveable { mutableStateOf(false) }
+    var confirmSignOut by rememberSaveable { mutableStateOf(false) }
+    var manualUsername by remember { mutableStateOf(vm.keyFor("git.username")) }
+    var manualToken by remember { mutableStateOf("") }
+    var hasSavedToken by remember { mutableStateOf(vm.keyFor("git.token").isNotBlank()) }
+    var manualError by remember { mutableStateOf<String?>(null) }
+    val secureStorageAvailable = !vm.secureStorageUnavailable()
     Page("Git", onBack) {
         PcSectionLabel("GitHub")
         when {
@@ -1535,16 +1743,18 @@ private fun GitPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: ()
                     PcRow {
                         Column(Modifier.weight(1f)) {
                             Text("@${state.githubLogin}", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                            Text("Connected - push & pull enabled", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                            Text("GitHub account connected", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
                         }
                         Text(
                             "Sign out",
                             style = MaterialTheme.typography.labelLarge,
                             color = colors.error,
-                            modifier = Modifier.clip(MaterialTheme.shapes.extraSmall).clickable { vm.signOutGitHub() }.padding(8.dp),
+                            modifier = Modifier.clip(MaterialTheme.shapes.extraSmall).heightIn(min = Spacing.touchTarget)
+                                .clickable { confirmSignOut = true }.padding(horizontal = 8.dp),
                         )
                     }
                 }
+                Note("Push and pull also require a local Git repository with a valid HTTPS origin.")
             }
             else -> {
                 PcButton("Sign in with GitHub") { vm.startGitHubSignIn() }
@@ -1564,23 +1774,77 @@ private fun GitPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: ()
                     "Each new chat works on its own branch of the project",
                     checked = settings.gitAutoBranch,
                 ) { v -> settingsVm.update { it.copy(gitAutoBranch = v) } }
-                var token by remember { mutableStateOf(vm.keyFor("git.token")) }
+                PcRow {
+                    Column(Modifier.weight(1f)) {
+                        Text("Git username", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
+                        Spacer(Modifier.height(6.dp))
+                        PcField(
+                            manualUsername,
+                            { manualUsername = it; manualError = null },
+                            "Account username",
+                            contentDescription = "Git username",
+                            enabled = secureStorageAvailable,
+                        )
+                    }
+                }
                 PcRow {
                     Column(Modifier.weight(1f)) {
                         Text("Manual access token", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
                         Spacer(Modifier.height(6.dp))
-                        PcField(token, { token = it; vm.setKey("git.token", it) }, "Fine-grained PAT (optional)", password = true)
+                        PcField(
+                            manualToken,
+                            { manualToken = it; manualError = null },
+                            if (hasSavedToken) "New PAT (leave blank to keep saved)" else "Fine-grained PAT",
+                            password = true,
+                            contentDescription = "Manual Git access token",
+                            enabled = secureStorageAvailable,
+                        )
                     }
                 }
             }
+        }
+        if (advanced) {
+            if (!secureStorageAvailable) {
+                ErrorText("Secure storage is unavailable on this device, so manual Git credentials cannot be changed.")
+            }
+            manualError?.let { ErrorText(it, modifier = Modifier.padding(top = Spacing.xs)) }
+            Spacer(Modifier.height(Spacing.xs))
+            PcButton(
+                "Save manual credentials",
+                enabled = secureStorageAvailable && manualUsername.isNotBlank() && (manualToken.isNotBlank() || hasSavedToken),
+            ) {
+                val updates = buildMap {
+                    put("git.username", manualUsername)
+                    if (manualToken.isNotBlank()) put("git.token", manualToken)
+                }
+                if (vm.setKeys(updates)) {
+                    if (manualToken.isNotBlank()) hasSavedToken = true
+                    manualToken = ""
+                    manualError = null
+                } else {
+                    manualError = "Manual Git credentials could not be saved securely."
+                }
+            }
+        }
+    }
+    if (confirmSignOut) {
+        ConfirmActionDialog(
+            title = "Sign out of GitHub?",
+            message = "This disconnects the GitHub account and clears manual Git credentials. Local repositories and commits stay on this device.",
+            action = "Sign out",
+            onDismiss = { confirmSignOut = false },
+        ) {
+            vm.signOutGitHub()
+            confirmSignOut = false
         }
     }
 }
 
 @Composable
 private fun ExportPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () -> Unit) {
-    val state by vm.state.collectAsStateWithLifecycle()
+    val state by collectSettingsState(vm)
     val stamp = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
+    var confirmImport by rememberSaveable { mutableStateOf(false) }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) vm.exportTo(uri)
     }
@@ -1592,14 +1856,31 @@ private fun ExportPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack:
     Page("Export & import", onBack) {
         PcSectionLabel("Your data")
         Note("Exports are not encrypted. Saved provider and sign-in credentials are excluded, but chats and tool activity may contain sensitive content.")
+        Note("Import replaces chats and settings with the backup. Linked phone folders, provider keys, MCP servers, and skills are not included. Approval always returns to Ask before each change.")
         Spacer(Modifier.height(10.dp))
         PcButton("Export chats & settings") { exporter.launch("phonecode-backup-$stamp.zip") }
         Spacer(Modifier.height(10.dp))
-        PcButton("Import from a file", filled = false) { importer.launch(arrayOf("application/zip", "application/octet-stream")) }
+        PcButton("Import from a file", filled = false) { confirmImport = true }
         state.notice?.let {
             Spacer(Modifier.height(10.dp))
-            Note(it)
+            Note(it, announce = true)
             LaunchedEffect(it) { kotlinx.coroutines.delay(4000); vm.clearNotice() }
+        }
+    }
+    if (confirmImport) {
+        ConfirmActionDialog(
+            title = "Replace chats and settings?",
+            message = "The backup replaces current chats and settings. Existing chats not in the backup are removed, and approval returns to Ask before each change. This cannot be undone unless you export first.",
+            action = "Choose backup file",
+            secondaryAction = "Export first",
+            onSecondary = {
+                confirmImport = false
+                exporter.launch("phonecode-backup-$stamp.zip")
+            },
+            onDismiss = { confirmImport = false },
+        ) {
+            confirmImport = false
+            importer.launch(arrayOf("application/zip", "application/octet-stream"))
         }
     }
 }
@@ -1669,6 +1950,7 @@ private fun DocPage(title: String, assetName: String, onBack: () -> Unit) {
 private fun CustomProviderDialog(
     existingIds: Set<String>,
     onSave: suspend (String, CustomProvider) -> Result<Unit>,
+    onSaved: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -1681,8 +1963,10 @@ private fun CustomProviderDialog(
     val scope = rememberCoroutineScope()
     Dialog(onDismissRequest = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().shadow(24.dp, MaterialTheme.shapes.extraLarge, clip = false)
-                .clip(MaterialTheme.shapes.extraLarge).background(colors.surfaceContainerHigh).padding(Spacing.m),
+            Modifier.fillMaxWidth().fillMaxHeight(0.9f)
+                .shadow(24.dp, MaterialTheme.shapes.extraLarge, clip = false)
+                .clip(MaterialTheme.shapes.extraLarge).background(colors.surfaceContainerHigh)
+                .contentVerticalScroll(rememberScrollState()).padding(Spacing.m),
         ) {
             Text("Add custom provider", style = MaterialTheme.typography.titleMedium, color = colors.onBackground, modifier = Modifier.padding(bottom = Spacing.s))
             PcField(name, { name = it }, "Name (e.g. My LM Studio)")
@@ -1698,7 +1982,10 @@ private fun CustomProviderDialog(
                 }
                 PcToggle(anthropicFormat, { anthropicFormat = it }, "Use Anthropic Messages format")
             }
-            error?.let { Spacer(Modifier.height(6.dp)); Text(it, style = MaterialTheme.typography.labelSmall, color = colors.error) }
+            error?.let {
+                Spacer(Modifier.height(6.dp))
+                ErrorText(it, style = MaterialTheme.typography.labelSmall)
+            }
             Spacer(Modifier.height(Spacing.s))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 Box(Modifier.weight(1f)) { PcButton("Cancel", filled = false, onClick = onDismiss) }
@@ -1721,7 +2008,7 @@ private fun CustomProviderDialog(
                                         baseUrl = baseUrl.trim().trimEnd('/'),
                                         format = if (anthropicFormat) "anthropic" else "openai",
                                         models = models.associateWith { CustomModel(name = it) },
-                                    )).onSuccess { onDismiss() }.onFailure { failure ->
+                                    )).onSuccess { onSaved(id) }.onFailure { failure ->
                                         error = failure.message ?: "Custom provider could not be saved"
                                     }
                                     saving = false

@@ -1,12 +1,20 @@
 package dev.phonecode.app.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
 
 class AppSettingsStoreTest {
+
+    @Test
+    fun restoredSettingsNeverElevateApprovalWithoutFreshConsent() {
+        val restored = AppSettings(autoAccept = true).safeAfterRestore()
+
+        assertFalse(restored.autoAccept)
+    }
 
     @Test fun defaultsAndPersistence() {
         val dir = Files.createTempDirectory("appsettings").toFile()

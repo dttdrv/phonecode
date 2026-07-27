@@ -80,6 +80,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -98,7 +99,10 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
@@ -114,6 +118,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.phonecode.app.agent.ChatViewModel
+import dev.phonecode.app.agent.ChatUiState
 import dev.phonecode.app.R
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.data.Project
@@ -145,9 +150,29 @@ import dev.chrisbanes.haze.hazeSource
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 private fun formatSessionDate(value: Long) = SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(value))
 private enum class DrawerValue { CLOSED, OPEN }
+
+private fun ChatUiState.shellSnapshot(): ChatUiState = copy(
+    lines = emptyList(),
+    streaming = "",
+    streamingReasoning = "",
+    sessionLoading = false,
+    queued = emptyList(),
+    pendingPermission = null,
+    pendingQuestion = null,
+    retry = null,
+    todos = emptyList(),
+    timelineEpoch = 0,
+    usageInput = 0,
+    usageOutput = 0,
+    contextLimit = null,
+    lastCompletedAt = null,
+    interruptedTurn = false,
+)
 
 private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
     is android.app.Activity -> this
@@ -167,7 +192,9 @@ fun PhoneCodeApp() {
     val settingsVm: SettingsViewModel = viewModel()
     val settings by settingsVm.settings.collectAsState()
     val settingsLoaded by settingsVm.loaded.collectAsState()
-    val chatState by vm.state.collectAsState()
+    val chatState by remember(vm) {
+        vm.state.map(ChatUiState::shellSnapshot).distinctUntilChanged()
+    }.collectAsState(initial = ChatUiState().shellSnapshot())
     // First-run overlay up: hide everything behind it from accessibility so TalkBack can't reach
     // the chat/settings controls under the modal.
     val needsOnboarding = settingsLoaded && !settings.onboarded
@@ -216,7 +243,8 @@ fun PhoneCodeApp() {
         val density = LocalDensity.current
         val windowInfo = LocalWindowInfo.current
         val screenWidth = with(density) { windowInfo.containerSize.width.toDp() }
-        val drawerWidth = screenWidth * 0.82f
+        // Keep phone proportions while avoiding a giant sheet on tablets and unfolded devices.
+        val drawerWidth = minOf(screenWidth * 0.82f, 400.dp)
         val drawerWidthPx = with(density) { drawerWidth.toPx() }
         val drawerState = remember {
             AnchoredDraggableState(DrawerValue.CLOSED)
@@ -233,9 +261,13 @@ fun PhoneCodeApp() {
             positionalThreshold = { it * 0.35f },
             animationSpec = PhoneSprings.drawer,
         )
-        val drawerOffset = drawerState.offset.takeUnless(Float::isNaN) ?: 0f
-        val drawerProgress = (drawerOffset / drawerWidthPx).coerceIn(0f, 1f)
-        val drawerVisible = drawerProgress > 0.001f || drawerState.targetValue == DrawerValue.OPEN
+        // Keep composition out of the continuous drag path. This boolean changes only when the
+        // drawer crosses the visible boundary; offset/progress are read later by graphicsLayer.
+        var drawerVisible by remember { mutableStateOf(false) }
+        LaunchedEffect(drawerState) {
+            snapshotFlow { (drawerState.offset.takeUnless(Float::isNaN) ?: 0f) > 0.5f }
+                .collect { visible -> drawerVisible = visible }
+        }
         val drawerScope = rememberCoroutineScope()
         val openDrawer: () -> Unit = {
             drawerScope.launch { drawerState.animateTo(DrawerValue.OPEN, PhoneSprings.drawer) }
@@ -266,14 +298,13 @@ fun PhoneCodeApp() {
         val drawerBackMotion = rememberPredictiveBackMotion(enabled = drawerVisible) {
             drawerState.animateTo(DrawerValue.CLOSED, snap())
         }
-        val progress = drawerProgress * (1f - drawerBackMotion.progress)
 
         Box(
             Modifier.fillMaxSize().background(colors.background)
                 .anchoredDraggable(
                     state = drawerState,
                     orientation = Orientation.Horizontal,
-                    enabled = !showOnboarding && route == "chat",
+                    enabled = settingsLoaded && !showOnboarding && route == "chat",
                     flingBehavior = drawerFling,
                 ),
         ) {
@@ -281,7 +312,7 @@ fun PhoneCodeApp() {
             // push-back scale read as "disabled", not depth; see revamp-diagnosis.md #8) -----
             Box(
                 Modifier.fillMaxSize()
-                    .then(if (showOnboarding) Modifier.clearAndSetSemantics {} else Modifier),
+                    .then(if (!settingsLoaded || showOnboarding || drawerVisible) Modifier.clearAndSetSemantics {} else Modifier),
             ) {
                 // Only HORIZONTAL insets at the root: BOTH vertical edges stay unpadded so the
                 // conversation slides under the status bar AND the nav bar, frosting through the
@@ -297,6 +328,9 @@ fun PhoneCodeApp() {
                         .graphicsLayer {
                             // Drawer open: the main pane settles back (the push-back depth cue)
                             // while the sidebar overlays it.
+                            val drawerOffset = drawerState.offset.takeUnless(Float::isNaN) ?: 0f
+                            val drawerProgress = (drawerOffset / drawerWidthPx).coerceIn(0f, 1f)
+                            val progress = drawerProgress * (1f - drawerBackMotion.progress.value)
                             if (progress > 0f) {
                                 val ds = 1f - 0.06f * progress
                                 scaleX = ds; scaleY = ds
@@ -307,18 +341,20 @@ fun PhoneCodeApp() {
                         Modifier.fillMaxSize()
                             .then(if (route == "chat") Modifier else Modifier.clearAndSetSemantics {}),
                     ) {
-                        ChatScreen(
-                            vm = vm,
-                            onOpenDrawer = openDrawer,
-                            onOpenModelSetup = {
-                                navController.navigate("model-setup") { launchSingleTop = true }
-                            },
-                            onOpenProviderSetup = { providerId ->
-                                settingsInitial = "provider:$providerId"
-                                navController.navigate("settings") { launchSingleTop = true }
-                            },
-                            sendOnEnter = settings.sendOnEnter,
-                        )
+                        if (route == "chat") {
+                            ChatScreen(
+                                vm = vm,
+                                onOpenDrawer = openDrawer,
+                                onOpenModelSetup = {
+                                    navController.navigate("model-setup") { launchSingleTop = true }
+                                },
+                                onOpenProviderSetup = { providerId ->
+                                    settingsInitial = "provider:$providerId"
+                                    navController.navigate("settings") { launchSingleTop = true }
+                                },
+                                sendOnEnter = settings.sendOnEnter,
+                            )
+                        }
                     }
                     NavHost(
                         navController = navController,
@@ -367,11 +403,22 @@ fun PhoneCodeApp() {
                     Modifier.fillMaxSize(),
                 ) {
                     Box(
-                        Modifier.fillMaxSize().graphicsLayer { alpha = (0.5f * progress).coerceIn(0f, 1f) }.background(colors.scrim)
+                        Modifier.fillMaxSize().graphicsLayer {
+                            val drawerOffset = drawerState.offset.takeUnless(Float::isNaN) ?: 0f
+                            val drawerProgress = (drawerOffset / drawerWidthPx).coerceIn(0f, 1f)
+                            val progress = drawerProgress * (1f - drawerBackMotion.progress.value)
+                            alpha = (0.5f * progress).coerceIn(0f, 1f)
+                        }.background(colors.scrim)
+                            .semantics { contentDescription = "Close navigation drawer" }
                             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { closeDrawer() },
                     )
                     Box(
-                        Modifier.fillMaxSize().graphicsLayer { translationX = -drawerWidthPx * (1f - progress) },
+                        Modifier.fillMaxSize().graphicsLayer {
+                            val drawerOffset = drawerState.offset.takeUnless(Float::isNaN) ?: 0f
+                            val drawerProgress = (drawerOffset / drawerWidthPx).coerceIn(0f, 1f)
+                            val progress = drawerProgress * (1f - drawerBackMotion.progress.value)
+                            translationX = -drawerWidthPx * (1f - progress)
+                        },
                     ) {
                         Sidebar(
                             vm = vm,
@@ -412,7 +459,9 @@ fun PhoneCodeApp() {
                     },
                     modelReady = vm.hasConfiguredProvider(),
                     githubReady = chatState.githubLogin != null,
-                    projectReady = chatState.projects.isNotEmpty(),
+                    projectReady = chatState.projects.any { project ->
+                        project.folderId != null && chatState.sharedFolders.any { it.id == project.folderId }
+                    },
                     onDone = {
                         if (vm.activateConfiguredModel()) settingsVm.update { it.copy(onboarded = true) }
                     },
@@ -420,6 +469,22 @@ fun PhoneCodeApp() {
                         settingsVm.update { it.copy(onboarded = true) }
                     },
                 )
+            }
+            // Settings load asynchronously. Keep the real navigation tree covered and inert until
+            // we know whether this is a first launch, avoiding a one-frame flash of the chat.
+            if (!settingsLoaded) {
+                Box(
+                    Modifier.fillMaxSize().background(colors.background)
+                        .clearAndSetSemantics { contentDescription = "Loading PhoneCode" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_phonecode_mark),
+                        contentDescription = null,
+                        tint = colors.onBackground,
+                        modifier = Modifier.size(48.dp),
+                    )
+                }
             }
         }
     }
@@ -439,7 +504,9 @@ private fun Sidebar(
     onOpenMcp: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    val state by vm.state.collectAsState()
+    val state by remember(vm) {
+        vm.state.map(ChatUiState::shellSnapshot).distinctUntilChanged()
+    }.collectAsState(initial = ChatUiState().shellSnapshot())
     var query by rememberSaveable { mutableStateOf("") }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var chatMenu by remember { mutableStateOf<SessionMeta?>(null) }
@@ -519,6 +586,7 @@ private fun Sidebar(
 
     Box(
         Modifier.width(width).fillMaxSize().background(colors.background)
+            .semantics { paneTitle = "Navigation drawer" }
             .windowInsetsPadding(WindowInsets.systemBars).clipToBounds(),
     ) {
         Box(
@@ -554,6 +622,7 @@ private fun Sidebar(
                 item(key = "projects_empty") {
                     Row(
                         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onNewProject)
+                            .heightIn(min = Spacing.touchTarget)
                             .padding(horizontal = 12.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -568,6 +637,7 @@ private fun Sidebar(
                 item(key = "p_${project.id}") {
                     Row(
                         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
+                            .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
                             .combinedClickable(
                                 onClick = { onToggleCollapse(project.id) },
                                 onLongClick = { projectMenu = project },
@@ -643,6 +713,7 @@ private fun Sidebar(
                 item(key = "h_archived") {
                     Row(
                         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { archivedOpen = !archivedOpen }
+                            .semantics { stateDescription = if (archivedOpen) "Expanded" else "Collapsed" }
                             .heightIn(min = Spacing.touchTarget).padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -910,6 +981,7 @@ private fun ChatRow(
     Row(
         Modifier.fillMaxWidth().padding(vertical = 1.dp).clip(MaterialTheme.shapes.medium)
             .background(if (active) colors.surfaceContainerHigh else androidx.compose.ui.graphics.Color.Transparent)
+            .semantics { selected = active }
             .combinedClickable(onClick = onClick, onLongClick = onMenu)
             .heightIn(min = 50.dp).padding(start = indent, end = 2.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,

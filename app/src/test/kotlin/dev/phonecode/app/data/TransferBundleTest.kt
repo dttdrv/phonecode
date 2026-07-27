@@ -173,6 +173,80 @@ class TransferBundleTest {
         assertEquals("""[{"id":"new","name":"New"}]""", File(target, "projects.json").readText())
     }
 
+    @Test fun importReplacesSessionsInsteadOfLeavingInvisibleStaleChats() {
+        File(source, "sessions").mkdirs()
+        File(source, "sessions/restored.json").writeText("""{"id":"restored"}""")
+        File(target, "sessions").mkdirs()
+        File(target, "sessions/stale.json").writeText("""{"id":"stale"}""")
+
+        TransferBundle.import(target, ByteArrayInputStream(exportBytes()))
+
+        assertTrue(File(target, "sessions/restored.json").isFile)
+        assertFalse(File(target, "sessions/stale.json").exists())
+    }
+
+    @Test fun failedCommitRollsBackWithoutDeletingCurrentChats() {
+        File(source, "sessions").mkdirs()
+        File(source, "config").mkdirs()
+        File(source, "sessions/restored.json").writeText("""{"id":"restored"}""")
+        File(source, "config/providers.json").writeText("[]")
+        File(target, "sessions").mkdirs()
+        File(target, "sessions/current.json").writeText("""{"id":"current"}""")
+        File(target, "config").writeText("blocks the imported config directory")
+
+        val result = runCatching {
+            TransferBundle.import(target, ByteArrayInputStream(exportBytes()))
+        }
+
+        assertTrue(result.isFailure)
+        assertTrue(File(target, "sessions/current.json").isFile)
+        assertFalse(File(target, "sessions/restored.json").exists())
+        assertEquals("blocks the imported config directory", File(target, "config").readText())
+    }
+
+    @Test fun failedNormalizationRollsBackTheWholeReplacement() {
+        File(source, "sessions").mkdirs()
+        File(source, "sessions/restored.json").writeText("""{"id":"restored"}""")
+        File(source, "projects.json").writeText("new projects")
+        File(target, "sessions").mkdirs()
+        File(target, "sessions/current.json").writeText("""{"id":"current"}""")
+        File(target, "projects.json").writeText("current projects")
+
+        val result = runCatching {
+            TransferBundle.import(target, ByteArrayInputStream(exportBytes())) {
+                File(target, "app_settings.json").writeText("partially normalized")
+                error("normalization failed")
+            }
+        }
+
+        assertTrue(result.isFailure)
+        assertTrue(File(target, "sessions/current.json").isFile)
+        assertFalse(File(target, "sessions/restored.json").exists())
+        assertEquals("current projects", File(target, "projects.json").readText())
+        assertFalse(File(target, "app_settings.json").exists())
+        assertFalse(File(target, ".import-rollback").exists())
+    }
+
+    @Test fun startupRecoveryRestoresAProcessKilledMidCommit() {
+        File(target, "sessions").mkdirs()
+        File(target, "sessions/restored.json").writeText("new session")
+        File(target, "projects.json").writeText("new projects")
+        val previous = File(target, ".import-rollback/previous")
+        File(previous, "sessions").mkdirs()
+        File(previous, "sessions/current.json").writeText("current session")
+        File(previous, "projects.json").writeText("current projects")
+        File(target, ".import-rollback/journal").writeText(
+            "sessions\ttrue\nprojects.json\ttrue\napp_settings.json\tfalse",
+        )
+
+        TransferBundle.recoverInterruptedImport(target)
+
+        assertTrue(File(target, "sessions/current.json").isFile)
+        assertFalse(File(target, "sessions/restored.json").exists())
+        assertEquals("current projects", File(target, "projects.json").readText())
+        assertFalse(File(target, ".import-rollback").exists())
+    }
+
     @Test fun maliciousAndUnknownEntriesAreSkipped() {
         val zip = ByteArrayOutputStream()
         ZipOutputStream(zip).use { zos ->

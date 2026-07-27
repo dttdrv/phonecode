@@ -18,7 +18,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -141,9 +140,16 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
@@ -838,6 +844,9 @@ private fun UserBubble(text: String, images: List<MessagePart.Image>) {
     val colors = MaterialTheme.colorScheme
     val clipboard = LocalClipboardManager.current
     val view = LocalView.current
+    fun copyMessage() {
+        clipboard.setText(AnnotatedString(text))
+    }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Box(
             Modifier.widthIn(max = 300.dp)
@@ -847,12 +856,18 @@ private fun UserBubble(text: String, images: List<MessagePart.Image>) {
                 .combinedClickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                     indication = null,
-                    onClick = {},
+                    onClick = ::copyMessage,
                     onLongClick = {
                         view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                        clipboard.setText(AnnotatedString(text))
+                        copyMessage()
                     },
                 )
+                .semantics {
+                    onClick("Copy message") {
+                        copyMessage()
+                        true
+                    }
+                }
                 .padding(horizontal = 8.dp, vertical = 8.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -893,7 +908,9 @@ private fun AssistantTurn(
         if (reasoning != null) {
             // "Thinking" row: dot + label that wipes right-to-left when opened.
             Row(
-                Modifier.clip(MaterialTheme.shapes.extraSmall).clickable { open = !open }.padding(vertical = 3.dp, horizontal = 2.dp),
+                Modifier.clip(MaterialTheme.shapes.extraSmall).heightIn(min = Spacing.touchTarget)
+                    .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
+                    .clickable { open = !open }.padding(vertical = 3.dp, horizontal = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
@@ -1132,7 +1149,9 @@ private fun ReportReview(
                     onValueChange = onNote,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onBackground),
                     cursorBrush = SolidColor(colors.onBackground),
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp).clip(MaterialTheme.shapes.medium)
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp)
+                        .semantics { contentDescription = "Optional report details" }
+                        .clip(MaterialTheme.shapes.medium)
                         .background(colors.surfaceContainerLow).padding(14.dp),
                     decorationBox = { field ->
                         Box {
@@ -1147,6 +1166,10 @@ private fun ReportReview(
                 error ?: "The response, prompt, files, credentials, tool activity, chat history, and device identifiers are never attached.",
                 style = MaterialTheme.typography.labelMedium,
                 color = if (error != null) colors.error else colors.tertiary,
+                modifier = if (error == null) Modifier else Modifier.semantics {
+                    this.error(error)
+                    liveRegion = LiveRegionMode.Polite
+                },
             )
         }
     }
@@ -1164,6 +1187,10 @@ private fun ReportChoice(
         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
             .background(if (selected) colors.surfaceContainerHigh else colors.surfaceContainerLow)
             .border(1.dp, if (selected) colors.onBackground else colors.outline, MaterialTheme.shapes.medium)
+            .semantics {
+                this.selected = selected
+                role = Role.RadioButton
+            }
             .clickable(onClick = onClick).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1348,6 +1375,7 @@ private fun ToolActivityView(line: ChatLine.ToolActivity) {
     Column(
         Modifier.fillMaxWidth().pressFeedback(interaction, pressedScale = 0.99f).clip(MaterialTheme.shapes.medium)
             .background(if (error) colors.errorContainer else colors.surfaceContainerLow)
+            .heightIn(min = Spacing.touchTarget)
             .clickable(interactionSource = interaction, indication = ripple()) { detailsOpen = true },
     ) {
         Row(
@@ -1468,7 +1496,7 @@ private fun NoticeBanner(text: String) {
     val colors = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).clip(MaterialTheme.shapes.small)
-            .background(colors.surface).padding(10.dp),
+            .background(colors.surface).semantics { liveRegion = LiveRegionMode.Polite }.padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, style = MaterialTheme.typography.labelMedium, color = colors.secondary)
@@ -1485,7 +1513,10 @@ private fun ErrorBanner(
     val colors = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).clip(MaterialTheme.shapes.small)
-            .background(colors.errorContainer).padding(10.dp),
+            .background(colors.errorContainer).semantics {
+                error(text)
+                liveRegion = LiveRegionMode.Polite
+            }.padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, style = MaterialTheme.typography.labelMedium, color = colors.onErrorContainer, modifier = Modifier.weight(1f))
@@ -1517,11 +1548,12 @@ internal fun TodoPanel(todos: List<TodoItem>) {
         ?: todos.firstOrNull { it.status == TodoStatus.PENDING }
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).clip(MaterialTheme.shapes.small)
-            .background(colors.surface)
-            .animateContentSize(spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow)),
+            .background(colors.surface),
     ) {
         Row(
-            Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(10.dp),
+            Modifier.fillMaxWidth().heightIn(min = Spacing.touchTarget)
+                .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
+                .clickable { expanded = !expanded }.padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -1691,7 +1723,7 @@ private fun PhotoThumbnail(image: MessagePart.Image, modifier: Modifier = Modifi
         }.getOrNull()
     }
     if (bitmap != null) {
-        Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier.clip(MaterialTheme.shapes.medium))
+        Image(bitmap = bitmap, contentDescription = "Attached image", contentScale = ContentScale.Crop, modifier = modifier.clip(MaterialTheme.shapes.medium))
     }
 }
 
@@ -1774,7 +1806,9 @@ private fun ModelSheet(
                 "Done",
                 style = MaterialTheme.typography.labelLarge,
                 color = colors.onBackground,
-                modifier = Modifier.clip(ShapePill).clickable(onClick = onDone).padding(horizontal = 14.dp, vertical = 9.dp),
+                modifier = Modifier.clip(ShapePill).clickable(onClick = onDone)
+                    .heightIn(min = Spacing.touchTarget)
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
             )
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
@@ -1795,6 +1829,10 @@ private fun ModelSheet(
                     Box(
                         Modifier.weight(1f).heightIn(min = Spacing.touchTarget).clip(ShapePill)
                             .background(if (selected) colors.primary else colors.surfaceContainerHigh)
+                            .semantics {
+                                this.selected = selected
+                                role = Role.RadioButton
+                            }
                             .clickable { vm.setAgentMode(mode) },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -1824,6 +1862,10 @@ private fun ModelSheet(
                         Box(
                             Modifier.heightIn(min = Spacing.touchTarget).clip(ShapePill)
                                 .background(if (selected) colors.primary else colors.surfaceContainerHigh)
+                                .semantics {
+                                    this.selected = selected
+                                    role = Role.RadioButton
+                                }
                                 .clickable { vm.setEffort(effort) }
                                 .padding(horizontal = 14.dp),
                             contentAlignment = Alignment.Center,
@@ -1850,7 +1892,7 @@ private fun ModelSheet(
                     value = query, onValueChange = { query = it },
                     textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onBackground),
                     cursorBrush = SolidColor(colors.primary), singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Search models" },
                 )
             }
         }
@@ -1867,6 +1909,16 @@ private fun ModelSheet(
             Modifier.heightIn(max = 480.dp).padding(horizontal = 6.dp, vertical = 4.dp)
                 .fillMaxWidth(),
         ) {
+            if (visible.isEmpty()) {
+                item("models-empty") {
+                    Text(
+                        "No models match “${query.trim()}”.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 22.dp),
+                    )
+                }
+            }
             if (favourites.isNotEmpty()) {
                 item("favourites-header") {
                     Text(
@@ -1938,6 +1990,10 @@ private fun ModelRow(
     Row(
         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
             .background(if (selected) colors.surfaceContainerHigh else Color.Transparent)
+            .semantics {
+                this.selected = selected
+                role = Role.RadioButton
+            }
             .clickable(onClick = if (ready) onSelect else onSetup).heightIn(min = 52.dp).padding(start = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -2155,6 +2211,12 @@ private fun approvalPresentation(tool: String): ApprovalPresentation {
                 risk = "External file access",
                 guidance = "This reads the exact file or folder path shown above. PhoneCode always asks for this access.",
             )
+        normalized.startsWith("mcp_") ->
+            ApprovalPresentation(
+                action = "Run an MCP server action",
+                risk = "Connected service change",
+                guidance = "This enabled MCP server may send data to or change an external service.",
+            )
         normalized.contains("shell") || normalized.contains("terminal") || normalized.contains("process") ->
             ApprovalPresentation(
                 action = "Run a command",
@@ -2253,6 +2315,10 @@ private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>
                     Row(
                         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
                             .background(if (selected) colors.surfaceContainerHighest else colors.surfaceContainer)
+                            .semantics {
+                                this.selected = selected
+                                role = if (item.multiSelect) Role.Checkbox else Role.RadioButton
+                            }
                             .clickable {
                                 val chosen = selections[index]
                                 if (item.multiSelect) {

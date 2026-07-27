@@ -37,6 +37,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -71,40 +73,53 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 
-data class PredictiveBackMotion(val progress: Float, val swipeEdge: Int)
+@Stable
+class PredictiveBackMotion internal constructor(
+    internal val progress: State<Float>,
+    internal val swipeEdge: State<Int>,
+    internal val activeState: State<Boolean>,
+) {
+    /** Changes only when a predictive gesture starts or finishes, not for every progress frame. */
+    val active: Boolean get() = activeState.value
+}
 
 @Composable
 fun rememberPredictiveBackMotion(
     enabled: Boolean = true,
     onBack: suspend () -> Unit,
 ): PredictiveBackMotion {
-    var progress by remember { mutableFloatStateOf(0f) }
-    var swipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+    val progress = remember { mutableFloatStateOf(0f) }
+    val swipeEdge = remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+    val active = remember { mutableStateOf(false) }
     val currentOnBack by rememberUpdatedState(onBack)
     val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     PredictiveBackHandler(enabled = enabled && !imeVisible) { events ->
         try {
             events.collect { event ->
-                progress = event.progress
-                swipeEdge = event.swipeEdge
+                active.value = true
+                progress.floatValue = event.progress
+                swipeEdge.intValue = event.swipeEdge
             }
             currentOnBack()
         } catch (cancelled: CancellationException) {
             withContext(NonCancellable) {
-                animate(progress, 0f, animationSpec = PhoneSprings.quick) { value, _ -> progress = value }
+                animate(progress.floatValue, 0f, animationSpec = PhoneSprings.quick) { value, _ ->
+                    progress.floatValue = value
+                }
             }
             throw cancelled
         } finally {
-            progress = 0f
+            progress.floatValue = 0f
+            active.value = false
         }
     }
-    return PredictiveBackMotion(progress, swipeEdge)
+    return remember { PredictiveBackMotion(progress, swipeEdge, active) }
 }
 
 fun Modifier.predictiveBackTransform(motion: PredictiveBackMotion): Modifier = graphicsLayer {
-    val fraction = motion.progress.coerceIn(0f, 1f)
-    val direction = if (motion.swipeEdge == BackEventCompat.EDGE_RIGHT) -1f else 1f
+    val fraction = motion.progress.value.coerceIn(0f, 1f)
+    val direction = if (motion.swipeEdge.value == BackEventCompat.EDGE_RIGHT) -1f else 1f
     val scale = 1f - 0.04f * fraction
     translationX = size.width * 0.1f * fraction * direction
     scaleX = scale
@@ -196,11 +211,16 @@ fun PcRoundButton(
 
 /** Platform switch - Material's own component IS the native feel; the theme keeps it monochrome. */
 @Composable
-fun PcToggle(checked: Boolean, onChange: (Boolean) -> Unit, contentDescription: String = "Toggle") {
+fun PcToggle(
+    checked: Boolean,
+    onChange: ((Boolean) -> Unit)?,
+    contentDescription: String = "Toggle",
+    modifier: Modifier = Modifier,
+) {
     Switch(
         checked = checked,
         onCheckedChange = onChange,
-        modifier = Modifier.semantics { this.contentDescription = contentDescription },
+        modifier = modifier.semantics { this.contentDescription = contentDescription },
     )
 }
 
@@ -260,6 +280,7 @@ fun PcField(
     minLines: Int = 1,
     contentDescription: String = placeholder,
     label: String? = null,
+    enabled: Boolean = true,
 ) {
     val colors = MaterialTheme.colorScheme
     var passwordVisible by remember { mutableStateOf(false) }
@@ -282,6 +303,7 @@ fun PcField(
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
+                    enabled = enabled,
                     textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onBackground),
                     cursorBrush = SolidColor(colors.primary),
                     singleLine = singleLine,

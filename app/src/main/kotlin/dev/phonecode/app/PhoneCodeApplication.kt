@@ -4,12 +4,19 @@ import android.app.Application
 import android.os.Process
 import dev.phonecode.app.agent.ChatViewModel
 import dev.phonecode.app.agent.TurnService
+import dev.phonecode.app.data.TransferBundle
 import dev.phonecode.app.runtime.ShellBackendFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 class PhoneCodeApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        // Recover before any lazy store/view-model reads can observe a half-committed import.
+        TransferBundle.recoverInterruptedImport(filesDir)
+    }
+
     val foregroundLeases by lazy {
         requireMainUid()
         ForegroundLeaseManager(

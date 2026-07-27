@@ -2,6 +2,7 @@ package dev.phonecode.app.data
 
 import kotlinx.serialization.Serializable
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -34,6 +35,9 @@ object TransferBundle {
     private const val BUNDLE_VERSION = 1
     private const val MAX_ENTRY_BYTES = 5L * 1024 * 1024 // a single chat/settings file should never be this big
     private const val MAX_TOTAL_BYTES = 100L * 1024 * 1024 // hard stop against zip bombs / disk fill
+    private const val ROLLBACK_DIR = ".import-rollback"
+    private const val ROLLBACK_JOURNAL = "journal"
+    private const val COMMIT_MARKER = "commit-complete"
 
     /** Zip every present data file under [filesDir] into [out], prefixed by a manifest entry. */
     fun export(filesDir: File, out: OutputStream) {
@@ -69,7 +73,8 @@ object TransferBundle {
      * full) can leave a mix of old/new files. Validation failures never write; I/O failures are
      * surfaced to the user as a failed import.
      */
-    fun import(filesDir: File, input: InputStream): Int {
+    fun import(filesDir: File, input: InputStream, afterCommit: () -> Unit = {}): Int {
+        recoverInterruptedImport(filesDir)
         var totalBytes = 0L
         var manifestSeen = false
         val staged = mutableListOf<Pair<String, File>>()
@@ -123,24 +128,115 @@ object TransferBundle {
                 }
             }
             if (!manifestSeen) throw IOException("Not a PhoneCode backup (missing manifest).")
-            // Stream fully validated - commit the staged files into place.
-            staged.forEach { (name, stage) ->
-                val target = File(filesDir, name)
-                target.parentFile?.mkdirs()
-                runCatching {
-                    Files.move(
-                        stage.toPath(),
-                        target.toPath(),
-                        StandardCopyOption.ATOMIC_MOVE,
-                        StandardCopyOption.REPLACE_EXISTING,
-                    )
-                }.getOrElse {
-                    Files.move(stage.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            // Stream fully validated - commit the staged files into place. Sessions are a
+            // replacement set, not a merge: omitted chats can reference projects that no longer
+            // exist and disappear from the drawer. Move every affected current file into a
+            // rollback area first so any commit failure restores the complete pre-import state.
+            // Sessions are replaced as one directory so a callback-created/repaired session is
+            // also covered by rollback. Settings and projects are always covered because restore
+            // normalization updates them even when an older/minimal bundle omitted either file.
+            val affectedFiles = (staged.asSequence().map { it.first }
+                .filterNot(SESSION_ENTRY::matches) + sequenceOf("projects.json", "app_settings.json"))
+                .distinct()
+                .toList()
+            val sessionsDir = File(filesDir, "sessions")
+            val rollbackDir = File(filesDir, ROLLBACK_DIR).apply { mkdirs() }
+            val previousRoot = File(rollbackDir, "previous")
+            val journalLines = buildList {
+                add("sessions\t${sessionsDir.exists()}")
+                affectedFiles.forEach { name -> add("$name\t${File(filesDir, name).isFile}") }
+            }
+            writeDurably(File(rollbackDir, ROLLBACK_JOURNAL), journalLines.joinToString("\n"))
+            var rollbackComplete = false
+            try {
+                if (sessionsDir.exists()) {
+                    moveReplacing(sessionsDir, File(previousRoot, "sessions"))
+                }
+                sessionsDir.mkdirs()
+                affectedFiles.forEach { name ->
+                    val current = File(filesDir, name)
+                    if (current.isFile) {
+                        moveReplacing(current, File(previousRoot, name))
+                    }
+                }
+                staged.forEach { (name, stage) ->
+                    val target = File(filesDir, name)
+                    target.parentFile?.mkdirs()
+                    moveReplacing(stage, target)
+                }
+                afterCommit()
+                writeDurably(File(rollbackDir, COMMIT_MARKER), "complete")
+            } catch (commitError: Exception) {
+                val rollbackError = runCatching { restoreRollback(filesDir, rollbackDir) }.exceptionOrNull()
+                if (rollbackError != null) {
+                    commitError.addSuppressed(rollbackError)
+                    throw IOException("Import failed and the previous data could not be fully restored.", commitError)
+                }
+                rollbackComplete = true
+                throw IOException("Import could not replace the current data; no changes were kept.", commitError)
+            } finally {
+                if (File(rollbackDir, COMMIT_MARKER).isFile || rollbackComplete) {
+                    rollbackDir.deleteRecursively()
                 }
             }
             return staged.size
         } finally {
             stagingDir.deleteRecursively()
+        }
+    }
+
+    /**
+     * Completes recovery from a process death during import. A durable commit marker means the
+     * new data won; otherwise the mapped previous tree is restored before any store is opened.
+     */
+    fun recoverInterruptedImport(filesDir: File) {
+        val rollbackDir = File(filesDir, ROLLBACK_DIR)
+        if (!rollbackDir.exists()) return
+        if (File(rollbackDir, COMMIT_MARKER).isFile) {
+            rollbackDir.deleteRecursively()
+            return
+        }
+        restoreRollback(filesDir, rollbackDir)
+        rollbackDir.deleteRecursively()
+    }
+
+    private fun restoreRollback(filesDir: File, rollbackDir: File) {
+        val journal = File(rollbackDir, ROLLBACK_JOURNAL)
+        if (!journal.isFile) throw IOException("Import recovery journal is missing.")
+        val previousRoot = File(rollbackDir, "previous")
+        journal.readLines().asReversed().forEach { line ->
+            val split = line.split('\t', limit = 2)
+            if (split.size != 2 || split[0] != "sessions" && !isAllowed(split[0])) {
+                throw IOException("Import recovery journal is invalid.")
+            }
+            val name = split[0]
+            val existed = split[1].toBooleanStrictOrNull()
+                ?: throw IOException("Import recovery journal is invalid.")
+            val target = File(filesDir, name)
+            if (existed) {
+                val backup = File(previousRoot, name)
+                // The journal is synced before the first move. If the process died before this
+                // particular move, the original is still at the target and there is nothing to
+                // restore for this entry.
+                if (!backup.exists()) {
+                    if (target.exists()) return@forEach
+                    throw IOException("Import recovery data for $name is missing.")
+                }
+                if (target.exists() && !target.deleteRecursively()) {
+                    throw IOException("Could not remove partially imported $name.")
+                }
+                moveReplacing(backup, target)
+            } else if (target.exists() && !target.deleteRecursively()) {
+                throw IOException("Could not remove partially imported $name.")
+            }
+        }
+    }
+
+    private fun writeDurably(file: File, value: String) {
+        file.parentFile?.mkdirs()
+        FileOutputStream(file).use { output ->
+            output.write(value.toByteArray(Charsets.UTF_8))
+            output.fd.sync()
         }
     }
 
@@ -169,6 +265,20 @@ object TransferBundle {
         file.inputStream().use { it.copyTo(zos) }
         zos.closeEntry()
         return total
+    }
+
+    private fun moveReplacing(source: File, target: File) {
+        target.parentFile?.mkdirs()
+        runCatching {
+            Files.move(
+                source.toPath(),
+                target.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        }.getOrElse {
+            Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
     }
 
     /** Whitelist check; rejects traversal ("..") , backslashes, and absolute paths outright. */

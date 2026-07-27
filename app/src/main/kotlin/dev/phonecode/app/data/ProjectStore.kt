@@ -7,6 +7,13 @@ import java.io.File
 @Serializable
 data class Project(val id: String, val name: String, val folderId: String? = null)
 
+/** Folder grants are device-local and are intentionally absent from backups. */
+fun List<Project>.safeAfterRestore(linkedFolderIds: Set<String>): List<Project> =
+    map { project -> project.copy(folderId = project.folderId?.takeIf(linkedFolderIds::contains)) }
+
+/** Chats whose project was not restored remain reachable under Unsorted. */
+fun String?.safeProjectAfterRestore(projectIds: Set<String>): String? = this?.takeIf(projectIds::contains)
+
 /** Persists the user's chat projects in a single JSON file. Sessions reference a project by id. */
 class ProjectStore(private val file: File) {
     private val json = storeJson

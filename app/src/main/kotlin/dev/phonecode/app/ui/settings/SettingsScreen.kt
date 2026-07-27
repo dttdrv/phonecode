@@ -231,6 +231,21 @@ private fun revisionOf(config: McpServerConfig): String = revisionOf(buildString
     append(config.enabled).append('\u0000').append(config.timeout)
 })
 
+private fun mcpConnectionDraftRevision(name: String, config: McpServerConfig): String =
+    revisionOf(buildString {
+        append(name.trim()).append('\u0000')
+        append(config.type).append('\u0000').append(config.url.trim()).append('\u0000')
+        config.headers.toSortedMap().forEach { (headerName, value) ->
+            append(headerName).append('\u0000').append(value).append('\u0000')
+        }
+        append(config.timeout)
+    })
+
+private data class TestedMcpDraft(
+    val revision: String,
+    val snapshot: McpServerSnapshot,
+)
+
 internal fun openExternalUrl(context: Context, url: String): String? =
     runCatching {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -1513,13 +1528,18 @@ private fun McpServerPage(
     var error by remember(initialName) { mutableStateOf<String?>(null) }
     var testing by remember(initialName) { mutableStateOf(false) }
     var saving by remember(initialName) { mutableStateOf(false) }
-    var testResult by remember(initialName) { mutableStateOf<McpServerSnapshot?>(null) }
+    var testResult by remember(initialName) { mutableStateOf<TestedMcpDraft?>(null) }
+    var reviewedDraftRevision by remember(initialName) { mutableStateOf<String?>(null) }
     var toolQuery by rememberSaveable(initialName) { mutableStateOf("") }
     var showAllTools by rememberSaveable(initialName) { mutableStateOf(false) }
     var confirmDelete by rememberSaveable(initialName) { mutableStateOf(false) }
     val deleteOperationKey = mcpDeleteOperationKey(initialName)
     val deleteOperation = state.settingsOperations[deleteOperationKey]
     val externalChange = !isNew && currentRevision != acceptedRevision
+    fun invalidateProbeReview() {
+        testResult = null
+        reviewedDraftRevision = null
+    }
 
     fun validationMessage(): String? {
         val finalName = if (isNew) name.trim() else initialName
@@ -1572,16 +1592,34 @@ private fun McpServerPage(
         url != baseline.url || headers != initialHeaders || timeout != baseline.timeout.toString()
     }
     val validationError = validationMessage()
+    val currentDraftRevision = if (validationError == null) {
+        mcpConnectionDraftRevision(
+            name = if (isNew) name.trim() else initialName,
+            config = McpServerConfig(
+                type = "remote",
+                url = url.trim(),
+                headers = parseHeaders(headers, baseline.headers),
+                enabled = false,
+                timeout = requireNotNull(timeout.toLongOrNull()),
+            ),
+        )
+    } else {
+        null
+    }
+    val latestDraftRevision by rememberUpdatedState(currentDraftRevision)
+    val currentTestResult = testResult?.takeIf { it.revision == currentDraftRevision }
+    val reviewedCurrentDraft =
+        currentTestResult?.snapshot?.connected == true &&
+            reviewedDraftRevision == currentDraftRevision
     val canTest = !testing && !saving && !externalChange
     val enabledDraftNeedsReview = enabled && (isNew || !baseline.enabled || connectionChanged)
-    val reviewedCurrentDraft = testResult?.connected == true
     val canSave =
         canTest && changed && validationError == null && (!enabledDraftNeedsReview || reviewedCurrentDraft)
     // Turning a server off is always available. Turning one on requires a successful probe for
     // this exact draft, including servers that were previously saved in the Off state.
-    val canEnable = enabled || testResult?.connected == true
+    val canEnable = enabled || reviewedCurrentDraft
     LaunchedEffect(changed) { onDirtyChange(changed) }
-    val shownSnapshot = testResult ?: snapshot.takeUnless { changed }
+    val shownSnapshot = currentTestResult?.snapshot ?: snapshot.takeUnless { changed }
     Page(if (isNew) "Add MCP server" else initialName, onBack) {
         if (externalChange) {
             ErrorText("This server changed elsewhere. Reload before saving.")
@@ -1594,7 +1632,7 @@ private fun McpServerPage(
                 enabled = initial.enabled
                 acceptedRevision = currentRevision
                 error = null
-                testResult = null
+                invalidateProbeReview()
             }
             Spacer(Modifier.height(Spacing.s))
         }
@@ -1607,7 +1645,16 @@ private fun McpServerPage(
         PcSectionLabel("Connection")
         if (isNew) {
             McpFieldLabel("Server name")
-            PcField(name, { name = it; error = null; testResult = null }, "e.g. context7", contentDescription = "Server name")
+            PcField(
+                name,
+                {
+                    name = it
+                    error = null
+                    invalidateProbeReview()
+                },
+                "e.g. context7",
+                contentDescription = "Server name",
+            )
             error?.takeIf {
                 it == "Name is required" || it.startsWith("A server named ") ||
                     it.startsWith("Use letters")
@@ -1616,7 +1663,16 @@ private fun McpServerPage(
             }
         }
         McpFieldLabel("Remote URL")
-        PcField(url, { url = it; error = null; testResult = null }, "e.g. https://host/mcp", contentDescription = "Remote URL")
+        PcField(
+            url,
+            {
+                url = it
+                error = null
+                invalidateProbeReview()
+            },
+            "e.g. https://host/mcp",
+            contentDescription = "Remote URL",
+        )
         error?.takeIf { it.startsWith("Use HTTPS") }?.let {
             ErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
         }
@@ -1631,7 +1687,7 @@ private fun McpServerPage(
                             {
                                 headers = updateHeaderRow(headers, index, name = it)
                                 error = null
-                                testResult = null
+                                invalidateProbeReview()
                             },
                             "e.g. Authorization",
                             contentDescription = "Header name ${index + 1}",
@@ -1643,7 +1699,7 @@ private fun McpServerPage(
                     ) {
                         headers = removeHeaderRow(headers, index)
                         error = null
-                        testResult = null
+                        invalidateProbeReview()
                     }
                 }
                 PcRow {
@@ -1652,7 +1708,7 @@ private fun McpServerPage(
                         {
                             headers = updateHeaderRow(headers, index, value = it)
                             error = null
-                            testResult = null
+                            invalidateProbeReview()
                         },
                         "Secret value",
                         password = true,
@@ -1664,7 +1720,7 @@ private fun McpServerPage(
         PcButton("Add header", filled = false, icon = Icons.Filled.Add) {
             headers = addHeaderRow(headers)
             error = null
-            testResult = null
+            invalidateProbeReview()
         }
         error?.takeIf {
             it.startsWith("Each header") || it.startsWith("Use no more")
@@ -1677,7 +1733,11 @@ private fun McpServerPage(
         McpFieldLabel("Connection timeout")
         PcField(
             timeout,
-            { timeout = it.filter(Char::isDigit); error = null; testResult = null },
+            {
+                timeout = it.filter(Char::isDigit)
+                error = null
+                invalidateProbeReview()
+            },
             "5000 milliseconds",
             contentDescription = "Connection timeout in milliseconds",
         )
@@ -1697,7 +1757,9 @@ private fun McpServerPage(
             }
         }
         if (enabledDraftNeedsReview && !reviewedCurrentDraft) {
-            Note("Test this changed configuration successfully before saving it enabled.")
+            Note(
+                "Test this changed configuration and review its reported tools before saving it enabled.",
+            )
         }
         if (isNew) {
             Note(
@@ -1722,8 +1784,13 @@ private fun McpServerPage(
                 PcButton(if (testing) "Testing…" else "Test", filled = false, enabled = canTest) {
                     if (!testing) draft()?.let { (draftName, server) ->
                         scope.launch {
+                            val testedRevision = mcpConnectionDraftRevision(draftName, server)
                             testing = true
-                            testResult = vm.testMcpServer(draftName, server)
+                            invalidateProbeReview()
+                            val result = vm.testMcpServer(draftName, server)
+                            if (latestDraftRevision == testedRevision) {
+                                testResult = TestedMcpDraft(testedRevision, result)
+                            }
                             testing = false
                         }
                     }
@@ -1813,6 +1880,31 @@ private fun McpServerPage(
                     Spacer(Modifier.height(Spacing.xs))
                     PcButton("Show fewer tools", filled = false) {
                         showAllTools = false
+                    }
+                }
+            }
+            if (currentTestResult?.snapshot?.connected == true) {
+                val completeInventoryVisible =
+                    toolQuery.isBlank() &&
+                        (connectedSnapshot.tools.size <= 8 || showAllTools)
+                PcSectionLabel("Review")
+                PcGroup {
+                    ToggleRow(
+                        label = "I reviewed the reported tools",
+                        sub = if (completeInventoryVisible) {
+                            if (connectedSnapshot.tools.isEmpty()) {
+                                "This server reported that it exposes no tools"
+                            } else {
+                                "Confirm this exact server inventory before enabling it"
+                            }
+                        } else {
+                            "Show all reported tools and clear the search before confirming"
+                        },
+                        checked = reviewedCurrentDraft,
+                        enabled = completeInventoryVisible,
+                    ) { reviewed ->
+                        reviewedDraftRevision =
+                            if (reviewed) currentDraftRevision else null
                     }
                 }
             }

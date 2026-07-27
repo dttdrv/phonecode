@@ -3,6 +3,7 @@ package dev.phonecode.app.ui
 import android.content.Context
 import androidx.activity.compose.setContent
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -30,6 +31,8 @@ import dev.phonecode.tools.mcp.McpToolDef
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -39,6 +42,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -155,6 +159,97 @@ class McpWorkflowPolishTest {
 
         compose.onNodeWithText("Test this changed configuration", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Save").assertIsNotEnabled()
+    }
+
+    @Test
+    fun successfulTestForDraftADoesNotUnlockChangedDraftB() {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(
+                MockResponse()
+                    .setBodyDelay(500, TimeUnit.MILLISECONDS)
+                    .setBody(
+                        """{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{},"serverInfo":{"name":"draft-a"}}}""",
+                    ),
+            )
+            server.enqueue(MockResponse().setResponseCode(202))
+            stateFlow().value = stateFlow().value.copy(
+                mcpServers = mapOf(
+                    "Docs" to McpServerConfig(
+                        url = server.url("/mcp").toString(),
+                        enabled = true,
+                    ),
+                ),
+            )
+            showMcp()
+            compose.onNodeWithContentDescription("Docs details").performClick()
+
+            compose.onNodeWithText("Test").performClick()
+            compose.onNodeWithText("Testing…").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Remote URL")
+                .performTextReplacement("https://draft-b.example/mcp")
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithText("Testing…").fetchSemanticsNodes().isEmpty()
+            }
+
+            compose.onNodeWithText("Save").assertIsNotEnabled()
+            compose.onNodeWithText("Test this changed configuration", substring = true)
+                .assertIsDisplayed()
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun connectedResultRequiresExplicitToolReviewBeforeEnable() {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"review-me"}}}""",
+                ),
+            )
+            server.enqueue(MockResponse().setResponseCode(202))
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"publish","description":"Publish content","inputSchema":{"type":"object"}}]}}""",
+                ),
+            )
+            stateFlow().value = stateFlow().value.copy(
+                mcpServers = mapOf(
+                    "Docs" to McpServerConfig(
+                        url = server.url("/mcp").toString(),
+                        enabled = false,
+                    ),
+                ),
+            )
+            showMcp()
+            compose.onNodeWithContentDescription("Docs details").performClick()
+
+            compose.onNodeWithText("Test").performClick()
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithText("Testing…").fetchSemanticsNodes().isEmpty()
+            }
+
+            compose.onNodeWithText("Enabled").performScrollTo().assertIsNotEnabled()
+            compose.onNodeWithText("I reviewed the reported tools")
+                .performScrollTo()
+                .assertIsDisplayed()
+                .performClick()
+            compose.onNodeWithText("Enabled").performScrollTo().assertIsEnabled()
+
+            compose.onNodeWithContentDescription("Remote URL")
+                .performScrollTo()
+                .performTextReplacement("https://changed.example/mcp")
+
+            compose.onNodeWithText("Enabled").performScrollTo().assertIsNotEnabled()
+            compose.onAllNodesWithText("I reviewed the reported tools")
+                .assertCountEquals(0)
+        } finally {
+            server.shutdown()
+        }
     }
 
     @Test

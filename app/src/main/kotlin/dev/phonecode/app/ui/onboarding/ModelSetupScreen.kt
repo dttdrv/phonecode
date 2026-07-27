@@ -2,7 +2,6 @@ package dev.phonecode.app.ui.onboarding
 
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.animation.animateContentSize
@@ -62,6 +61,8 @@ import dev.phonecode.app.ui.components.PcGroup
 import dev.phonecode.app.ui.components.PcIconButton
 import dev.phonecode.app.ui.components.PcRow
 import dev.phonecode.app.ui.components.PcSectionLabel
+import dev.phonecode.app.ui.components.predictiveBackTransform
+import dev.phonecode.app.ui.components.rememberPredictiveBackMotion
 import dev.phonecode.app.ui.theme.Spacing
 import dev.phonecode.app.ui.theme.PhoneEasings
 import dev.phonecode.app.ui.theme.PhoneSprings
@@ -81,7 +82,9 @@ fun ModelSetupScreen(
     val navigateBack = {
         if (selectedProviderId == null) onBack() else selectedProviderId = null
     }
-    BackHandler(onBack = navigateBack)
+    val detailBackMotion = rememberPredictiveBackMotion(enabled = selectedProviderId != null) {
+        selectedProviderId = null
+    }
 
     Box(
         Modifier.fillMaxSize()
@@ -117,14 +120,16 @@ fun ModelSetupScreen(
                     onConfigured = onConfigured,
                 )
             } else {
-                ApiKeySetup(
-                    vm = vm,
-                    provider = provider,
-                    globalError = state.error,
-                    onDismissError = vm::clearError,
-                    onBack = navigateBack,
-                    onConfigured = onConfigured,
-                )
+                Box(Modifier.fillMaxSize().predictiveBackTransform(detailBackMotion)) {
+                    ApiKeySetup(
+                        vm = vm,
+                        provider = provider,
+                        globalError = state.error,
+                        onDismissError = vm::clearError,
+                        onBack = navigateBack,
+                        onConfigured = onConfigured,
+                    )
+                }
             }
         }
     }

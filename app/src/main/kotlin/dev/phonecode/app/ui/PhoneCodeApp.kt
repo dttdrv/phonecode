@@ -12,7 +12,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -163,6 +165,11 @@ internal fun renameSaveEnabled(initial: String, value: String): Boolean {
     val trimmed = value.trim()
     return trimmed.isNotEmpty() && trimmed != initial.trim()
 }
+
+internal enum class AppNavigationMotion { HIERARCHY, MODAL }
+
+internal fun navigationMotionFor(route: String): AppNavigationMotion =
+    if (route == "model-setup") AppNavigationMotion.MODAL else AppNavigationMotion.HIERARCHY
 
 private enum class DrawerValue { CLOSED, OPEN }
 
@@ -353,12 +360,12 @@ fun PhoneCodeApp() {
                         startDestination = "chat",
                         modifier = Modifier.fillMaxSize(),
                         enterTransition = {
-                            slideInHorizontally(tween(240, easing = PhoneEasings.easeInOut)) { it }
+                            slideInHorizontally(tween(240, easing = PhoneEasings.easeOut)) { it }
                         },
                         exitTransition = { androidx.compose.animation.ExitTransition.None },
                         popEnterTransition = { androidx.compose.animation.EnterTransition.None },
                         popExitTransition = {
-                            slideOutHorizontally(tween(180, easing = PhoneEasings.easeInOut)) { it }
+                            slideOutHorizontally(tween(180, easing = PhoneEasings.easeOut)) { it }
                         },
                     ) {
                         composable("chat") {
@@ -384,7 +391,21 @@ fun PhoneCodeApp() {
                         composable("mcp") {
                             SettingsScreen(vm, settingsVm, onBack = { navController.popBackStack() }, initialPage = "mcp")
                         }
-                        composable("model-setup") {
+                        composable(
+                            route = "model-setup",
+                            enterTransition = {
+                                if (needsOnboarding) {
+                                    androidx.compose.animation.EnterTransition.None
+                                } else {
+                                    slideInVertically(tween(260, easing = PhoneEasings.easeOut)) { it } +
+                                        fadeIn(tween(160, easing = PhoneEasings.easeOut))
+                                }
+                            },
+                            popExitTransition = {
+                                slideOutVertically(tween(200, easing = PhoneEasings.easeOut)) { it } +
+                                    fadeOut(tween(120, easing = PhoneEasings.easeOut))
+                            },
+                        ) {
                             ModelSetupScreen(
                                 vm = vm,
                                 onBack = { navController.popBackStack() },

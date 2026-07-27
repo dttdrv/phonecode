@@ -145,6 +145,30 @@ class OnboardingFlowTest {
     }
 
     @Test
+    fun modelSetupVisibleBackReturnsFromDetailBeforeDismissingRoot() {
+        val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
+        var rootBackCount = 0
+        compose.setContent {
+            PhoneCodeTheme(darkTheme = false) {
+                ModelSetupScreen(
+                    vm = app.chatViewModel,
+                    onBack = { rootBackCount++ },
+                    onConfigured = {},
+                )
+            }
+        }
+
+        compose.onNodeWithText("OpenAI").performClick()
+        compose.onNodeWithContentDescription("OpenAI API key").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("Choose how to connect").assertIsDisplayed()
+        assertEquals(0, rootBackCount)
+
+        compose.onNodeWithContentDescription("Back").performClick()
+        assertEquals(1, rootBackCount)
+    }
+
+    @Test
     fun providerSetupFailureCopyDistinguishesStorageFromActivation() {
         assertEquals(
             "PhoneCode could not save this API key in secure storage.",

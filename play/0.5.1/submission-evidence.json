@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "applicationId": "dev.phonecode",
+    "versionName": "0.5.1",
+    "versionCode": 51,
+    "aabSha256": null
+  },
+  "requirements": [
+    {
+      "id": "data-safety",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The Play Console export is absent and sharing, encryption, taxonomy, and deletion answers are unresolved against the final AAB."
+      ]
+    },
+    {
+      "id": "privacy-policy-url",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The live public HTTPS policy has not been verified to match the in-app policy for the final AAB."
+      ]
+    },
+    {
+      "id": "terms-url",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The live public HTTPS terms have not been verified to match the in-app terms for the final AAB."
+      ]
+    },
+    {
+      "id": "foreground-service-declaration",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The specialUse foreground-service declaration has not been submitted and accepted for the final AAB."
+      ]
+    },
+    {
+      "id": "foreground-service-video",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "An unedited specialUse foreground-service video from the Play-delivered build is absent."
+      ]
+    },
+    {
+      "id": "ai-safety",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "Release-model prevention tests, report-flow evidence, production retention checks, and the moderation feedback loop are incomplete."
+      ]
+    },
+    {
+      "id": "reviewer-access",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "Dedicated reviewer access and final Play Console instructions have not been verified without exposing credential material."
+      ]
+    },
+    {
+      "id": "content-rating",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The final content-rating and target-audience questionnaires have not been completed in Play Console."
+      ]
+    },
+    {
+      "id": "listing-assets",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The final listing copy, icon, feature graphic, screenshots, and their release-specific inventory are incomplete."
+      ]
+    },
+    {
+      "id": "play-policy-status",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "Play Console declarations, warnings, rejections, and required actions have not been checked after producing the final AAB."
+      ]
+    },
+    {
+      "id": "signed-device-testing",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The exact signed AAB has not completed the required physical-device lifecycle, background, stop, recovery, and upgrade matrix."
+      ]
+    },
+    {
+      "id": "pre-launch-report",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "A Play pre-launch report for the exact candidate is absent or has not been cleared of release-blocking findings."
+      ]
+    }
+  ]
+}

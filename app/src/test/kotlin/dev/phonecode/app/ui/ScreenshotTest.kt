@@ -297,6 +297,7 @@ class ScreenshotTest {
         compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("Agent tools").performClick()
+        shootPage("22-agent-tools-inventory", "Agent tools")
         compose.onNodeWithContentDescription("Search tools").performTextInput("missing-production-tool")
         shootPage("22-tools-no-results", "Agent tools")
         compose.onNodeWithContentDescription("Back").performClick()
@@ -616,7 +617,7 @@ class ScreenshotTest {
         settleAnimation(1_000)
         compose.onNodeWithText("Add dark mode to Settings and keep the system default.").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
-            "../play/0.5.0/graphics/phone/01-agent-conversation.png",
+            "../play/0.5.1/graphics/phone/01-agent-conversation.png",
         )
 
         state.value = state.value.copy(
@@ -627,14 +628,14 @@ class ScreenshotTest {
         )
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithText("Approve agent action?").assertIsDisplayed()
-        captureScreenRoboImage("../play/0.5.0/graphics/phone/02-action-approval.png")
+        captureScreenRoboImage("../play/0.5.1/graphics/phone/02-action-approval.png")
         state.value = state.value.copy(pendingPermission = null)
 
         compose.onNodeWithContentDescription("Menu").performClick()
         settleAnimation()
         compose.onNodeWithContentDescription("Settings").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
-            "../play/0.5.0/graphics/phone/03-project-drawer.png",
+            "../play/0.5.1/graphics/phone/03-project-drawer.png",
         )
 
         compose.onNodeWithContentDescription("Settings").performClick()
@@ -642,7 +643,7 @@ class ScreenshotTest {
         compose.onNodeWithText("Settings").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
-            "../play/0.5.0/graphics/phone/04-settings.png",
+            "../play/0.5.1/graphics/phone/04-settings.png",
         )
     }
 }

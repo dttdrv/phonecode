@@ -544,35 +544,154 @@ private fun HomePage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: (
 private fun AgentToolsPage(vm: ChatViewModel, onBack: () -> Unit) {
     val state by collectSettingsState(vm)
     var query by rememberSaveable { mutableStateOf("") }
+    var accessFilter by rememberSaveable { mutableStateOf(AgentToolAccessFilter.ALL) }
     val inventory = remember(state.mcpToolCount, state.skills.size) { vm.availableTools() }
-    val tools = remember(inventory, query) {
-        inventory.filter {
-            query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) || it.source.contains(query, true)
-        }
+    val summary = remember(inventory) { agentToolInventorySummary(inventory) }
+    val tools = remember(inventory, query, accessFilter) {
+        filterAgentTools(inventory, query, accessFilter)
     }
     val colors = MaterialTheme.colorScheme
     Page("Agent tools", onBack) {
-        Note("${inventory.size} available · read-only tools work in Plan mode · mutating actions follow your approval setting")
+        PcSectionLabel("Available capabilities")
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            Text(
+                summary.total.toString(),
+                style = MaterialTheme.typography.headlineMedium,
+                color = colors.onBackground,
+            )
+            Text(
+                " tools",
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 2.dp),
+            )
+            Spacer(Modifier.weight(1f))
+            if (summary.remote > 0) {
+                AgentToolBadge("${summary.remote} connected", emphasized = true)
+            }
+        }
+        Text(
+            "${summary.readOnly} read only · ${summary.needsApproval} require approval · ${summary.contextual} depend on the action",
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.onSurfaceVariant,
+        )
+        Note("Read-only tools work in Plan mode. Changes follow your approval setting in Files & permissions.")
         PcField(query, { query = it }, "Search tools", contentDescription = "Search tools")
-        if (tools.isEmpty()) {
-            Note("No tools match “${query.trim()}”. Try a shorter name or description.")
+        AgentToolFilters(accessFilter) { accessFilter = it }
+        if (inventory.isEmpty()) {
+            Note("No tools are available yet. Connect an MCP server or add a skill to extend PhoneCode.")
+        } else if (tools.isEmpty()) {
+            val message = if (query.isNotBlank()) {
+                "No tools match “${query.trim()}”. Clear the search or choose another access filter."
+            } else {
+                "No ${accessFilter.emptyLabel()} tools are available. Choose All to see the full inventory."
+            }
+            Note(message)
         } else {
-            tools.groupBy { it.source }.forEach { (source, entries) ->
-                PcSectionLabel(source)
+            tools.groupBy { it.source }.toList()
+                .sortedBy { (source, _) -> listOf("PhoneCode", "Skills", "MCP").indexOf(source).let { if (it < 0) Int.MAX_VALUE else it } }
+                .forEach { (source, entries) ->
+                PcSectionLabel("$source · ${entries.size}")
                 PcGroup {
                     entries.forEach { tool ->
                         PcRow {
                             Column(Modifier.weight(1f)) {
-                                Text(tool.name, style = MaterialTheme.typography.bodyLarge.copy(fontFamily = PcMono), color = colors.onBackground)
-                                Text(tool.description, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    tool.name,
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontFamily = PcMono),
+                                    color = colors.onBackground,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    tool.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
-                            Text(tool.access, style = MaterialTheme.typography.labelSmall, color = colors.tertiary)
+                            Spacer(Modifier.width(10.dp))
+                            AgentToolBadge(tool.access, emphasized = tool.access == "Read only")
                         }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun AgentToolFilters(
+    selected: AgentToolAccessFilter,
+    onSelect: (AgentToolAccessFilter) -> Unit,
+) {
+    FlowRow(
+        Modifier.fillMaxWidth().padding(top = Spacing.s).selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        AgentToolAccessFilter.entries.forEach { filter ->
+            val colors = MaterialTheme.colorScheme
+            val active = selected == filter
+            val interaction = remember(filter) { MutableInteractionSource() }
+            Box(
+                Modifier.heightIn(min = Spacing.touchTarget)
+                    .pressFeedback(interaction, pressedScale = 0.98f)
+                    .clip(MaterialTheme.shapes.large)
+                    .background(if (active) colors.primary else colors.surfaceContainerHigh)
+                    .semantics { this.selected = active; role = Role.Tab }
+                    .clickable(
+                        interactionSource = interaction,
+                        indication = ripple(),
+                        role = Role.Tab,
+                        onClick = { onSelect(filter) },
+                    )
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    filter.shortLabel(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (active) colors.onPrimary else colors.onBackground,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentToolBadge(text: String, emphasized: Boolean) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        Modifier.clip(MaterialTheme.shapes.large)
+            .background(if (emphasized) colors.secondaryContainer else colors.surfaceContainerHighest)
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (emphasized) colors.onSecondaryContainer else colors.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
+private fun AgentToolAccessFilter.shortLabel() = when (this) {
+    AgentToolAccessFilter.ALL -> "All"
+    AgentToolAccessFilter.READ_ONLY -> "Read only"
+    AgentToolAccessFilter.NEEDS_APPROVAL -> "Approval"
+    AgentToolAccessFilter.CONTEXTUAL -> "Conditional"
+}
+
+private fun AgentToolAccessFilter.emptyLabel() = when (this) {
+    AgentToolAccessFilter.ALL -> "matching"
+    AgentToolAccessFilter.READ_ONLY -> "read-only"
+    AgentToolAccessFilter.NEEDS_APPROVAL -> "approval-gated"
+    AgentToolAccessFilter.CONTEXTUAL -> "conditional"
 }
 
 @Composable

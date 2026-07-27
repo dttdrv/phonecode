@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "play" / "verify_submission_evidence.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-MANIFEST = ROOT / "play" / "0.5.0" / "submission-evidence.json"
+MANIFEST = ROOT / "play" / "0.5.1" / "submission-evidence.json"
 
 
 class SubmissionEvidenceValidatorTest(unittest.TestCase):

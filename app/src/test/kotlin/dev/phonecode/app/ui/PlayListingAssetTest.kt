@@ -64,7 +64,7 @@ class PlayListingAssetTest {
         compose.onNodeWithText("Build real projects from your phone").assertIsDisplayed()
         compose.onNodeWithText("Get started").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
-            "../play/0.5.0/graphics/feature-graphic-source.png",
+            "../play/0.5.1/graphics/feature-graphic-source.png",
         )
     }
 
@@ -82,7 +82,7 @@ class PlayListingAssetTest {
             }
         }
 
-        compose.onRoot().captureRoboImage("../play/0.5.0/graphics/app-icon.png")
+        compose.onRoot().captureRoboImage("../play/0.5.1/graphics/app-icon.png")
     }
 
     @Test
@@ -106,7 +106,7 @@ class PlayListingAssetTest {
         compose.onNodeWithText("PhoneCode").assertIsDisplayed()
         compose.onNodeWithText("Get started").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
-            "../play/0.5.0/graphics/phone/05-welcome.png",
+            "../play/0.5.1/graphics/phone/05-welcome.png",
         )
         compose.onNodeWithText("Get started").performClick()
         compose.mainClock.advanceTimeBy(500)
@@ -114,7 +114,7 @@ class PlayListingAssetTest {
         compose.onNodeWithText("Setup").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
-            "../play/0.5.0/graphics/phone/06-setup.png",
+            "../play/0.5.1/graphics/phone/06-setup.png",
         )
     }
 
@@ -150,7 +150,7 @@ class PlayListingAssetTest {
         compose.onNodeWithText("Sign in with ChatGPT").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
-            "../play/0.5.0/graphics/phone/07-model-providers.png",
+            "../play/0.5.1/graphics/phone/07-model-providers.png",
         )
     }
 }

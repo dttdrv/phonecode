@@ -77,11 +77,11 @@ class ReleaseRuntimePackagingTest {
     fun releaseCandidateUsesVersion050EvidencePaths() {
         val build = File(root, "app/build.gradle.kts").readText()
 
-        assertTrue(build.contains("""versionCode = 50"""))
-        assertTrue(build.contains("""versionName = "0.5.0""""))
-        assertTrue(build.contains("""release-evidence/0.5.0/vm-host"""))
-        assertTrue(build.contains("""release-evidence/0.5.0/guest/sources"""))
-        assertTrue(build.contains("""play/0.5.0/submission-evidence.json"""))
-        assertTrue(File(root, "play/0.5.0/README.md").isFile)
+        assertTrue(build.contains("""versionCode = 51"""))
+        assertTrue(build.contains("""versionName = "0.5.1""""))
+        assertTrue(build.contains("""release-evidence/0.5.1/vm-host"""))
+        assertTrue(build.contains("""release-evidence/0.5.1/guest/sources"""))
+        assertTrue(build.contains("""play/0.5.1/submission-evidence.json"""))
+        assertTrue(File(root, "play/0.5.1/README.md").isFile)
     }
 }

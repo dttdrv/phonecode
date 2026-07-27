@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Process
 import dev.phonecode.app.agent.ChatViewModel
 import dev.phonecode.app.agent.TurnService
+import dev.phonecode.app.runtime.ShellBackendFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,6 +20,10 @@ class PhoneCodeApplication : Application() {
     val chatViewModel by lazy {
         requireMainUid()
         ChatViewModel(this)
+    }
+    internal val shellBackend by lazy {
+        requireMainUid()
+        ShellBackendFactory.create(this, BuildConfig.DEBUG)
     }
 
     /**

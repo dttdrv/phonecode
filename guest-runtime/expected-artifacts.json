@@ -1,0 +1,22 @@
+{
+  "schema": "phonecode-guest-artifacts-v1",
+  "status": "blocked-authenticated-source-closure",
+  "architecture": "aarch64",
+  "artifacts": [
+    {
+      "name": "vmlinuz",
+      "role": "kernel",
+      "required": true
+    },
+    {
+      "name": "initramfs.cpio.gz",
+      "role": "early-userspace-and-guest-daemon",
+      "required": true
+    },
+    {
+      "name": "system.img",
+      "role": "immutable-alpine-minirootfs-targz-v1-carried-in-raw-read-only-block-device",
+      "required": true
+    }
+  ]
+}

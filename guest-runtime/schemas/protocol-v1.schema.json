@@ -1,0 +1,352 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dttdrv.xyz/schemas/phonecode/guest-protocol-v1.schema.json",
+  "title": "PhoneCode guest protocol v1 frame",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/hello"
+    },
+    {
+      "$ref": "#/$defs/ready"
+    },
+    {
+      "$ref": "#/$defs/exec"
+    },
+    {
+      "$ref": "#/$defs/started"
+    },
+    {
+      "$ref": "#/$defs/output"
+    },
+    {
+      "$ref": "#/$defs/exit"
+    },
+    {
+      "$ref": "#/$defs/stdin"
+    },
+    {
+      "$ref": "#/$defs/signal"
+    },
+    {
+      "$ref": "#/$defs/shutdown"
+    },
+    {
+      "$ref": "#/$defs/error"
+    }
+  ],
+  "$defs": {
+    "version": {
+      "const": 1
+    },
+    "lifecycleId": {
+      "const": 0
+    },
+    "requestId": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base64Chunk": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "maxLength": 16000
+    },
+    "hello": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "nonce",
+        "type",
+        "v"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/lifecycleId"
+        },
+        "nonce": {
+          "$ref": "#/$defs/nonce"
+        },
+        "type": {
+          "const": "hello"
+        },
+        "v": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "ready": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent",
+        "capabilities",
+        "id",
+        "nonce",
+        "type",
+        "v"
+      ],
+      "properties": {
+        "agent": {
+          "const": "phonecode-guestd"
+        },
+        "capabilities": {
+          "const": [
+            "exec",
+            "shutdown",
+            "signal",
+            "stdin"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/lifecycleId"
+        },
+        "nonce": {
+          "$ref": "#/$defs/nonce"
+        },
+        "type": {
+          "const": "ready"
+        },
+        "v": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "exec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "background",
+        "command",
+        "cwd",
+        "id",
+        "timeout_ms",
+        "type",
+        "v"
+      ],
+      "properties": {
+        "background": {
+          "type": "boolean"
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "cwd": {
+          "const": "/workspace"
+        },
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1800000
+        },
+        "type": {
+          "const": "exec"
+        },
+        "v": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "started": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "pid",
+        "type",
+        "v"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "type": {
+          "const": "started"
+        },
+        "v": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_b64",
+        "id",
+        "seq",
+        "type",
+        "v"
+      ],
+      "properties": {
+        "data_b64": {
+          "$ref": "#/$defs/base64Chunk"
+        },
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "const": "output"
+        },
+        "v": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "exit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "truncated",
+        "type",
+        "v"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "status": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "type": {
+          "const": "exit"
+        },
+        "v": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "stdin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_b64",
+        "eof",
+        "id",
+        "type",
+        "v"
+      ],
+      "properties": {
+        "data_b64": {
+          "$ref": "#/$defs/base64Chunk"
+        },
+        "eof": {
+          "type": "boolean"
+        },
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "type": {
+          "const": "stdin"
+        },
+        "v": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "signal",
+        "type",
+        "v"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "signal": {
+          "enum": [
+            "INT",
+            "KILL",
+            "TERM"
+          ]
+        },
+        "type": {
+          "const": "signal"
+        },
+        "v": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "shutdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "v"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/lifecycleId"
+        },
+        "type": {
+          "const": "shutdown"
+        },
+        "v": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "id",
+        "message",
+        "type",
+        "v"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "type": {
+          "const": "error"
+        },
+        "v": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    }
+  }
+}

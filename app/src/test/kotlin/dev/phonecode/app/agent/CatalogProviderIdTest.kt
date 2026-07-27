@@ -13,7 +13,7 @@ class CatalogProviderIdTest {
 
     @Test
     fun offlineOpenCodeModelsUseApiModelIds() {
-        val models = builtInModels().associate { "${it.providerId}/${it.modelId}" to it }
+        val models = builtInModels(codexOAuthEnabled = true).associate { "${it.providerId}/${it.modelId}" to it }
 
         assertEquals("Go · DeepSeek V4 Flash", models["opencode-go/deepseek-v4-flash"]?.label)
         assertEquals("Go · MiMo V2.5", models["opencode-go/mimo-v2.5"]?.label)

@@ -1,12 +1,12 @@
 # PhoneCode Terms of Service
 
-_Last updated: 15 July 2026_
+_Last updated: 22 July 2026_
 
 These Terms govern your use of PhoneCode, an on-device AI coding client published by Deyan Todorov. By installing or using PhoneCode, you agree to these Terms. If you do not agree, do not use the app.
 
 ## 1. The service
 
-PhoneCode lets an AI agent work with code and files on your device. It can use a permanent app workspace, access folders you explicitly link, run commands, use Git, search the web, connect to tools, and install software inside the local Linux environment.
+PhoneCode lets an AI agent work with code and files on your device. It can use a permanent app workspace, access folders you explicitly link, run commands in an on-device Linux virtual machine, use Git, search the web, connect to tools, and install software inside that virtual machine.
 
 PhoneCode does not include an AI model or a general-purpose developer-operated backend. You connect a supported or custom third-party AI provider using your own account, sign-in, or API key. The developer operates only a narrowly scoped endpoint for AI-output reports you deliberately submit. There is no PhoneCode account.
 
@@ -30,7 +30,7 @@ You may not use PhoneCode to violate the law, infringe another person's rights, 
 
 PhoneCode does not verify or guarantee generated output. Output may contain errors, vulnerabilities, incompatible code, or material subject to third-party rights or licenses. Test and review it before relying on it.
 
-Software installed in the local Linux environment comes from third parties and may run build or lifecycle scripts. You are responsible for choosing package sources, reviewing licenses, and evaluating security. PRoot is a compatibility layer, not a VM or security sandbox. Installed software can access directories mounted into the environment and use PhoneCode's network access. PhoneCode does not guarantee that a package is safe, available, or compatible.
+Software installed in the on-device Linux virtual machine comes from third parties and may run build or lifecycle scripts. You are responsible for choosing package sources, reviewing licenses, and evaluating security. Installed software can access the VM workspace and use PhoneCode's network access. PhoneCode does not guarantee that a package is safe, available, or compatible.
 
 ## 6. Privacy
 

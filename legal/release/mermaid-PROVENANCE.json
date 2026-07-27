@@ -1,0 +1,39 @@
+{
+  "bundledAsset": {
+    "packageMember": "package/dist/mermaid.min.js",
+    "path": "app/src/main/assets/mermaid.min.js",
+    "sha256": "eda3a0ad572bbe69a318c1be0163e8233dd824f3f12939e5168feba207767151",
+    "size": 3337508
+  },
+  "caveats": [
+    "The npm package contains no dependency lock or source map.",
+    "Declared dependency ranges do not identify the versions resolved into the bundle.",
+    "This evidence does not identify the complete bundled transitive dependency closure.",
+    "This evidence does not contain complete third-party license and copyright notices."
+  ],
+  "component": {
+    "authorDeclaredByPackage": "Knut Sveidqvist",
+    "licenseDeclaredByPackage": "MIT",
+    "name": "mermaid",
+    "repositoryDeclaredByPackage": "https://github.com/mermaid-js/mermaid",
+    "version": "10.9.6"
+  },
+  "evidenceScope": {
+    "authenticatedPackageArtifact": true,
+    "authenticatedPackageMetadataSnapshot": true,
+    "bundledAssetByteIdenticalToPackageMember": true,
+    "bundledDependencyClosure": false,
+    "completeThirdPartyNotices": false,
+    "resolvedDependencyVersions": false
+  },
+  "npmPackage": {
+    "npmIntegrity": "sha512-XRjjRaI4aPCAMpVaOhxIwLYdx3U4Cb6mN0M268ggFAfFRqsvyFW8zxWbEZazN/mPkqsVWThb0oa1UawWK+XMNg==",
+    "packageJsonMember": "package/package.json",
+    "packageJsonSha256": "f963194e44252af0bf21918ab7708743b20046ccd7db2f4f30c6ea53f6c58f7a",
+    "registryTarball": "https://registry.npmjs.org/mermaid/-/mermaid-10.9.6.tgz",
+    "sha256": "6e9f31fbb7e174339f44199726b2b5f118dc985f49b7f00f96b3843ca22e27d1",
+    "sha512": "5d18e345a23868f08032955a3a1c48c0b61dc7753809bea6374336ebc8201407c546ab2fc855bccf159b1196b337f98f92ab1559385bd286b551ac162be5cc36",
+    "size": 5117308
+  },
+  "schemaVersion": 1
+}

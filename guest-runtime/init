@@ -1,0 +1,77 @@
+#!/bin/busybox sh
+set -eu
+
+export HOME=/root
+export LANG=C
+export LC_ALL=C
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export TZ=UTC
+
+BUSYBOX=/bin/busybox
+NEW_ROOT=/newroot
+SYSTEM_IMAGE=/run/system.tar.gz
+SYSTEM_IMAGE_BYTES=4023732
+SYSTEM_IMAGE_SHA256=f55a90f69052c5bd6f92cb09a8f47065970830b194c917a006fb94028e721259
+KERNEL_RELEASE=6.18.35-0-virt
+CONTROL_PORT_NAME=org.phonecode.guest.0
+
+panic() {
+  printf 'phonecode-init: %s\n' "$*" >/dev/console
+  exec "$BUSYBOX" sh
+}
+
+"$BUSYBOX" --install -s /bin
+mkdir -p /dev /proc /run /sys "$NEW_ROOT"
+mount -t devtmpfs -o nosuid,noexec devtmpfs /dev || panic "cannot mount devtmpfs"
+mount -t proc -o nosuid,nodev,noexec proc /proc || panic "cannot mount proc"
+mount -t sysfs -o nosuid,nodev,noexec sysfs /sys || panic "cannot mount sysfs"
+mount -t tmpfs -o size=16m,nosuid,nodev tmpfs /run || panic "cannot mount runtime tmpfs"
+mount -t tmpfs -o size=256m,nosuid,nodev tmpfs "$NEW_ROOT" ||
+  panic "cannot mount root tmpfs"
+
+insmod "/lib/modules/$KERNEL_RELEASE/virtio_mmio.ko" ||
+  panic "cannot load virtio_mmio"
+insmod "/lib/modules/$KERNEL_RELEASE/virtio_blk.ko" ||
+  panic "cannot load virtio_blk"
+
+attempt=0
+while [ ! -b /dev/vda ] && [ "$attempt" -lt 100 ]; do
+  sleep 0.05
+  attempt=$((attempt + 1))
+done
+[ -b /dev/vda ] || panic "immutable system device is absent"
+
+dd if=/dev/vda of="$SYSTEM_IMAGE" bs="$SYSTEM_IMAGE_BYTES" count=1 2>/dev/null ||
+  panic "cannot read immutable system image"
+[ "$(wc -c <"$SYSTEM_IMAGE")" -eq "$SYSTEM_IMAGE_BYTES" ] ||
+  panic "immutable system image length mismatch"
+printf '%s  %s\n' "$SYSTEM_IMAGE_SHA256" "$SYSTEM_IMAGE" |
+  sha256sum -c - >/dev/null ||
+  panic "immutable system image digest mismatch"
+
+tar -xzf "$SYSTEM_IMAGE" -C "$NEW_ROOT" --no-same-owner ||
+  panic "cannot extract immutable system image"
+install -D -m 0755 /phonecode-guestd "$NEW_ROOT/usr/local/bin/phonecode-guestd" ||
+  panic "cannot install guest daemon"
+
+mkdir -p "$NEW_ROOT/dev" "$NEW_ROOT/proc" "$NEW_ROOT/sys" "$NEW_ROOT/workspace"
+mount -t tmpfs -o size=128m,nosuid,nodev tmpfs "$NEW_ROOT/workspace" ||
+  panic "cannot mount ephemeral workspace"
+
+CONTROL_PORT=
+for name_file in /sys/class/virtio-ports/*/name; do
+  [ -f "$name_file" ] || continue
+  if [ "$(cat "$name_file")" = "$CONTROL_PORT_NAME" ]; then
+    CONTROL_PORT="/dev/$(basename "$(dirname "$name_file")")"
+    break
+  fi
+done
+[ -c "$CONTROL_PORT" ] || panic "dedicated control port is absent"
+
+mount --move /dev "$NEW_ROOT/dev" || panic "cannot move devtmpfs"
+mount --move /proc "$NEW_ROOT/proc" || panic "cannot move proc"
+mount --move /sys "$NEW_ROOT/sys" || panic "cannot move sysfs"
+
+exec chroot "$NEW_ROOT" /usr/local/bin/phonecode-guestd \
+  <"$NEW_ROOT$CONTROL_PORT" >"$NEW_ROOT$CONTROL_PORT" 2>"$NEW_ROOT$CONTROL_PORT"
+panic "guest daemon exited"

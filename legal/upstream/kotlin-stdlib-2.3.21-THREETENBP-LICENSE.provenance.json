@@ -1,0 +1,22 @@
+{
+  "coordinates": [
+    "org.jetbrains.kotlin:kotlin-stdlib:2.3.21"
+  ],
+  "copyright_status": "included",
+  "license_expression": "BSD-3-Clause",
+  "local_path": "legal/upstream/kotlin-stdlib-2.3.21-THREETENBP-LICENSE.txt",
+  "local_sha256": "d1bc53b493a3ab387b42717ed5c4b1976a5048996f81154278100bff86d39331",
+  "normalization": "None; the upstream bytes are preserved exactly.",
+  "notice_status": "included",
+  "schema_version": 1,
+  "source": {
+    "blob": "bbed3563e938dd26bdc2daeb5f5cccdd0f03eb61",
+    "commit": "fea1ad8c18995b80d1ca0e3917056104613d23db",
+    "path": "license/third_party/threetenbp_license.txt",
+    "raw_url": "https://raw.githubusercontent.com/JetBrains/kotlin/fea1ad8c18995b80d1ca0e3917056104613d23db/license/third_party/threetenbp_license.txt",
+    "repository": "https://github.com/JetBrains/kotlin",
+    "sha256": "d1bc53b493a3ab387b42717ed5c4b1976a5048996f81154278100bff86d39331",
+    "tag": "v2.3.21"
+  },
+  "third_party_origin": "ThreeTenBP-derived implementation in kotlin.time.Instant"
+}

@@ -13,6 +13,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: report-backend/package-lock.json
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -21,6 +26,18 @@ jobs:
         with:
           packages: platform-tools platforms;android-37.0 build-tools;36.0.0
       - uses: gradle/actions/setup-gradle@v6
+      - name: Install report backend toolchain
+        working-directory: report-backend
+        run: npm ci
+      - name: Test report backend in Node and workerd
+        working-directory: report-backend
+        run: npm test
+      - name: Validate report backend D1 migration
+        working-directory: report-backend
+        run: npm run check:migrations
+      - name: Validate report backend deployment bundle
+        working-directory: report-backend
+        run: npm run check:deploy
       - name: Test and lint
         run: ./gradlew --no-daemon test lintDebug :app:verifyLegalInventory :app:verifyPrototypeRuntimeBoundary
       - name: Build development artifact
@@ -28,10 +45,17 @@ jobs:
       - name: Verify Play release gate
         shell: bash
         run: |
-          if ./gradlew --no-daemon :app:assembleRelease; then
+          set +e
+          output=$(./gradlew --no-daemon :app:verifyPlayRelease 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if (( status == 0 )); then
             echo "Play release gate unexpectedly passed before the VM runtime landed"
             exit 1
           fi
+          grep -F "Google Play release blocked:" <<<"$output"
+          grep -F "wire IsolatedVmController into the production turn runtime" <<<"$output"
       - name: Verify Play execution boundary
         shell: bash
         run: |
@@ -44,14 +68,5 @@ jobs:
       - name: Verify 16 KB compatibility
         shell: bash
         run: |
-          command -v readelf
-          shopt -s nullglob
-          for file in app/src/main/jniLibs/arm64-v8a/* app/src/main/jniLibs/x86_64/*; do
-            while read -r alignment; do
-              if (( alignment < 0x4000 )); then
-                echo "$file has a LOAD segment aligned to $alignment"
-                exit 1
-              fi
-            done < <(readelf -lW "$file" | awk '$1 == "LOAD" { print $NF }')
-          done
+          ./native-runtime/audit-apk-native-libs.sh app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 app/build/outputs/apk/debug/app-debug.apk

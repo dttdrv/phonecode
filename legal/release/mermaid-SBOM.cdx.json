@@ -1,0 +1,72 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "pkg:npm/mermaid@10.9.6",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/mermaid/-/mermaid-10.9.6.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "https://github.com/mermaid-js/mermaid"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "eda3a0ad572bbe69a318c1be0163e8233dd824f3f12939e5168feba207767151"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "name": "mermaid",
+      "properties": [
+        {
+          "name": "phonecode:hash-subject",
+          "value": "package/dist/mermaid.min.js"
+        },
+        {
+          "name": "phonecode:source-package-json-sha256",
+          "value": "f963194e44252af0bf21918ab7708743b20046ccd7db2f4f30c6ea53f6c58f7a"
+        },
+        {
+          "name": "phonecode:dependency-inventory-status",
+          "value": "unresolved-and-incomplete"
+        }
+      ],
+      "type": "library",
+      "version": "10.9.6"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "bom-ref": "pkg:generic/phonecode-mermaid-asset@0.4.0",
+      "name": "PhoneCode Mermaid web asset",
+      "type": "application",
+      "version": "0.4.0"
+    },
+    "properties": [
+      {
+        "name": "phonecode:evidence-scope",
+        "value": "authenticated-package-and-byte-identical-dist-only"
+      },
+      {
+        "name": "phonecode:resolved-dependency-closure-complete",
+        "value": "false"
+      },
+      {
+        "name": "phonecode:third-party-notices-complete",
+        "value": "false"
+      }
+    ]
+  },
+  "specVersion": "1.6",
+  "version": 1
+}

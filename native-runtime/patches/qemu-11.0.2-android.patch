@@ -1,0 +1,155 @@
+--- a/meson.build
++++ b/meson.build
+@@ -1361,6 +1361,11 @@ spice_headers = spice.partial_dependency(compile_args: true, includes: true)
+ 
+ rt = not_found
+-if host_os != 'windows'
++have_android = cc.compiles('''
++  #ifndef __ANDROID__
++  #error not Android
++  #endif
++''', name: 'Android target')
++if host_os != 'windows' and not have_android
+   have_shm_open = cc.has_function('shm_open')
+   if not have_shm_open
+     rt = cc.find_library('rt', required: true)
+--- a/util/oslib-posix.c
++++ b/util/oslib-posix.c
+@@ -59,6 +59,7 @@
+ #endif
+ 
+ #include "qemu/memalign.h"
++#include "qemu/memfd.h"
+ #include "qemu/mmap-alloc.h"
+ 
+ #define MAX_MEM_PREALLOC_THREAD_COUNT 32
+@@ -984,6 +985,9 @@ int qemu_msync(void *addr, size_t length, int fd)
+ 
+ int qemu_shm_alloc(size_t size, Error **errp)
+ {
++#ifdef __ANDROID__
++    return qemu_memfd_create("qemu-shm", size, false, 0, 0, errp);
++#else
+     g_autoptr(GString) shm_name = g_string_new(NULL);
+     int fd, oflag, cur_sequence;
+     static int sequence;
+@@ -1032,4 +1036,5 @@ int qemu_shm_alloc(size_t size, Error **errp)
+     }
+ 
+     return fd;
++#endif
+ }
+--- a/system/vl.c
++++ b/system/vl.c
+@@ -141,6 +141,35 @@
+ #include "system/iothread.h"
+ #include "qemu/guest-random.h"
+ #include "qemu/keyval.h"
++
++#ifdef __ANDROID__
++#include <android/api-level.h>
++#include <dlfcn.h>
++#include <malloc.h>
++
++static void android_disable_pointer_tags(void)
++{
++    if (android_get_device_api_level() >= 31) {
++        mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_NONE);
++        return;
++    }
++
++    void *libc = dlopen("libc.so", RTLD_LAZY | RTLD_LOCAL);
++    if (libc) {
++        bool (*android_mallopt)(int, void *, size_t) =
++            dlsym(libc, "android_mallopt");
++        if (android_mallopt) {
++            int tagging_level = 0;
++            android_mallopt(8, &tagging_level, sizeof(tagging_level));
++        }
++        dlclose(libc);
++    }
++}
++#else
++static void android_disable_pointer_tags(void)
++{
++}
++#endif
+ 
+ #define MAX_VIRTIO_CONSOLES 1
+ 
+@@ -2839,6 +2868,7 @@ static void qemu_process_early_options(void)
+ 
+ void qemu_init(int argc, char **argv)
+ {
++    android_disable_pointer_tags();
+     QemuOpts *opts;
+     QemuOpts *icount_opts = NULL, *accel_opts = NULL;
+     QemuOptsList *olist;
+--- a/include/qemu/transactions.h
++++ b/include/qemu/transactions.h
+@@ -39,7 +39,7 @@
+ #ifndef QEMU_TRANSACTIONS_H
+ #define QEMU_TRANSACTIONS_H
+ 
+-#include <gmodule.h>
++#include <glib.h>
+ 
+ typedef struct TransactionActionDrv {
+     void (*abort)(void *opaque);
+--- a/hw/arm/Kconfig
++++ b/hw/arm/Kconfig
+@@ -34,7 +34,6 @@ config ARM_VIRT
+     select ACPI_PCIHP
+     select ACPI_PCI_BRIDGE
+     select VIRTIO_MEM_SUPPORTED
+-    select ACPI_CXL
+     select ACPI_HMAT
+ 
+ config CUBIEBOARD
+--- a/hw/arm/virt-acpi-build.c
++++ b/hw/arm/virt-acpi-build.c
+@@ -124,6 +124,7 @@ static void acpi_dsdt_add_cpus(Aml *scope, VirtMachineState *vms)
+     aml_append(scope, dev);
+ }
+ 
++#ifdef CONFIG_ACPI_CXL
+ static void build_acpi0017(Aml *table)
+ {
+     Aml *dev, *scope, *method;
+@@ -140,6 +141,7 @@ static void build_acpi0017(Aml *table)
+     aml_append(scope, dev);
+     aml_append(table, scope);
+ }
++#endif
+ 
+ static void acpi_dsdt_add_pci(Aml *scope, const MemMapEntry *memmap,
+                               uint32_t irq, VirtMachineState *vms)
+@@ -183,7 +185,9 @@ static void acpi_dsdt_add_pci(Aml *scope, const MemMapEntry *memmap,
+         }
+     }
+     if (cxl_present) {
++#ifdef CONFIG_ACPI_CXL
+         build_acpi0017(scope);
++#endif
+     }
+ }
+ 
+@@ -1343,10 +1347,12 @@ static
+         }
+     }
+ 
++#ifdef CONFIG_ACPI_CXL
+     if (vms->cxl_devices_state.is_enabled) {
+         cxl_build_cedt(table_offsets, tables_blob, tables->linker,
+                        vms->oem_id, vms->oem_table_id, &vms->cxl_devices_state);
+     }
++#endif
+ 
+     if (ms->nvdimms_state->is_enabled) {
+         nvdimm_build_acpi(table_offsets, tables_blob, tables->linker,
+--- /dev/null
++++ b/configs/devices/aarch64-softmmu/phonecode.mak
+@@ -0,0 +1,3 @@
++CONFIG_ARM_VIRT=y
++CONFIG_VIRTIO_BLK=y
++CONFIG_ACPI_CXL=n

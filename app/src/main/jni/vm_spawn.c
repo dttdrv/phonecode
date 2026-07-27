@@ -13,6 +13,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "fd_hygiene.h"
+
 static void close_fd(int fd) {
     if (fd >= 0) {
         close(fd);
@@ -91,6 +93,7 @@ Java_dev_phonecode_app_runtime_QemuNative_start(
     jobjectArray argument_values,
     jint kernel_fd,
     jint initramfs_fd,
+    jint system_image_fd,
     jint console_fd,
     jint control_fd
 ) {
@@ -104,29 +107,29 @@ Java_dev_phonecode_app_runtime_QemuNative_start(
         &argument_count,
         &error
     );
-    int received[] = {kernel_fd, initramfs_fd, console_fd, control_fd};
+    int received[] = {kernel_fd, initramfs_fd, system_image_fd, console_fd, control_fd};
     if (arguments == NULL) {
-        close_fds(received, 4);
+        close_fds(received, 5);
         return -error;
     }
 
-    int prepared[] = {-1, -1, -1, -1};
-    for (size_t index = 0; index < 4; index++) {
+    int prepared[] = {-1, -1, -1, -1, -1};
+    for (size_t index = 0; index < 5; index++) {
         prepared[index] = fcntl(received[index], F_DUPFD_CLOEXEC, 16);
         if (prepared[index] < 0) {
             error = errno;
-            close_fds(received, 4);
-            close_fds(prepared, 4);
+            close_fds(received, 5);
+            close_fds(prepared, 5);
             free_arguments(arguments, argument_count);
             return -error;
         }
     }
-    close_fds(received, 4);
+    close_fds(received, 5);
 
     int error_pipe[2] = {-1, -1};
-    if (pipe2(error_pipe, O_CLOEXEC) != 0) {
-        error = errno;
-        close_fds(prepared, 4);
+    error = phonecode_make_cloexec_pipe_above(error_pipe, 64);
+    if (error != 0) {
+        close_fds(prepared, 5);
         free_arguments(arguments, argument_count);
         return -error;
     }
@@ -135,7 +138,7 @@ Java_dev_phonecode_app_runtime_QemuNative_start(
     pid_t child = fork();
     if (child < 0) {
         error = errno;
-        close_fds(prepared, 4);
+        close_fds(prepared, 5);
         close_fds(error_pipe, 2);
         free_arguments(arguments, argument_count);
         return -error;
@@ -147,21 +150,22 @@ Java_dev_phonecode_app_runtime_QemuNative_start(
         if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0) child_error(error_pipe[1], errno);
         if (getppid() != parent) child_error(error_pipe[1], ESRCH);
         if (
-            dup2(prepared[2], STDIN_FILENO) < 0 ||
-            dup2(prepared[2], STDOUT_FILENO) < 0 ||
-            dup2(prepared[2], STDERR_FILENO) < 0 ||
+            dup2(prepared[3], STDIN_FILENO) < 0 ||
+            dup2(prepared[3], STDOUT_FILENO) < 0 ||
+            dup2(prepared[3], STDERR_FILENO) < 0 ||
             dup2(prepared[0], 3) < 0 ||
             dup2(prepared[1], 4) < 0 ||
-            dup2(prepared[3], 6) < 0
+            dup2(prepared[2], 5) < 0 ||
+            dup2(prepared[4], 6) < 0
         ) {
             child_error(error_pipe[1], errno);
         }
-        close_fds(prepared, 4);
+        close_fds(prepared, 5);
         execv(arguments[0], arguments);
         child_error(error_pipe[1], errno);
     }
 
-    close_fds(prepared, 4);
+    close_fds(prepared, 5);
     close_fd(error_pipe[1]);
     free_arguments(arguments, argument_count);
 

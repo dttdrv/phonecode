@@ -121,6 +121,7 @@ import dev.phonecode.app.data.SessionMeta
 import dev.phonecode.app.data.SkillStatus
 import dev.phonecode.app.data.ThemeMode
 import dev.phonecode.app.ui.chat.ChatScreen
+import dev.phonecode.app.ui.onboarding.ModelSetupScreen
 import dev.phonecode.app.ui.onboarding.OnboardingScreen
 import dev.phonecode.app.ui.components.PcIconButton
 import dev.phonecode.app.ui.components.PcButton
@@ -207,7 +208,7 @@ fun PhoneCodeApp() {
         val navController = rememberNavController()
         val navEntry by navController.currentBackStackEntryAsState()
         val route = navEntry?.destination?.route ?: "chat"
-        val showOnboarding = needsOnboarding && route != "onboarding-settings"
+        val showOnboarding = needsOnboarding && route != "onboarding-settings" && route != "model-setup"
         val focusManager = LocalFocusManager.current
         var settingsInitial by rememberSaveable { mutableStateOf("home") }
         var onboardingStep by rememberSaveable { mutableIntStateOf(0) }
@@ -309,6 +310,9 @@ fun PhoneCodeApp() {
                         ChatScreen(
                             vm = vm,
                             onOpenDrawer = openDrawer,
+                            onOpenModelSetup = {
+                                navController.navigate("model-setup") { launchSingleTop = true }
+                            },
                             onOpenProviderSetup = { providerId ->
                                 settingsInitial = "provider:$providerId"
                                 navController.navigate("settings") { launchSingleTop = true }
@@ -338,6 +342,13 @@ fun PhoneCodeApp() {
                         }
                         composable("mcp") {
                             SettingsScreen(vm, settingsVm, onBack = { navController.popBackStack() }, initialPage = "mcp")
+                        }
+                        composable("model-setup") {
+                            ModelSetupScreen(
+                                vm = vm,
+                                onBack = { navController.popBackStack() },
+                                onConfigured = { navController.popBackStack() },
+                            )
                         }
                         composable(
                             route = "onboarding-settings",
@@ -390,8 +401,7 @@ fun PhoneCodeApp() {
                     step = onboardingStep,
                     onStepChange = { onboardingStep = it },
                     onConnectModels = {
-                        settingsInitial = "providers"
-                        navController.navigate("onboarding-settings") { launchSingleTop = true }
+                        navController.navigate("model-setup") { launchSingleTop = true }
                     },
                     onConnectGitHub = {
                         settingsInitial = "git"
@@ -403,7 +413,12 @@ fun PhoneCodeApp() {
                     modelReady = vm.hasConfiguredProvider(),
                     githubReady = chatState.githubLogin != null,
                     projectReady = chatState.projects.isNotEmpty(),
-                    onDone = { settingsVm.update { it.copy(onboarded = true) } },
+                    onDone = {
+                        if (vm.activateConfiguredModel()) settingsVm.update { it.copy(onboarded = true) }
+                    },
+                    onSkip = {
+                        settingsVm.update { it.copy(onboarded = true) }
+                    },
                 )
             }
         }

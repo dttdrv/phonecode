@@ -1,5 +1,6 @@
 package dev.phonecode.app.auth
 
+import dev.phonecode.app.BuildConfig
 import dev.phonecode.provider.preset.CodexCompatibility
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -34,11 +35,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  * `codex.account` (chatgpt_account_id, captured at initial login only - refreshed tokens omit it).
  */
 class CodexAuth(
-    private val http: OkHttpClient,
+    http: OkHttpClient,
     private val store: (String, String) -> Unit,
     private val read: (String) -> String?,
     private val tokenEndpoint: String = TOKEN_ENDPOINT,
+    private val enabled: Boolean = BuildConfig.CODEX_OAUTH_ENABLED,
 ) {
+    private val http = http.newBuilder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
     private val json = Json { ignoreUnknownKeys = true }
     private val refreshLock = Any()
 
@@ -65,6 +71,7 @@ class CodexAuth(
 
     /** Builds the authorization URL, generating a fresh verifier/state pair as a side effect. */
     fun buildAuthUrl(): String {
+        check(enabled) { "Codex OAuth is not enabled in this build" }
         val verifier = generateVerifier()
         val state = base64Url(ByteArray(16).also { SecureRandom().nextBytes(it) })
         pendingVerifier = verifier
@@ -95,6 +102,7 @@ class CodexAuth(
         onError: (message: String) -> Unit = {},
         onCode: (code: String) -> Unit,
     ) {
+        check(enabled) { "Codex OAuth is not enabled in this build" }
         stopLoopback()
         val servers = listOf("127.0.0.1", "::1").mapNotNull { address ->
             runCatching { ServerSocket(LOOPBACK_PORT, 8, InetAddress.getByName(address)) }.getOrNull()
@@ -147,6 +155,7 @@ class CodexAuth(
 
     /** Exchanges the authorization code for tokens and persists them. Blocking; throws [IOException] on failure. */
     fun exchangeCode(code: String, verifier: String) {
+        check(enabled) { "Codex OAuth is not enabled in this build" }
         val token = postForToken(
             FormBody.Builder()
                 .add("grant_type", "authorization_code")
@@ -165,6 +174,7 @@ class CodexAuth(
 
     /** Refreshes the access token if it expires within 60s and a refresh token exists. Blocking. */
     fun refreshIfNeeded() {
+        if (!enabled) return
         synchronized(refreshLock) {
             val expires = read(KEY_EXPIRES)?.toLongOrNull() ?: return@synchronized
             if (System.currentTimeMillis() <= expires - REFRESH_MARGIN_MS) return@synchronized
@@ -182,6 +192,7 @@ class CodexAuth(
 
     /** A currently valid access token, refreshing first when needed, or null if signed out/expired. */
     fun accessToken(): String? {
+        if (!enabled) return null
         // A network failure while refreshing must honor the null/last-token contract, not throw IOException
         // out of a getter: fall through to the stored token and let the expiry check below decide.
         runCatching { refreshIfNeeded() }
@@ -191,8 +202,9 @@ class CodexAuth(
     }
 
     /** The cached chatgpt_account_id from the initial login, for the ChatGPT-Account-Id header. */
-    fun accountId(): String? = read(KEY_ACCOUNT)
-        ?: read(KEY_ACCESS)?.let(::extractAccountId)?.also { store(KEY_ACCOUNT, it) }
+    fun accountId(): String? = if (!enabled) null else {
+        read(KEY_ACCOUNT) ?: read(KEY_ACCESS)?.let(::extractAccountId)?.also { store(KEY_ACCOUNT, it) }
+    }
 
     // -- Internals ---------------------------------------------------------------------------
 

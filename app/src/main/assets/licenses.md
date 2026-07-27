@@ -51,5 +51,13 @@ packages, including GPL-2.0-only BusyBox, apk-tools, alpine-baselayout, and pax-
 also contains PRoot under GPL-2.0-or-later and talloc under LGPL-3.0-or-later. These prototype
 artifacts are blocked from release until complete corresponding source and notices are available.
 
+## Play VM runtime
+
+The planned Play runtime uses QEMU as a separate executable process with GLib, libiconv, PCRE2,
+libffi, device-tree compiler code, and proxy-libintl components under their respective GPL, LGPL,
+BSD, and permissive licenses. Its guest includes the Linux kernel, BusyBox, and other independently
+licensed packages. The release gate requires the complete host and guest license texts, corresponding
+source manifests, SBOMs, and exact hashes before any of those files may enter a release candidate.
+
 Complete component hashes, source status, copyright notices, and release blockers are published in
 `THIRD_PARTY.md` and `legal/RELEASE_COMPLIANCE.md` at github.com/dttdrv/phonecode.

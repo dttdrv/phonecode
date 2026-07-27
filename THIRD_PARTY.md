@@ -66,7 +66,10 @@ runtime dependencies, including sanitize-url, Cytoscape, D3, dagre-d3-es, Day.js
 KaTeX, khroma, Lodash, mdast utilities, Stylis, UUID, and related transitive code. Their exact resolved
 versions and notices are not present in this repository. This pinned backport includes the Mermaid
 11.15.0 security fixes for CVE-2026-41148, CVE-2026-41149, CVE-2026-41150, and CVE-2026-41159.
-Publish its generated third-party-notice inventory before release.
+`legal/release/mermaid-PROVENANCE.json` authenticates the package and bundled bytes, while
+`legal/release/mermaid-declared-dependencies.json`, the partial SBOM, and the incomplete notice
+evidence explicitly preserve the unresolved boundary. Derive the exact bundled dependency closure
+and publish its complete third-party-notice inventory before release.
 
 ## Fonts
 
@@ -76,13 +79,17 @@ Publish its generated third-party-notice inventory before release.
 | `jetbrainsmono_medium.ttf` | `d16e6dc99672734698d629705f617c79f6eb6040f5113efe3a145204dc988109` | SIL Open Font License 1.1, Copyright 2020 The JetBrains Mono Project Authors |
 | `jetbrainsmono_regular.ttf` | `e6fd0d7e91550b3ed2b735d4312474362c4716edc4fc0577a0f61ed782d5aed1` | SIL Open Font License 1.1, Copyright 2020 The JetBrains Mono Project Authors |
 
-The exact upstream release and source-file path for each committed font has not been recorded. Pin
-and reproduce the font files, preserve their copyright statements, and package the full OFL text
-before release.
+All three files embed version `2.305` and match the official JetBrains Mono repository at immutable
+revision [`02bb50b082dad9ef8a0f33ac393839202b760223`](https://github.com/JetBrains/JetBrainsMono/commit/02bb50b082dad9ef8a0f33ac393839202b760223)
+byte-for-byte. JetBrains did not publish a `v2.305` tag or release archive; the provenance therefore
+records the exact repository revision, upstream paths, Git blob IDs, and SHA-256 values without
+claiming a release tag. The complete upstream `OFL.txt` and machine-readable provenance are in
+`legal/release/`. Run `./gradlew :app:verifyJetBrainsMonoReleaseEvidence` to authenticate them
+against the bundled TTF metadata and bytes.
 
 ## Alpine 3.21.7 development root filesystem
 
-- File: `app/src/main/assets/alpine-aarch64.rootfs`
+- Debug-only file: `app/src/debug/assets/alpine-aarch64.rootfs`
 - SHA-256: `d1d1a3fae5f4d6146e9742790a47fcb116199622cfb8439f218a4d5fbe5000da`
 - Exact binary origin:
   `https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/alpine-minirootfs-3.21.7-aarch64.tar.gz`
@@ -110,9 +117,9 @@ and patches, license texts, and a machine-readable SBOM are published beside the
 
 ## PRoot development prototype
 
-- Files: `app/src/main/jniLibs/arm64-v8a/libproot.so` and `libproot-loader.so`
+- Debug-only files: `app/src/debug/jniLibs/arm64-v8a/libproot.so` and `libproot-loader.so`
 - Licenses represented in the binaries: PRoot GPL-2.0-or-later and talloc LGPL-3.0-or-later
-- Detailed audit: `app/src/main/jniLibs/PROVENANCE.md`
+- Detailed audit: `app/src/debug/jniLibs/PROVENANCE.md`
 
 The committed hashes do not match the formerly cited upstream build archive. Complete corresponding
 source and reproducible build inputs are missing. These binaries are not distributable until they

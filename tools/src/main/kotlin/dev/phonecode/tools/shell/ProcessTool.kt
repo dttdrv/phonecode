@@ -14,7 +14,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 
 class ProcessTool(
-    private val manager: ProcessManager,
+    private val backend: ShellBackend,
 ) : Tool {
     override val name = "process"
     override val description = "List, inspect, send input to, or stop managed background commands started by bash."
@@ -45,9 +45,9 @@ class ProcessTool(
             ?: return ToolResult("process: missing 'action'", true)
         val id = (args["session_id"] as? JsonPrimitive)?.contentOrNull
         return when (action) {
-            "list" -> manager.list(context.workspacePath)
+            "list" -> backend.list(context.workspacePath)
             "output" -> id?.let {
-                manager.output(
+                backend.output(
                     it,
                     context.workspacePath,
                     (args["tail_chars"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()?.coerceIn(1_000, 48_000) ?: 12_000,
@@ -56,14 +56,15 @@ class ProcessTool(
             "input" -> when {
                 id == null -> ToolResult("process: input requires 'session_id'", true)
                 args["data"] !is JsonPrimitive -> ToolResult("process: input requires 'data'", true)
-                else -> manager.input(
+                else -> backend.input(
                     id,
                     (args["data"] as JsonPrimitive).content,
                     (args["append_newline"] as? JsonPrimitive)?.booleanOrNull ?: true,
                     context.workspacePath,
                 )
             }
-            "stop" -> id?.let { manager.stop(it, context.workspacePath) } ?: ToolResult("process: stop requires 'session_id'", true)
+            "stop" -> id?.let { backend.stop(it, context.workspacePath) }
+                ?: ToolResult("process: stop requires 'session_id'", true)
             else -> ToolResult("process: unsupported action '$action'", true)
         }
     }

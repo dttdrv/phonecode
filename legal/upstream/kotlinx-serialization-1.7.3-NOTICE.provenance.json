@@ -1,0 +1,22 @@
+{
+  "coordinates": [
+    "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.7.3",
+    "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.7.3"
+  ],
+  "copyright_status": "included",
+  "license_expression": "Apache-2.0",
+  "local_path": "legal/upstream/kotlinx-serialization-1.7.3-NOTICE.txt",
+  "local_sha256": "ec77bba5c852830abfdefcdefbf4a22577ff4df79ec323a898d5100ca1d6f8d6",
+  "normalization": "None; the upstream bytes are preserved exactly.",
+  "notice_status": "included",
+  "schema_version": 1,
+  "source": {
+    "blob": "ee516ec09649791af5ff26c0346e748a881cacb7",
+    "commit": "d4d066d72a9f92f06c640be5a36a22f75d0d7659",
+    "path": "license/NOTICE.txt",
+    "raw_url": "https://raw.githubusercontent.com/Kotlin/kotlinx.serialization/d4d066d72a9f92f06c640be5a36a22f75d0d7659/license/NOTICE.txt",
+    "repository": "https://github.com/Kotlin/kotlinx.serialization",
+    "sha256": "ec77bba5c852830abfdefcdefbf4a22577ff4df79ec323a898d5100ca1d6f8d6",
+    "tag": "v1.7.3"
+  }
+}

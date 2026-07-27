@@ -1,0 +1,7 @@
+schema=phonecode-guest-toolchain-lock-v1
+status=blocked
+blocked_reason=Go toolchain and corresponding Go source are not retained in the authenticated content-addressed cache
+
+# name|version|HTTPS URL|SHA-256
+go-darwin-arm64|1.26.5|https://go.dev/dl/go1.26.5.darwin-arm64.tar.gz|efb87ff28af9a188d0536ef5d42e63dd52ba8263cd7344a993cc48dd11dedb6a
+go-source|1.26.5|https://go.dev/dl/go1.26.5.src.tar.gz|495be4bc87176ac567392e5b4116abd98466d33d7b49d41e764ccc6976b2dc42

@@ -567,7 +567,7 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
     val colors = MaterialTheme.colorScheme
     var addingCustom by remember { mutableStateOf(false) }
     Page("Providers", onBack) {
-        if (!state.codexConnected) {
+        if (state.codexOAuthAvailable && !state.codexConnected) {
             PcSectionLabel("ChatGPT")
             PcButton("Sign in with ChatGPT (Codex)") {
                 vm.startCodexSignIn()?.let { url ->

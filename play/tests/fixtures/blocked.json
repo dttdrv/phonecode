@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "applicationId": "dev.phonecode",
+    "versionName": "0.4.0",
+    "versionCode": 40,
+    "aabSha256": null
+  },
+  "requirements": [
+    {
+      "id": "data-safety",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Console declaration is incomplete."]
+    },
+    {
+      "id": "privacy-policy-url",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Public URL is not verified."]
+    },
+    {
+      "id": "terms-url",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Public URL is not verified."]
+    },
+    {
+      "id": "foreground-service-declaration",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Console declaration is incomplete."]
+    },
+    {
+      "id": "foreground-service-video",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Release video is missing."]
+    },
+    {
+      "id": "ai-safety",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Release evidence is incomplete."]
+    },
+    {
+      "id": "reviewer-access",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Reviewer access is incomplete."]
+    },
+    {
+      "id": "content-rating",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Content rating is incomplete."]
+    },
+    {
+      "id": "listing-assets",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Listing assets are incomplete."]
+    },
+    {
+      "id": "play-policy-status",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Policy status is not verified."]
+    },
+    {
+      "id": "signed-device-testing",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Signed-device testing is incomplete."]
+    },
+    {
+      "id": "pre-launch-report",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": ["Pre-launch report is incomplete."]
+    }
+  ]
+}

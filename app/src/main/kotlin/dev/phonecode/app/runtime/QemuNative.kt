@@ -12,6 +12,7 @@ internal object QemuNative {
         arguments: Array<String>,
         kernelFd: Int,
         initramfsFd: Int,
+        systemImageFd: Int,
         consoleFd: Int,
         controlFd: Int,
     ): Int

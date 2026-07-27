@@ -28,7 +28,11 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w412dp-h915dp-xhdpi")
+@Config(
+    sdk = [34],
+    qualifiers = "w412dp-h915dp-xhdpi",
+    shadows = [UiTestSecureKeyStore::class],
+)
 class UiSmokeTest {
 
     private val skillFixture = """---
@@ -44,6 +48,7 @@ Original instruction.
         override fun before() {
             val filesDir = androidx.test.core.app.ApplicationProvider
                 .getApplicationContext<android.content.Context>().filesDir
+            UiTestSecureKeyStore.replaceWith(mapOf("anthropic" to "ui-smoke-key"))
             java.io.File(filesDir, "app_settings.json").writeText("""{"onboarded":true}""")
             java.io.File(filesDir, "config/skills/hot-skill/SKILL.md").apply {
                 parentFile?.mkdirs()

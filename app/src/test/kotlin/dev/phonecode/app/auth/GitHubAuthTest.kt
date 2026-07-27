@@ -5,22 +5,44 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 
 class GitHubAuthTest {
 
+    private val clientId = "phonecode-test-client"
     private val server = MockWebServer().apply { start() }
     private val stored = mutableMapOf<String, String>()
     private val auth = GitHubAuth(
         http = OkHttpClient(),
         store = { k, v -> stored[k] = v },
         read = { stored[it] },
+        clientId = clientId,
         deviceCodeUrl = server.url("/login/device/code").toString(),
         tokenUrl = server.url("/login/oauth/access_token").toString(),
         userUrl = server.url("/user").toString(),
     )
+
+    @Test fun releaseRequiresAnAppOwnedClientId() {
+        assertEquals("phonecode-owned-client", githubOAuthClientId(" phonecode-owned-client ", debug = false))
+        assertThrows(IllegalStateException::class.java) { githubOAuthClientId("", debug = false) }
+        assertThrows(IllegalStateException::class.java) { githubOAuthClientId(GitHubAuth.CLIENT_ID, debug = false) }
+    }
+
+    @Test fun debugMayUseThePublicClientFallback() {
+        assertEquals(GitHubAuth.CLIENT_ID, githubOAuthClientId("", debug = true))
+    }
+
+    @Test fun authClientDisablesBothRedirectModes() {
+        val field = GitHubAuth::class.java.getDeclaredField("http").apply { isAccessible = true }
+        val client = field.get(auth) as OkHttpClient
+
+        assertFalse(client.followRedirects)
+        assertFalse(client.followSslRedirects)
+    }
 
     @After fun tearDown() = server.shutdown()
 
@@ -49,7 +71,7 @@ class GitHubAuthTest {
 
         val request = server.takeRequest()
         val body = request.body.readUtf8()
-        assertTrue(body.contains("client_id=${GitHubAuth.CLIENT_ID}"))
+        assertTrue(body.contains("client_id=$clientId"))
         assertEquals("application/json", request.getHeader("Accept"))
     }
 
@@ -62,9 +84,12 @@ class GitHubAuthTest {
         assertEquals("gho_tok", auth.pollForToken(code()))
         assertEquals("gho_tok", stored["git.token"])
         assertEquals(2, server.requestCount)
-        val body = server.takeRequest().body.readUtf8()
-        assertTrue(body.contains("device_code=dev-1"))
-        assertTrue(body.contains("grant_type=urn")) // RFC 8628 device_code grant
+        repeat(2) {
+            val body = server.takeRequest().body.readUtf8()
+            assertTrue(body.contains("client_id=$clientId"))
+            assertTrue(body.contains("device_code=dev-1"))
+            assertTrue(body.contains("grant_type=urn")) // RFC 8628 device_code grant
+        }
     }
 
     @Test fun pollThrowsOnGitHubDenial() {
@@ -92,6 +117,20 @@ class GitHubAuthTest {
         assertEquals(0, server.requestCount)
     }
 
+    @Test fun pollDoesNotFollowRedirectWithDeviceCode() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(302)
+                .setHeader("Location", server.url("/replayed")),
+        )
+        server.enqueue(json("""{"access_token":"replayed"}"""))
+
+        assertThrows(IOException::class.java) { auth.pollForToken(code()) }
+
+        assertEquals(1, server.requestCount)
+        assertTrue(server.takeRequest().body.readUtf8().contains("device_code=dev-1"))
+    }
+
     // -- fetchLogin --
 
     @Test fun fetchLoginStoresLoginAndGitUsername() {
@@ -101,6 +140,20 @@ class GitHubAuthTest {
         assertEquals("octocat", stored["git.username"])
         assertEquals("Bearer gho_tok", server.takeRequest().getHeader("Authorization"))
         assertEquals("octocat", auth.login())
+    }
+
+    @Test fun fetchLoginDoesNotReplayAccessTokenHeaderAcrossRedirect() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(302)
+                .setHeader("Location", server.url("/replayed")),
+        )
+        server.enqueue(json("""{"login":"attacker"}"""))
+
+        assertThrows(IOException::class.java) { auth.fetchLogin("gho_secret") }
+
+        assertEquals(1, server.requestCount)
+        assertEquals("Bearer gho_secret", server.takeRequest().getHeader("Authorization"))
     }
 
     // -- signOut --

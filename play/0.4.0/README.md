@@ -20,8 +20,12 @@ is not a changelog or a substitute for testing the exact signed Android App Bund
 
 ## Submission blockers
 
-- Every release artifact task is deliberately stopped by the Gradle task-graph gate until the QEMU runtime,
-  licensing, supported-API, and final-AAB audits pass.
+- The `verifyPlayRelease` dependency deliberately stops candidate packaging until credentials, exact
+  QEMU/guest payloads, legal/SBOM/source inputs, and production integration are complete.
+- `verifyPlaySubmission` builds that controlled candidate, audits every packaged release ELF, and
+  still fails until signed-AAB, native-symbol, device-lifecycle, Play-artifact, and policy evidence
+  exists. `submission-evidence.json` is the machine-readable fail-closed inventory; every `PASS`
+  item must carry hashed evidence bound to the exact AAB SHA-256.
 - The current Alpine/PRoot prototype executes downloaded native code under the app UID and is not the
   Google Play release boundary. The reproducible isolated QEMU payload is not yet a shipping artifact.
 - PRoot/talloc, Alpine, Mermaid, fonts, Android/JVM dependencies, and the future QEMU payload still
@@ -62,6 +66,7 @@ Use `PASS`, `FAIL`, or `BLOCKED`; never leave a checked item without a link or h
 | Target API | PASS, source-only | Candidate targets API 36 ahead of the announced August 2026 requirement; confirm from the final AAB and recheck the [target API requirements](https://developer.android.com/google/play/requirements/target-sdk) on submission day |
 | 16 KB page support | BLOCKED | Every loaded native artifact passes bundle alignment inspection and runs on a 16 KB API 35+ image, following the [official page-size guidance](https://developer.android.com/guide/practices/page-sizes) |
 | Runtime boundary | BLOCKED | No out-of-Play native execution under the app UID; isolated VM evidence and package behavior reviewed |
+| Native host foundation | PASS, source-only | [`native-runtime-evidence.md`](native-runtime-evidence.md) records reproducibility, exact host hashes, ELF audit, and the limited API 34 emulator boot proof; final guest/AAB/device evidence remains blocked |
 | Runtime device matrix | BLOCKED | API 26, 34, 35, 36, and current target tested on representative arm64 hardware; lifecycle, stop, storage, network, and recovery pass |
 | SBOM and complete notices | BLOCKED | Final resolved graph and every shipped binary covered by version, source, license, notice, and hash |
 | Corresponding source and rebuild evidence | BLOCKED | Exact copyleft sources, patches, scripts, toolchain, offer or download, and reproduction logs available beside the release |
@@ -69,13 +74,14 @@ Use `PASS`, `FAIL`, or `BLOCKED`; never leave a checked item without a link or h
 | Terms URL | BLOCKED | Public HTTPS page loads and matches `legal/terms.md` |
 | Data Safety declaration | BLOCKED | [`data-safety.md`](data-safety.md) reconciled to the final artifact and submitted in Play Console |
 | Foreground-service declaration | BLOCKED | [`foreground-service.md`](foreground-service.md) text submitted and release-build video URL accepted |
-| App access | BLOCKED | Dedicated reviewer credential and [`reviewer-instructions.md`](reviewer-instructions.md) entered in Play Console |
-| Personal-account production access | UNRESOLVED | Account type/date recorded; when applicable, physical-device verification and the [12-tester, 14-day closed test](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en) are complete |
-| Developer verification | UNRESOLVED | Play Console identity, contact details, and package registration remain verified for the submission account |
+| App access | BLOCKED | Dedicated API-key reviewer credential and [`reviewer-instructions.md`](reviewer-instructions.md) entered in Play Console; Codex OAuth is not part of the release path |
+| Signing and Play App Signing | BLOCKED | [`signing.md`](signing.md) completed for the exact AAB without placing keystores or secrets in this repository |
+| Personal-account production access | UNRESOLVED | [`developer-account.md`](developer-account.md) establishes applicability; when required, physical-device verification and [`closed-test.md`](closed-test.md) are complete |
+| Developer verification | UNRESOLVED | [`developer-account.md`](developer-account.md) records current Play Console identity, contact, and package-registration evidence |
 | Store listing | DRAFT | [`store-listing.md`](store-listing.md) proofread against the exact release capabilities and assets |
 | Target audience and content rating | UNRESOLVED | Play questionnaires completed truthfully; app is not directed to children under 13 |
 | Ads declaration | UNRESOLVED | Final SDK/AAB scan confirms no ad SDK or ad surface before selecting No |
-| AI-generated content safeguards | BLOCKED | In-app reporting, restricted-content prevention, endpoint handling, retention, and moderation response verified against the [AI-Generated Content policy](https://support.google.com/googleplay/android-developer/answer/13985936?hl=en) |
+| AI-generated content safeguards | BLOCKED | [`ai-safety.md`](ai-safety.md) verifies in-app reporting, restricted-content prevention, endpoint handling, retention, and moderation response against the [AI-Generated Content policy](https://support.google.com/googleplay/android-developer/answer/13985936?hl=en) |
 | Financial features | PASS, source-only | No in-app Ko-fi, Stripe, donation, or external-payment steering in the submitted build |
 | Pre-launch report | BLOCKED | No unresolved crash, ANR, security, accessibility, or compatibility issue |
 | Play policy status | BLOCKED | No pending declaration, rejection, warning, or required action in Play Console |
@@ -93,3 +99,12 @@ responsible for its accuracy. See the [Data Safety guidance](https://support.goo
 
 If these disagree, stop submission and update the lower-priority source. Google reviews metadata,
 in-app behavior, third-party code, and declarations together; see [Prepare your app for review](https://support.google.com/googleplay/android-developer/answer/9859455?hl=en).
+
+Validate the blocked draft structure without claiming readiness:
+
+```sh
+./gradlew :app:verifyPlaySubmissionEvidenceSchema
+```
+
+The final `verifyPlaySubmission` task passes the generated AAB to the validator and refuses evidence
+whose recorded candidate hash differs from the actual bundle bytes.

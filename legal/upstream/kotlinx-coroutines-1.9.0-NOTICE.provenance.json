@@ -1,0 +1,22 @@
+{
+  "coordinates": [
+    "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0",
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.9.0"
+  ],
+  "copyright_status": "included",
+  "license_expression": "Apache-2.0",
+  "local_path": "legal/upstream/kotlinx-coroutines-1.9.0-NOTICE.txt",
+  "local_sha256": "421d45acbd92670b4131621a28fcbb41ba0b747d3a336cb13fca38c0685426c4",
+  "normalization": "None; the upstream bytes are preserved exactly.",
+  "notice_status": "included",
+  "schema_version": 1,
+  "source": {
+    "blob": "01d81385e4ace2e64601668ea7021ca27cdbe376",
+    "commit": "d8d6f8f37978b8e202d93b34f23f101df9c5724d",
+    "path": "license/NOTICE.txt",
+    "raw_url": "https://raw.githubusercontent.com/Kotlin/kotlinx.coroutines/d8d6f8f37978b8e202d93b34f23f101df9c5724d/license/NOTICE.txt",
+    "repository": "https://github.com/Kotlin/kotlinx.coroutines",
+    "sha256": "421d45acbd92670b4131621a28fcbb41ba0b747d3a336cb13fca38c0685426c4",
+    "tag": "1.9.0"
+  }
+}

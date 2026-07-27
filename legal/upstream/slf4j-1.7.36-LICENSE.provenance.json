@@ -1,0 +1,16 @@
+{
+  "coordinate": "org.slf4j:slf4j-api:1.7.36",
+  "local_path": "legal/upstream/slf4j-1.7.36-LICENSE.txt",
+  "local_sha256": "6add69474639ec79e70f4a26be310aefd732b826fcbf9126da575a9efb97d72f",
+  "normalization": "Only trailing empty lines were removed; license text bytes are otherwise identical.",
+  "schema_version": 1,
+  "source": {
+    "commit": "e9ee55cca93c2bf26f14482a9bdf961c750d2a56",
+    "path": "LICENSE.txt",
+    "raw_url": "https://raw.githubusercontent.com/qos-ch/slf4j/e9ee55cca93c2bf26f14482a9bdf961c750d2a56/LICENSE.txt",
+    "repository": "https://github.com/qos-ch/slf4j",
+    "sha256": "6fbe2eaf44b193b8a40eed9208f52848572224ad8d7672dd09418aa174847e73",
+    "tag": "v_1.7.36",
+    "tag_object": "e4b93526e5f005e9ab7750c993520ab2b680166c"
+  }
+}

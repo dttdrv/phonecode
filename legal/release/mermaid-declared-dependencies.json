@@ -1,0 +1,96 @@
+{
+  "completeBundledDependencyClosure": false,
+  "component": {
+    "name": "mermaid",
+    "version": "10.9.6"
+  },
+  "dependencies": [
+    {
+      "declaredRange": "^6.0.1",
+      "name": "@braintree/sanitize-url"
+    },
+    {
+      "declaredRange": "^4.0.3",
+      "name": "@types/d3-scale"
+    },
+    {
+      "declaredRange": "^3.0.0",
+      "name": "@types/d3-scale-chromatic"
+    },
+    {
+      "declaredRange": "^3.28.1",
+      "name": "cytoscape"
+    },
+    {
+      "declaredRange": "^4.1.0",
+      "name": "cytoscape-cose-bilkent"
+    },
+    {
+      "declaredRange": "^7.4.0",
+      "name": "d3"
+    },
+    {
+      "declaredRange": "^0.12.3",
+      "name": "d3-sankey"
+    },
+    {
+      "declaredRange": "7.0.13",
+      "name": "dagre-d3-es"
+    },
+    {
+      "declaredRange": "^1.11.7",
+      "name": "dayjs"
+    },
+    {
+      "declaredRange": "^3.2.4",
+      "name": "dompurify"
+    },
+    {
+      "declaredRange": "^0.9.0",
+      "name": "elkjs"
+    },
+    {
+      "declaredRange": "^0.16.9",
+      "name": "katex"
+    },
+    {
+      "declaredRange": "^2.0.0",
+      "name": "khroma"
+    },
+    {
+      "declaredRange": "^4.17.21",
+      "name": "lodash-es"
+    },
+    {
+      "declaredRange": "^1.3.0",
+      "name": "mdast-util-from-markdown"
+    },
+    {
+      "declaredRange": "^2.0.2",
+      "name": "non-layered-tidy-tree-layout"
+    },
+    {
+      "declaredRange": "^4.1.3",
+      "name": "stylis"
+    },
+    {
+      "declaredRange": "^2.2.0",
+      "name": "ts-dedent"
+    },
+    {
+      "declaredRange": "^9.0.0 || ^10 || ^11.1.0 || ^12 || ^13 || ^14.0.0",
+      "name": "uuid"
+    },
+    {
+      "declaredRange": "^1.2.0",
+      "name": "web-worker"
+    }
+  ],
+  "dependencyKind": "declared-runtime-dependency-ranges",
+  "resolvedVersions": false,
+  "schemaVersion": 1,
+  "sourcePackageJson": {
+    "member": "package/package.json",
+    "sha256": "f963194e44252af0bf21918ab7708743b20046ccd7db2f4f30c6ea53f6c58f7a"
+  }
+}

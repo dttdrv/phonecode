@@ -150,6 +150,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -168,6 +169,7 @@ import dev.phonecode.app.agent.PermissionRequest
 import dev.phonecode.app.agent.QuestionRequest
 import dev.phonecode.app.agent.ToolStatus
 import dev.phonecode.app.ui.components.ContextRing
+import dev.phonecode.app.ui.components.PcButton
 import dev.phonecode.app.ui.components.PcDivider
 import dev.phonecode.app.ui.components.PcIconButton
 import dev.phonecode.app.ui.components.MorphingMenu
@@ -231,11 +233,13 @@ private fun contextUsageColor(fraction: Float): Color {
 fun ChatScreen(
     vm: ChatViewModel,
     onOpenDrawer: () -> Unit,
+    onOpenModelSetup: () -> Unit,
     onOpenProviderSetup: (String) -> Unit,
     sendOnEnter: Boolean = true,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val colors = MaterialTheme.colorScheme
+    val modelConfigured = state.selected?.let { vm.providerConfigured(it.providerId) } == true
     val rootView = LocalView.current
     val composerKey = "${state.currentProjectId.orEmpty()}:${state.currentSessionId}"
     var input by rememberSaveable(composerKey) { mutableStateOf("") }
@@ -371,7 +375,11 @@ fun ChatScreen(
                         exit = fadeOut(tween(120)),
                         modifier = Modifier.align(Alignment.Center),
                     ) {
-                        EmptyState(onSuggestion = { input = it })
+                        EmptyState(
+                            modelConfigured = modelConfigured,
+                            onSuggestion = { input = it },
+                            onOpenModelSetup = onOpenModelSetup,
+                        )
                     }
                 } else {
                     val lastAssistantIndex = state.lines.indexOfLast { it is ChatLine.Assistant }
@@ -490,18 +498,25 @@ fun ChatScreen(
             // Model selector moved out of the composer into the title: tap to switch.
             Row(
                 Modifier.padding(top = 3.dp).clip(ShapePill).background(colors.surfaceContainerHigh.copy(alpha = 0.72f))
-                    .clickable { modelOpen = true }
+                    .clickable {
+                        if (modelConfigured) modelOpen = true else onOpenModelSetup()
+                    }
                     .padding(start = 11.dp, end = 7.dp, top = 3.dp, bottom = 3.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 Text(
-                    if (state.selected?.let { vm.providerConfigured(it.providerId) } == true) modelShortLabel(state) else "Set up model",
+                    if (modelConfigured) modelShortLabel(state) else "Set up model",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (state.selected?.let { vm.providerConfigured(it.providerId) } == true) colors.secondary else colors.error,
+                    color = colors.secondary,
                     maxLines = 1,
                 )
-                Icon(Icons.Filled.KeyboardArrowDown, "Switch model", tint = colors.secondary, modifier = Modifier.size(15.dp))
+                Icon(
+                    Icons.Filled.KeyboardArrowDown,
+                    if (modelConfigured) "Switch model" else "Set up model",
+                    tint = colors.secondary,
+                    modifier = Modifier.size(15.dp),
+                )
             }
         }
         Row(
@@ -596,6 +611,7 @@ fun ChatScreen(
             if (state.sessionLoading) NoticeBanner("Opening chat…")
             Composer(
                 state = state,
+                enabled = modelConfigured,
                 input = input,
                 photos = photos,
                 onInput = { input = it },
@@ -713,35 +729,63 @@ private fun reasoningBefore(lines: List<ChatLine>, i: Int): String? =
     (lines.getOrNull(i - 1) as? ChatLine.Reasoning)?.text
 
 @Composable
-private fun EmptyState(onSuggestion: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun EmptyState(
+    modelConfigured: Boolean,
+    onSuggestion: (String) -> Unit,
+    onOpenModelSetup: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = MaterialTheme.colorScheme
     // Grok-style home: crisp mark + wordmark + starter chips. The chat stays quiet at rest -
     // no halos, no gradients; the ethereal layer belongs to generation only (grok-design.md).
     Column(modifier.padding(Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(painter = painterResource(R.drawable.ic_phonecode_mark), contentDescription = null, tint = colors.onBackground, modifier = Modifier.size(48.dp))
         Spacer(Modifier.height(14.dp))
-        Text("What should we build?", style = MaterialTheme.typography.titleLarge, color = colors.onBackground)
-        Spacer(Modifier.height(20.dp))
-        listOf(
-            "Build a small web app",
-            "Explain an error message",
-            "Refactor a function",
-            "Set up a git project",
-        ).forEach { suggestion ->
-            val chipInteraction = remember(suggestion) { MutableInteractionSource() }
+        if (!modelConfigured) {
             Text(
-                suggestion,
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Normal),
-                color = colors.secondary,
-                modifier = Modifier
-                    .padding(vertical = 4.dp)
-                    .pressFeedback(chipInteraction, pressedScale = 0.96f)
-                    .clip(ShapePill)
-                    .clickable(interactionSource = chipInteraction, indication = ripple()) { onSuggestion(suggestion) }
-                    .background(colors.surfaceContainerHigh)
-                    .heightIn(min = 48.dp)
-                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                "Connect a model to start",
+                style = MaterialTheme.typography.titleLarge,
+                color = colors.onBackground,
+                textAlign = TextAlign.Center,
             )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Choose ChatGPT or add an API key. You can change providers at any time.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.secondary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 300.dp),
+            )
+            Spacer(Modifier.height(20.dp))
+            PcButton(
+                text = "Set up a model",
+                modifier = Modifier.widthIn(max = 260.dp),
+                onClick = onOpenModelSetup,
+            )
+        } else {
+            Text("What should we build?", style = MaterialTheme.typography.titleLarge, color = colors.onBackground)
+            Spacer(Modifier.height(20.dp))
+            listOf(
+                "Build a small web app",
+                "Explain an error message",
+                "Refactor a function",
+                "Set up a git project",
+            ).forEach { suggestion ->
+                val chipInteraction = remember(suggestion) { MutableInteractionSource() }
+                Text(
+                    suggestion,
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Normal),
+                    color = colors.secondary,
+                    modifier = Modifier
+                        .padding(vertical = 4.dp)
+                        .pressFeedback(chipInteraction, pressedScale = 0.96f)
+                        .clip(ShapePill)
+                        .clickable(interactionSource = chipInteraction, indication = ripple()) { onSuggestion(suggestion) }
+                        .background(colors.surfaceContainerHigh)
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                )
+            }
         }
     }
 }
@@ -1503,6 +1547,7 @@ internal fun TodoPanel(todos: List<TodoItem>) {
 @Composable
 private fun Composer(
     state: ChatUiState,
+    enabled: Boolean,
     input: String,
     photos: List<MessagePart.Image>,
     onInput: (String) -> Unit,
@@ -1551,19 +1596,23 @@ private fun Composer(
                     PcIconButton(
                         Icons.Outlined.AttachFile,
                         "Attach photo or file",
-                        tint = if (state.sessionLoading) colors.tertiary else colors.secondary,
-                        onClick = { if (!state.sessionLoading) onUpload() },
+                        tint = if (!enabled || state.sessionLoading) colors.tertiary else colors.secondary,
+                        onClick = { if (enabled && !state.sessionLoading) onUpload() },
                     )
                     Box(Modifier.weight(1f).padding(horizontal = 4.dp)) {
                         if (input.isEmpty()) Text(
-                            if (state.sessionLoading) "Opening chat…" else "Message...",
+                            when {
+                                state.sessionLoading -> "Opening chat…"
+                                !enabled -> "Set up a model to chat"
+                                else -> "Message..."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.secondary,
                         )
                         BasicTextField(
                             value = input,
                             onValueChange = onInput,
-                            enabled = !state.sessionLoading,
+                            enabled = enabled && !state.sessionLoading,
                             textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onBackground),
                             cursorBrush = SolidColor(colors.primary),
                             maxLines = 6,
@@ -1572,12 +1621,14 @@ private fun Composer(
                             } else {
                                 KeyboardOptions.Default
                             },
-                            keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank() || photos.isNotEmpty()) onSend() }),
+                            keyboardActions = KeyboardActions(onSend = {
+                                if (enabled && (input.isNotBlank() || photos.isNotEmpty())) onSend()
+                            }),
                             modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Message" },
                         )
                     }
                     val composerAction = when {
-                        state.sessionLoading -> null
+                        !enabled || state.sessionLoading -> null
                         input.isNotBlank() || photos.isNotEmpty() -> false
                         state.isRunning -> true
                         else -> null

@@ -61,6 +61,7 @@ fun OnboardingScreen(
     githubReady: Boolean = false,
     projectReady: Boolean = false,
     onDone: () -> Unit,
+    onSkip: () -> Unit = onDone,
 ) {
     val colors = MaterialTheme.colorScheme
     androidx.activity.compose.BackHandler(enabled = step > 0) { onStepChange(0) }
@@ -91,7 +92,7 @@ fun OnboardingScreen(
                     githubReady = githubReady,
                     projectReady = projectReady,
                     onDone = onDone,
-                    onSkip = onDone,
+                    onSkip = onSkip,
                 )
             }
         }
@@ -212,7 +213,7 @@ private fun Connect(
                 OptionRow(
                     icon = Icons.Outlined.Cloud,
                     title = "Connect a model",
-                    sub = if (modelReady) "Ready" else "Required · sign in or add a provider key",
+                    sub = if (modelReady) "Configured" else "Required · sign in or add a provider key",
                     complete = modelReady,
                     onClick = onConnectModels,
                 )

@@ -6,9 +6,12 @@ import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -16,12 +19,37 @@ import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 class CodexAuthTest {
 
     private val auth = CodexAuth(OkHttpClient(), { _, _ -> }, { null })
+
+    @Test fun authClientDisablesBothRedirectModes() {
+        val field = CodexAuth::class.java.getDeclaredField("http").apply { isAccessible = true }
+        val client = field.get(auth) as OkHttpClient
+
+        assertFalse(client.followRedirects)
+        assertFalse(client.followSslRedirects)
+    }
+
+    @Test fun disabledAuthDoesNotExposeOrReadStoredIdentity() {
+        val reads = AtomicInteger()
+        val disabled = CodexAuth(
+            OkHttpClient(),
+            { _, _ -> },
+            { reads.incrementAndGet(); "stored-identity" },
+            enabled = false,
+        )
+
+        assertThrows(IllegalStateException::class.java) { disabled.buildAuthUrl() }
+        disabled.refreshIfNeeded()
+        assertNull(disabled.accessToken())
+        assertNull(disabled.accountId())
+        assertEquals(0, reads.get())
+    }
 
     // -- PKCE --
 
@@ -99,6 +127,53 @@ class CodexAuthTest {
         val stored = CodexAuth(OkHttpClient(), values::put, values::get)
         assertEquals("acct-legacy", stored.accountId())
         assertEquals("acct-legacy", values["codex.account"])
+    }
+
+    @Test fun exchangeDoesNotFollowRedirectWithAuthorizationCode() {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(302)
+                .setHeader("Location", server.url("/replayed")),
+        )
+        server.enqueue(MockResponse().setBody("""{"access_token":"replayed","expires_in":3600}"""))
+        try {
+            val stored = CodexAuth(OkHttpClient(), { _, _ -> }, { null }, server.url("/oauth/token").toString())
+
+            assertThrows(IOException::class.java) { stored.exchangeCode("auth-secret", "verifier-secret") }
+
+            assertEquals(1, server.requestCount)
+            val body = server.takeRequest().body.readUtf8()
+            assertTrue(body.contains("code=auth-secret"))
+            assertTrue(body.contains("code_verifier=verifier-secret"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test fun refreshDoesNotFollowRedirectWithRefreshToken() {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(302)
+                .setHeader("Location", server.url("/replayed")),
+        )
+        server.enqueue(MockResponse().setBody("""{"access_token":"replayed","expires_in":3600}"""))
+        try {
+            val values = ConcurrentHashMap<String, String>()
+            values["codex.refresh"] = "refresh-secret"
+            values["codex.expires"] = (System.currentTimeMillis() - 1).toString()
+            val stored = CodexAuth(OkHttpClient(), values::put, values::get, server.url("/oauth/token").toString())
+
+            assertThrows(IOException::class.java) { stored.refreshIfNeeded() }
+
+            assertEquals(1, server.requestCount)
+            assertTrue(server.takeRequest().body.readUtf8().contains("refresh_token=refresh-secret"))
+        } finally {
+            server.shutdown()
+        }
     }
 
     @Test fun concurrentRefreshUsesRotatingTokenOnce() {

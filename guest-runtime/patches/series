@@ -1,0 +1,4 @@
+# Ordered guest patch list.
+#
+# Each non-comment line will be a safe relative path beneath this directory. The release gate
+# requires exact coverage of every checked-in patch. The skeleton applies no patches.

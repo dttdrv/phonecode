@@ -1,0 +1,14 @@
+# name|version|source|sha256-or-commit
+qemu|11.0.2|https://download.qemu.org/qemu-11.0.2.tar.xz|3745f6ea88e2e87fe0dc838b2b1d4e0a770bf48e01a1d5a186842a1fff76ccf5
+glib|2.88.2|https://download.gnome.org/sources/glib/2.88/glib-2.88.2.tar.xz|cf3f215a640c8a4257f14317586b8f1fdd25a10a93cb4bdda147c0f9ad88e74f
+libiconv|1.18|https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz|3b08f5f4f9b4eb82f151a7040bfd6fe6c6fb922efe4b1659c66ea933276965e8
+pcre2|10.47|https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.47/pcre2-10.47.tar.bz2|47fe8c99461250d42f89e6e8fdaeba9da057855d06eb7fc08d9ca03fd08d7bc7
+libffi|3.5.2|https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz|f3a3082a23b37c293a4fcd1053147b371f2ff91fa7ea1b2a52e335676bac82dc
+proxy-libintl|0.5|https://github.com/frida/proxy-libintl/archive/refs/tags/0.5.tar.gz|f7a1cbd7579baaf575c66f9d99fb6295e9b0684a28b095967cfda17857595303
+meson-wheel|1.10.0|qemu-11.0.2/python/wheels/meson-1.10.0-py3-none-any.whl|4b27aafce281e652dcb437b28007457411245d975c48b5db3a797d3e93ae1585
+wheel|0.46.2|https://files.pythonhosted.org/packages/13/2c/5e079cefe955ae58e5a052fe037c850ce493eb7269dedeb960237e78fb0f/wheel-0.46.2-py3-none-any.whl|33ae60725d69eaa249bc1982e739943c23b34b58d51f1cb6253453773aca6e65
+packaging|26.2|https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl|5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e
+pkgconf|2.5.1|https://github.com/pkgconf/pkgconf.git|4fc570f91d9d8d843ab32d2198a5c064538d8ffd
+ninja|1.13.1|https://github.com/ninja-build/ninja.git|79feac0f3e3bc9da9effc586cd5fea41e7550051
+dtc|1.7.2-qemu|https://gitlab.com/qemu-project/dtc.git|b6910bec11614980a21e46fbccc35934b671bd81
+android-ndk|28.2.13676358|local Android SDK installation|28.2.13676358

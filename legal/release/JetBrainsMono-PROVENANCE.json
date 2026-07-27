@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "name": "JetBrains Mono",
+  "version": "2.305",
+  "license": "OFL-1.1",
+  "copyright": "Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)",
+  "upstreamRepository": "https://github.com/JetBrains/JetBrainsMono",
+  "sourceRevision": "02bb50b082dad9ef8a0f33ac393839202b760223",
+  "sourceCommitUrl": "https://github.com/JetBrains/JetBrainsMono/commit/02bb50b082dad9ef8a0f33ac393839202b760223",
+  "sourceRevisionDate": "2024-08-08T12:34:44Z",
+  "sourceRevisionMessage": "Built fonts",
+  "releaseStatus": "unreleased-upstream-revision",
+  "releaseNote": "The upstream project did not publish a v2.305 tag or release archive. These embedded-version 2.305 files match this immutable official repository revision byte-for-byte.",
+  "embeddedVersion": "Version 2.305; ttfautohint (v1.8.4.7-5d5b)",
+  "licenseFile": {
+    "gitBlobSha1": "8bee4148c1d54dbf5dae6d6c117fc80414266abb",
+    "sha256": "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad",
+    "size": 4399,
+    "sourceUrl": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/02bb50b082dad9ef8a0f33ac393839202b760223/OFL.txt",
+    "upstreamPath": "OFL.txt"
+  },
+  "files": {
+    "jetbrainsmono_bold.ttf": "d22c4f3821d725eb01210d278d95dfcfcaadc34699a06658d47c8a5cc5830ada",
+    "jetbrainsmono_medium.ttf": "d16e6dc99672734698d629705f617c79f6eb6040f5113efe3a145204dc988109",
+    "jetbrainsmono_regular.ttf": "e6fd0d7e91550b3ed2b735d4312474362c4716edc4fc0577a0f61ed782d5aed1"
+  },
+  "sourceFiles": {
+    "jetbrainsmono_bold.ttf": {
+      "embeddedUniqueId": "2.305;JB;JetBrainsMono-Bold",
+      "gitBlobSha1": "cd1bee0704e05a899cd70f0640a801f1afe046b2",
+      "postScriptName": "JetBrainsMono-Bold",
+      "size": 274096,
+      "sourceUrl": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/02bb50b082dad9ef8a0f33ac393839202b760223/fonts/ttf/JetBrainsMono-Bold.ttf",
+      "upstreamPath": "fonts/ttf/JetBrainsMono-Bold.ttf"
+    },
+    "jetbrainsmono_medium.ttf": {
+      "embeddedUniqueId": "2.305;JB;JetBrainsMono-Medium",
+      "gitBlobSha1": "dc2e5d08677d603b6755dc6c34fc8ad9aa6fc8a5",
+      "postScriptName": "JetBrainsMono-Medium",
+      "size": 270316,
+      "sourceUrl": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/02bb50b082dad9ef8a0f33ac393839202b760223/fonts/ttf/JetBrainsMono-Medium.ttf",
+      "upstreamPath": "fonts/ttf/JetBrainsMono-Medium.ttf"
+    },
+    "jetbrainsmono_regular.ttf": {
+      "embeddedUniqueId": "2.305;JB;JetBrainsMono-Regular",
+      "gitBlobSha1": "711830ede02a366f8b99f88e52f3148405e67eaf",
+      "postScriptName": "JetBrainsMono-Regular",
+      "size": 270224,
+      "sourceUrl": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/02bb50b082dad9ef8a0f33ac393839202b760223/fonts/ttf/JetBrainsMono-Regular.ttf",
+      "upstreamPath": "fonts/ttf/JetBrainsMono-Regular.ttf"
+    }
+  }
+}

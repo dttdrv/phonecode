@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dttdrv.xyz/schemas/phonecode/guest-build-manifest-v1.schema.json",
+  "title": "PhoneCode guest build manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "architecture",
+    "artifacts",
+    "build_epoch",
+    "packages_lock_sha256",
+    "protocol_version",
+    "schema",
+    "sources_lock_sha256",
+    "toolchain_lock_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "phonecode-guest-build-manifest-v1"
+    },
+    "protocol_version": {
+      "const": 1
+    },
+    "architecture": {
+      "const": "aarch64"
+    },
+    "build_epoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sources_lock_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "packages_lock_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "toolchain_lock_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "bytes",
+          "name",
+          "sha256"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "initramfs.cpio.gz",
+              "system.img",
+              "vmlinuz"
+            ]
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sha256": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

@@ -14,6 +14,7 @@ class IsolatedQemuService : Service() {
         override fun start(
             kernel: ParcelFileDescriptor,
             initramfs: ParcelFileDescriptor,
+            systemImage: ParcelFileDescriptor,
             console: ParcelFileDescriptor,
             control: ParcelFileDescriptor,
         ) {
@@ -24,8 +25,8 @@ class IsolatedQemuService : Service() {
                 val executable = File(applicationInfo.nativeLibraryDir, "libphonecode_qemu.so")
                 check(executable.isFile) { "QEMU runtime unavailable" }
 
-                val descriptors = arrayOf(kernel, initramfs, console, control)
-                val detached = intArrayOf(-1, -1, -1, -1)
+                val descriptors = arrayOf(kernel, initramfs, systemImage, console, control)
+                val detached = intArrayOf(-1, -1, -1, -1, -1)
                 try {
                     QemuNative.ensureLoaded()
                     descriptors.forEachIndexed { index, descriptor ->
@@ -35,11 +36,12 @@ class IsolatedQemuService : Service() {
                     detached.fill(-1)
                     val result = QemuNative.start(
                         executable.absolutePath,
-                        arguments,
+                        QemuLaunchConfig.arguments,
                         owned[0],
                         owned[1],
                         owned[2],
                         owned[3],
+                        owned[4],
                     )
                     check(result > 0) { "QEMU failed to start: ${-result}" }
                     pid = result
@@ -76,22 +78,31 @@ class IsolatedQemuService : Service() {
         if (child > 0) QemuNative.stop(child)
     }
 
-    private companion object {
-        val arguments = arrayOf(
-            "-M", "virt",
-            "-cpu", "max",
-            "-accel", "tcg,thread=multi",
-            "-smp", "1",
-            "-m", "256",
-            "-nic", "none",
-            "-display", "none",
-            "-serial", "stdio",
-            "-no-reboot",
-            "-kernel", "/proc/self/fd/3",
-            "-initrd", "/proc/self/fd/4",
-            "-append", "earlycon=pl011,0x09000000 console=ttyAMA0 panic=-1",
-            "-chardev", "socket,id=phonecode_control,fd=6",
-            "-mon", "chardev=phonecode_control,mode=control,pretty=off",
-        )
-    }
+}
+
+internal object QemuLaunchConfig {
+    const val kernelFd = 3
+    const val initramfsFd = 4
+    const val systemImageFd = 5
+    const val controlFd = 6
+
+    val arguments = arrayOf(
+        "-M", "virt",
+        "-cpu", "max",
+        "-accel", "tcg,thread=multi",
+        "-smp", "1",
+        "-m", "256",
+        "-nic", "none",
+        "-display", "none",
+        "-serial", "stdio",
+        "-no-reboot",
+        "-kernel", "/proc/self/fd/$kernelFd",
+        "-initrd", "/proc/self/fd/$initramfsFd",
+        "-drive", "file=/proc/self/fd/$systemImageFd,format=raw,if=none,id=system,readonly=on",
+        "-device", "virtio-blk-device,drive=system",
+        "-device", "virtio-serial-device",
+        "-chardev", "socket,id=phonecode_control,fd=$controlFd",
+        "-device", "virtserialport,chardev=phonecode_control,name=dev.phonecode.guestd",
+        "-append", "earlycon=pl011,0x09000000 console=ttyAMA0 panic=-1",
+    )
 }

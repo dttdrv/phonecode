@@ -19,14 +19,19 @@ import java.io.IOException
  * the exact keys the agent's git push/pull tools already read - plus `github.login` for display.
  */
 class GitHubAuth(
-    private val http: OkHttpClient,
+    http: OkHttpClient,
     private val store: (String, String) -> Unit,
     private val read: (String) -> String?,
+    private val clientId: String = CLIENT_ID,
     // Injectable for tests (MockWebServer); production uses the real GitHub endpoints.
     private val deviceCodeUrl: String = DEVICE_CODE_ENDPOINT,
     private val tokenUrl: String = TOKEN_ENDPOINT,
     private val userUrl: String = USER_ENDPOINT,
 ) {
+    private val http = http.newBuilder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Returned by [startDeviceFlow]; show [userCode], open [verificationUri], then [pollForToken]. */
@@ -41,7 +46,7 @@ class GitHubAuth(
     /** Step 1: request device + user codes. Blocking; throws [IOException] on failure. */
     fun startDeviceFlow(): DeviceCode {
         val body = FormBody.Builder()
-            .add("client_id", CLIENT_ID)
+            .add("client_id", clientId)
             .add("scope", SCOPE)
             .build()
         val request = Request.Builder()
@@ -74,7 +79,7 @@ class GitHubAuth(
             if (!active()) throw SignInAbandonedException()
 
             val body = FormBody.Builder()
-                .add("client_id", CLIENT_ID)
+                .add("client_id", clientId)
                 .add("device_code", deviceCode.deviceCode)
                 .add("grant_type", GRANT_TYPE)
                 .build()
@@ -182,4 +187,11 @@ class GitHubAuth(
         private const val KEY_GIT_USERNAME = "git.username"
         private const val KEY_LOGIN = "github.login"
     }
+}
+
+internal fun githubOAuthClientId(configured: String, debug: Boolean): String {
+    val clientId = configured.trim()
+    if (clientId.isNotEmpty() && (debug || clientId != GitHubAuth.CLIENT_ID)) return clientId
+    check(debug) { "Release GitHub sign-in requires a PhoneCode-owned OAuth client id" }
+    return GitHubAuth.CLIENT_ID
 }

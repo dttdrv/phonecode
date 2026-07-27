@@ -1,0 +1,25 @@
+--- a/meson.build
++++ b/meson.build
+@@ -2349,7 +2349,11 @@ if libintl.found() and libintl.type_name() != 'internal'
+   have_bind_textdomain_codeset = cc.has_function('bind_textdomain_codeset', dependencies: libintl_deps, prefix: libintl_prefix)
+ else
+   # using proxy-libintl fallback
+-  libintl = dependency('intl', allow_fallback: true)
++  libintl = dependency(
++    'intl',
++    allow_fallback: true,
++    default_options: ['default_library=static'],
++  )
+   assert(libintl.type_name() == 'internal')
+ endif
+ 
+--- a/glib/meson.build
++++ b/glib/meson.build
+@@ -426,6 +426,7 @@ libglib = library('glib-2.0',
+   soversion : soversion,
+   darwin_versions : darwin_versions,
+   install : true,
++  install_tag : 'phonecode-runtime',
+   # intl.lib is not compatible with SAFESEH
+   link_args : [noseh_link_args, glib_link_flags, win32_ldflags],
+   include_directories : configinc,

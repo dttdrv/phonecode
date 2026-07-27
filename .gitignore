@@ -21,6 +21,17 @@ local.properties
 /_research/
 /oc_research/
 
+# Reproducible native-runtime build outputs and source cache.
+/native-runtime/.downloads/
+/native-runtime/.work/
+/native-runtime/out/
+/release-evidence/
+
+# Cloudflare Worker local secrets and D1 state.
+/report-backend/.dev.vars
+/report-backend/.wrangler/
+/report-backend/node_modules/
+
 # Roborazzi design-loop screenshots (regenerated every test run)
 app/screenshots/
 

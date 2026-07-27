@@ -1,0 +1,5419 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "pkg:maven/androidx.activity/activity-compose@1.12.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/activity#1.12.3"
+        }
+      ],
+      "group": "androidx.activity",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ce9c0dc390667ea8163778f5c38cf43e2d6747d0149f9423d41acb938e667e0a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "activity-compose",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "activity-compose-1.12.3.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "1644e87366e6bf64681ac9fa37501191262e23b65fb19ee99f87d9dc0360d555"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.activity:activity-compose:1.12.3@1644e87366e6bf64681ac9fa37501191262e23b65fb19ee99f87d9dc0360d555"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.12.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.activity/activity-ktx@1.12.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/activity#1.12.3"
+        }
+      ],
+      "group": "androidx.activity",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7e75894a3500af569effdfb858b7a9cebc91d9228ad1c60ebfff4da7614aac91"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "activity-ktx",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "activity-ktx-1.12.3.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "0cc0ca5285646fef9ecb989df109f08b0137dbb7e33b95841002571ab7448da2"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.activity:activity-ktx:1.12.3@0cc0ca5285646fef9ecb989df109f08b0137dbb7e33b95841002571ab7448da2"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.12.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.activity/activity@1.12.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/activity#1.12.3"
+        }
+      ],
+      "group": "androidx.activity",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "840cd28f79556b23177363f2c43bf398a8b77a2950950dd359341d5f3a62b975"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "activity",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "activity-1.12.3.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "48125cf13dbc59563445c70f5d271d1a28a710a73e13419550d75ca2102f17e9"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.activity:activity:1.12.3@48125cf13dbc59563445c70f5d271d1a28a710a73e13419550d75ca2102f17e9"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.12.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.annotation/annotation-experimental@1.4.1",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/annotation#1.4.1"
+        }
+      ],
+      "group": "androidx.annotation",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6bd4c7c7476f8260cd3bdbb81183583e93fc9f790c27dea7dc314181cbf87aa0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "annotation-experimental",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "annotation-experimental-1.4.1.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "fe57b228417f4d7c677903dc61fb4a7cf993d603499de26d8d8113e477cc4f1b"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.annotation:annotation-experimental:1.4.1@fe57b228417f4d7c677903dc61fb4a7cf993d603499de26d8d8113e477cc4f1b"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.4.1"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.annotation/annotation-jvm@1.10.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/annotation#1.10.0"
+        }
+      ],
+      "group": "androidx.annotation",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ddd072ddbb553178e205517ce777b2f05aa9e412982d9ecb4eedc74f1212f697"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "annotation-jvm",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "annotation-jvm-1.10.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "5eece0903b4810aa1da85414dc4c2746046d878a543aa12dd4f1fe74171f7506"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.annotation:annotation-jvm:1.10.0@5eece0903b4810aa1da85414dc4c2746046d878a543aa12dd4f1fe74171f7506"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.10.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.arch.core/core-common@2.2.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/arch-core#2.2.0"
+        }
+      ],
+      "group": "androidx.arch.core",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "65308a06b1c00ee186cb9e19321383f043b993813f1522c47f4a3e3303bdba41"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "core-common",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "core-common-2.2.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "1e17d4af8d6425be2a69f8af4d654a87e0456259a9eef1542869bcb023547e28"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.arch.core:core-common:2.2.0@1e17d4af8d6425be2a69f8af4d654a87e0456259a9eef1542869bcb023547e28"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.2.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.arch.core/core-runtime@2.2.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/arch-core#2.2.0"
+        }
+      ],
+      "group": "androidx.arch.core",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a1be5e0caa2b07623862af6ae21b3ab0718123245184d0e30dea81b53f990a47"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "core-runtime",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "core-runtime-2.2.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "0f953706598140d9d8735cdd5aeb1fa35933f4e2f31c0bf3eb81a053a4c8c1a5"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.arch.core:core-runtime:2.2.0@0f953706598140d9d8735cdd5aeb1fa35933f4e2f31c0bf3eb81a053a4c8c1a5"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.2.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.autofill/autofill@1.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx"
+        }
+      ],
+      "group": "androidx.autofill",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c9468f56e05006ea151a426c54957cd0799b8b83a579d2846dd22061f33e5ecd"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "autofill",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "autofill-1.0.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "3677abead5d4e06cf76cbacb954151e051779c2274494451fb424e375aa9e450"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.autofill:autofill:1.0.0@3677abead5d4e06cf76cbacb954151e051779c2274494451fb424e375aa9e450"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.collection/collection-jvm@1.5.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/collection#1.5.0"
+        }
+      ],
+      "group": "androidx.collection",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "70b35924e4babcdffa37d0e575ee039c56a2d97123342624c48b603233704341"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "collection-jvm",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "collection-jvm-1.5.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "11c415864d3402f61d426e67210158dce1b04680412526a994f1823ecd3cb388"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.collection:collection-jvm:1.5.0@11c415864d3402f61d426e67210158dce1b04680412526a994f1823ecd3cb388"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.5.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.collection/collection-ktx@1.5.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/collection#1.5.0"
+        }
+      ],
+      "group": "androidx.collection",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "939b4a8697640e77d83e4e8b4c4a9d18f8130198c5961194af8dd9db9dc7c353"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "collection-ktx",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "collection-ktx-1.5.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "983f8d0630d072d5bfcd166a498ac7213f3a44a98c09051004ce96429d867cea"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.collection:collection-ktx:1.5.0@983f8d0630d072d5bfcd166a498ac7213f3a44a98c09051004ce96429d867cea"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.5.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.animation/animation-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-animation#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.animation",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c012855d0154d43a0768fc6b0d9f73b5dc3a9ec8bb57533504e656f51e97151f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "animation-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "animation.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "d1853ba82328953b6fb7813d771cdab351120653aea04978019aad49e957c7ef"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.animation:animation-android:1.11.3@d1853ba82328953b6fb7813d771cdab351120653aea04978019aad49e957c7ef"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.animation/animation-core-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-animation#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.animation",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a4ffa9bc67a249c8e35705c2caeb6f7b442bae6ca1b94e2d6a20b4e55d61b65a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "animation-core-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "animation-core.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "f6c619602f2d4f840b2e4d35d60b4f2763ef235c395da81992a0550b21300c2d"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.animation:animation-core-android:1.11.3@f6c619602f2d4f840b2e4d35d60b4f2763ef235c395da81992a0550b21300c2d"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.foundation/foundation-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-foundation#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.foundation",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9612d15e038a261bd6cbadc24197e468b49967f36b90501bbcd95c551a2cabc1"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "foundation-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "foundation.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "ce6e2b3f512cf68f7498a9f92ae9663929637e2bd38ca267dd1af4aec0c43bde"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.foundation:foundation-android:1.11.3@ce6e2b3f512cf68f7498a9f92ae9663929637e2bd38ca267dd1af4aec0c43bde"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.foundation/foundation-layout-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-foundation#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.foundation",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7a7e14710f4e8a41cf48b7b7fa3afcda7cef7261063f500a5b5c61d4bb9f27d2"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "foundation-layout-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "foundation-layout.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "09daf687ff3d4352ab10c94ef3f0c29f84fdc68a838ed2ccce7ce76ff7874f5d"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.foundation:foundation-layout-android:1.11.3@09daf687ff3d4352ab10c94ef3f0c29f84fdc68a838ed2ccce7ce76ff7874f5d"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.material3/material3-android@1.4.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-material3#1.4.0"
+        }
+      ],
+      "group": "androidx.compose.material3",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "3a37e8b36df3822fe1e6059f0f9fafda8800388860477624ac1b9422c418a36e"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "material3-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "material3.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "cc0362653240708a010de50fee8caf884a610fbb10b6013e86694d77c43febc7"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.material3:material3-android:1.4.0@cc0362653240708a010de50fee8caf884a610fbb10b6013e86694d77c43febc7"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.4.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.material/material-icons-core-android@1.7.8",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-material#1.7.8"
+        }
+      ],
+      "group": "androidx.compose.material",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "332c06b25e662cc417fb087e76b8faa5cb249f4992ffa3360084a3d4ab882284"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "material-icons-core-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "material-icons-core-release.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "df671e1144120b43f83464e1e94ff828d0ded8132b3b15b86de07f1b82d0d932"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.material:material-icons-core-android:1.7.8@df671e1144120b43f83464e1e94ff828d0ded8132b3b15b86de07f1b82d0d932"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.7.8"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.material/material-icons-extended-android@1.7.8",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-material#1.7.8"
+        }
+      ],
+      "group": "androidx.compose.material",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "64e86269f1106848981dd76f0046f81b46f3bd92efb22645de8fd044c0402b61"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "material-icons-extended-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "material-icons-extended-release.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "e1582bfe84d5df59487c3ed2d3399601dc2a16241708ecb6721a25809df8558e"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.material:material-icons-extended-android:1.7.8@e1582bfe84d5df59487c3ed2d3399601dc2a16241708ecb6721a25809df8558e"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.7.8"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.material/material-ripple-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-material#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.material",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "595d2582bfd7560cb31b95267748a008fb9c3df3177d8bc88164adae2cd13a56"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "material-ripple-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "material-ripple.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "91aca24e824595087ea088887c566be3c6d2dd8f72ff22b18783370546fbcefa"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.material:material-ripple-android:1.11.3@91aca24e824595087ea088887c566be3c6d2dd8f72ff22b18783370546fbcefa"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.runtime/runtime-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.runtime",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "5986432e904d5f50e076dddc80ec5e6eb0d2cdc49ca084c93f83e43c64794fa9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "runtime-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "runtime.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "fe64f3bc45354b62a18c0990af542fcae9db29b16d4625f7d86eec17c41ffcfd"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.runtime:runtime-android:1.11.3@fe64f3bc45354b62a18c0990af542fcae9db29b16d4625f7d86eec17c41ffcfd"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.runtime/runtime-annotation-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.runtime",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "82cdf5ee75a7940cca22c966fee52f528adad732f3ea8d3d6c70231222d8f903"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "runtime-annotation-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "runtime-annotation.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "34caaed1a00c35ebacd197df993b08a558e681397063d3fdbaeca9926fb25ef7"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.runtime:runtime-annotation-android:1.11.3@34caaed1a00c35ebacd197df993b08a558e681397063d3fdbaeca9926fb25ef7"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.runtime/runtime-retain-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.runtime",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b58c6109b7158d3d0a0867a258fbd17363dd049f843b456ed9a1ca258fdae57c"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "runtime-retain-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "runtime-retain.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "dae425041efb174f902669e868640ab7030aa4064287213ed04291feaea79661"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.runtime:runtime-retain-android:1.11.3@dae425041efb174f902669e868640ab7030aa4064287213ed04291feaea79661"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.runtime/runtime-saveable-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.runtime",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "38e03ce012188f902639304ff6bdcef98ccae57e2c80b0a48bae2a29d15ec498"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "runtime-saveable-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "runtime-saveable.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "1d3e2036b8eb1f4c945f437de1ac3d26030a013c77c39a191e1dcc414af76101"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.runtime:runtime-saveable-android:1.11.3@1d3e2036b8eb1f4c945f437de1ac3d26030a013c77c39a191e1dcc414af76101"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.ui/ui-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.ui",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4ce4638a58704b02ff8ad4e28722d5fd6a64b0d6093ff211e1afdcec40719066"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "ui-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "ui.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "7ed3581910ea7cfd1af5f6346c226bf5556d5a6e29db4b358f28ceff5f16d032"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.ui:ui-android:1.11.3@7ed3581910ea7cfd1af5f6346c226bf5556d5a6e29db4b358f28ceff5f16d032"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.ui/ui-geometry-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.ui",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9f0f3a1afd05ddc334c84a00b45ae8116de9d59f5f203fa3244f7a975174c24d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "ui-geometry-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "ui-geometry.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "0ab80c3de29cfcf72c1f24a3dcffb697daa02115f9791c26d8de8f9a70f770be"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.ui:ui-geometry-android:1.11.3@0ab80c3de29cfcf72c1f24a3dcffb697daa02115f9791c26d8de8f9a70f770be"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.ui/ui-graphics-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.ui",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "aa68e4d0540ce8e5bc9414c8d61832fec9ae2b5bb914e54e38eccb6915d0659c"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "ui-graphics-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "ui-graphics.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "bcef16c88649dbfa7845fb5d4574bd3d73d9c50d029c5f699fbfc510d027e582"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.ui:ui-graphics-android:1.11.3@bcef16c88649dbfa7845fb5d4574bd3d73d9c50d029c5f699fbfc510d027e582"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.ui/ui-text-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.ui",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4d41c16bf0b4a4cf9e8befe807a630a761cc9f4e8c8f4129b64d5df35d4a556d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "ui-text-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "ui-text.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "554e61b61f61933e0b9fab87c197af1e5808738dd014df41db2de53f15dce545"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.ui:ui-text-android:1.11.3@554e61b61f61933e0b9fab87c197af1e5808738dd014df41db2de53f15dce545"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.ui/ui-unit-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.ui",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "da4a64969d81989378fdda02ef4728cd124469d7f1ab79ab538506db88857671"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "ui-unit-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "ui-unit.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "09be906d333708b8439054b748db21b2e91154640fefb34d88a5c08918a736e4"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.ui:ui-unit-android:1.11.3@09be906d333708b8439054b748db21b2e91154640fefb34d88a5c08918a736e4"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.compose.ui/ui-util-android@1.11.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.11.3"
+        }
+      ],
+      "group": "androidx.compose.ui",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "fa4a395223a2e62d4618e31009d399cdad09a4c4723fcb19589a4c4b78c9af3f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "ui-util-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "ui-util.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "459e37d23de0ddb905d7809841cc755db763f0a3182bad64a64dbc0d3832c29d"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.compose.ui:ui-util-android:1.11.3@459e37d23de0ddb905d7809841cc755db763f0a3182bad64a64dbc0d3832c29d"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.11.3"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.concurrent/concurrent-futures@1.1.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/topic/libraries/architecture/index.html"
+        }
+      ],
+      "group": "androidx.concurrent",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0ce067c514a0d1049d1bebdf709e344ed3266fe9744275682937cdcb13334e9e"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "concurrent-futures",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "concurrent-futures-1.1.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "748a34eb5d13d19d187adecaea82667fded5f1b0b98a655e13ed2e4a8b3d8ae6"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.concurrent:concurrent-futures:1.1.0@748a34eb5d13d19d187adecaea82667fded5f1b0b98a655e13ed2e4a8b3d8ae6"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.1.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.core/core-ktx@1.19.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/core#1.19.0"
+        }
+      ],
+      "group": "androidx.core",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "db1ae24b15c36358ad46497d561b19c325642565432d56479ebe47ee3baa0d7e"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "core-ktx",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "core-ktx-1.19.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "b8fe1568a1cb462c99c660cebaf80348c2dd1881054be5d9659c1a2589cc3ba8"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.core:core-ktx:1.19.0@b8fe1568a1cb462c99c660cebaf80348c2dd1881054be5d9659c1a2589cc3ba8"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.19.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.core/core-viewtree@1.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/core#1.0.0"
+        }
+      ],
+      "group": "androidx.core",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "dc1b678d58ebcf2bfa1587be68ff826694ce3d221251b9ef30d4d4b36297e6de"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "core-viewtree",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "core-viewtree-1.0.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "d4f2ed1176fa8c5612b80f74c952a8799142a9ed36022a1a238fde5b140580d9"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.core:core-viewtree:1.0.0@d4f2ed1176fa8c5612b80f74c952a8799142a9ed36022a1a238fde5b140580d9"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.core/core@1.19.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/core#1.19.0"
+        }
+      ],
+      "group": "androidx.core",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "55445ad0ff025963929892569a0bfc6b4c68e60d8b7c965dcffba09048c36c8e"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "core",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "core-1.19.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "1a99fe690775ed0e84788d5895f4a55664479176737ca0986336319ecfce8538"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.core:core:1.19.0@1a99fe690775ed0e84788d5895f4a55664479176737ca0986336319ecfce8538"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.19.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.customview/customview-poolingcontainer@1.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/customview#1.0.0"
+        }
+      ],
+      "group": "androidx.customview",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "3584102fc49bf399c56e3b7be4bfe12000c46112320cd8cf85cc0a8f93f3e752"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "customview-poolingcontainer",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "customview-poolingcontainer-1.0.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "9fa62196c4c4e79b6a58dbb38a8c022bef8db21989d7dae2da0f6f5b66289a9c"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.customview:customview-poolingcontainer:1.0.0@9fa62196c4c4e79b6a58dbb38a8c022bef8db21989d7dae2da0f6f5b66289a9c"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.documentfile/documentfile@1.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://developer.android.com/tools/extras/support-library.html"
+        }
+      ],
+      "group": "androidx.documentfile",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "865a061ef2fad16522f8433536b8d47208c46ff7c7745197dfa1eeb481869487"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "documentfile",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "documentfile-1.0.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "013288a9317a552706ce625fb24493e8223288529223ec578cf855a5ae9c16e5"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.documentfile:documentfile:1.0.0@013288a9317a552706ce625fb24493e8223288529223ec578cf855a5ae9c16e5"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.dynamicanimation/dynamicanimation@1.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://developer.android.com/tools/extras/support-library.html"
+        }
+      ],
+      "group": "androidx.dynamicanimation",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ce005162c229bf308d2d5b12fb6cad0874069cbbeaccee63a8193bd08d40de04"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "dynamicanimation",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "dynamicanimation-1.0.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "44ce22ee620d28f17301bcc60ad49b69b7d0596c2a87b054ad1e3feac7b4a898"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.dynamicanimation:dynamicanimation:1.0.0@44ce22ee620d28f17301bcc60ad49b69b7d0596c2a87b054ad1e3feac7b4a898"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.emoji2/emoji2@1.4.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/emoji2#1.4.0"
+        }
+      ],
+      "group": "androidx.emoji2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "433febd3434a45667176c76a64f3f205ca6335a6b544c5b5d57f25a38a375242"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "emoji2",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "emoji2-1.4.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "1f67221484f7d1260eb6e2b490cd4e7046bf5cb536276d79f972ad3f198b474d"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.emoji2:emoji2:1.4.0@1f67221484f7d1260eb6e2b490cd4e7046bf5cb536276d79f972ad3f198b474d"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.4.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.graphics/graphics-path@1.0.1",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/graphics#1.0.1"
+        }
+      ],
+      "group": "androidx.graphics",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "8ca4032b6d79b351f0b59ad4b580eddbb9423e1652f7c958830687f1eee2ec03"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "graphics-path",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "graphics-path-1.0.1.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "866fb357c7146f5f7678ad44e4bc6c2823d568defce1ed2805bb6c899606b228"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.graphics:graphics-path:1.0.1@866fb357c7146f5f7678ad44e4bc6c2823d568defce1ed2805bb6c899606b228"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.1"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.interpolator/interpolator@1.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://developer.android.com/tools/extras/support-library.html"
+        }
+      ],
+      "group": "androidx.interpolator",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "33193135a64fe21fa2c35eec6688f1a76e512606c0fc83dc1b689e37add7732a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "interpolator",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "interpolator-1.0.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "0ddc07cc39699f48ecd9ec894b5830c0f09e22e82959294edf37217224c88b7b"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.interpolator:interpolator:1.0.0@0ddc07cc39699f48ecd9ec894b5830c0f09e22e82959294edf37217224c88b7b"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.legacy/legacy-support-core-utils@1.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://developer.android.com/tools/extras/support-library.html"
+        }
+      ],
+      "group": "androidx.legacy",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a7edcf01d5b52b3034073027bc4775b78a4764bb6202bb91d61c829add8dd1c7"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "legacy-support-core-utils",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "legacy-support-core-utils-1.0.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "8fd093008b3ee7c06e52c78da2af980a7b47b69b967fa91dad7af466f7a00a38"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.legacy:legacy-support-core-utils:1.0.0@8fd093008b3ee7c06e52c78da2af980a7b47b69b967fa91dad7af466f7a00a38"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-common-java8@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "895e71679cd319db8140664d650af6695b0530f5896be9b8ecccd24cc4f6674f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-common-java8",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-common-java8-2.11.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "3d02f40af88dba161d4be407ed07723d7131ac464193ffe05c96bc9cb72e9034"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-common-java8:2.11.0@3d02f40af88dba161d4be407ed07723d7131ac464193ffe05c96bc9cb72e9034"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-common-jvm@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e6a66e67b9f63a0fb6344f165c1d872376e5fe6d235bffb138af45122cf452a9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-common-jvm",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-common-jvm-2.11.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "421918e01dd8508b0c376207a9e98159ef77fed11eb1d9098294344ed67750c7"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-common-jvm:2.11.0@421918e01dd8508b0c376207a9e98159ef77fed11eb1d9098294344ed67750c7"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-livedata-core-ktx@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "408fac99b61a7ca9d0620f4f24891f85c14ee007cfd027abc3df759a31b0086a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-livedata-core-ktx",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-livedata-core-ktx-2.11.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "cf5d8651182e43675968e4bff5b018a7b5d9ad75d777ded594ffc7c2d8c0948a"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-livedata-core-ktx:2.11.0@cf5d8651182e43675968e4bff5b018a7b5d9ad75d777ded594ffc7c2d8c0948a"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-livedata-core@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "39b26ef1e081fc88d7054ff1a63d0a5d71876373c33a711ab789c8228d025ad1"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-livedata-core",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-livedata-core-2.11.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "bedbe8c2230f207c7b27c15a67fa85aff7df681b145a45fd4fd9d6ccedafb2d4"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-livedata-core:2.11.0@bedbe8c2230f207c7b27c15a67fa85aff7df681b145a45fd4fd9d6ccedafb2d4"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-livedata@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1bc28e40e06ff5e0478b9276ca6287ce6993415b70910745ac916b14dec9b72f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-livedata",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-livedata-2.11.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "ec47faea1d2f68625ac49ad260f5f5233d9b40da922253b57aa153d49b5f5ca8"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-livedata:2.11.0@ec47faea1d2f68625ac49ad260f5f5233d9b40da922253b57aa153d49b5f5ca8"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-process@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9743f0c7baf27d34497b7e9a1cd497d8260251b03124507963abfaad66c3f552"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-process",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-process-2.11.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "63f3303cb0f0ece424fedaba55cd3984e44422e7dd5071debca4a4423216c420"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-process:2.11.0@63f3303cb0f0ece424fedaba55cd3984e44422e7dd5071debca4a4423216c420"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-runtime-android@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "8711865f8d3603bc05decc03bb42aab2faa8d8bc55b3b12a0a8e516b562b60ca"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-runtime-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-runtime.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "1dfd1f739d71957166a0511a6fb2cbfc8da766c1840d5664063898ed6dac8aa6"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-runtime-android:2.11.0@1dfd1f739d71957166a0511a6fb2cbfc8da766c1840d5664063898ed6dac8aa6"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-runtime-compose-android@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7b31489e6e162143c481f14e1ae5a4dc089f8ec58e65976a0502b910c641987f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-runtime-compose-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-runtime-compose.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "006872b13e979a262c15b40e1422eaebce90bab240b1a08ac9fd7f6020fcca8e"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-runtime-compose-android:2.11.0@006872b13e979a262c15b40e1422eaebce90bab240b1a08ac9fd7f6020fcca8e"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-runtime-ktx-android@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1fead96607f8b4ebd2bc5840c6fcf08b09fc47ceb1665e4b381dce80b19f32a0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-runtime-ktx-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-runtime-ktx.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "a5e598838f5ce314cff3b7b5cd4ed53119ae7a307a51a9a519fef9f1fe95d57f"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-runtime-ktx-android:2.11.0@a5e598838f5ce314cff3b7b5cd4ed53119ae7a307a51a9a519fef9f1fe95d57f"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-viewmodel-android@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "509aa5c0711e61a1571024b4f8431dc9aa20960d23cbadb01f21a33fd864352a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-viewmodel-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-viewmodel.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "c6d78741c43ccf10d5da5f0e040dedfffda20b9748caa038dc58be25d35c90a3"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-viewmodel-android:2.11.0@c6d78741c43ccf10d5da5f0e040dedfffda20b9748caa038dc58be25d35c90a3"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-viewmodel-compose-android@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2bafd402807bd4af05c06cf58c48cbdad09521e2145273faae90908b7712f689"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-viewmodel-compose-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-viewmodel-compose.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "350daf4884944f4f0c82edd3e66ea195342bcffd4945689057a5fada9cd79f4c"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-viewmodel-compose-android:2.11.0@350daf4884944f4f0c82edd3e66ea195342bcffd4945689057a5fada9cd79f4c"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-viewmodel-ktx@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "230af6c866076d320d92c22c7c44bb52afca97f6892ddf987e2906ef2919998f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-viewmodel-ktx",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-viewmodel-ktx-2.11.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "98cee40062344063eef3f71f9d66032d69e6304ba0858561fc823d73c61b63b4"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.0@98cee40062344063eef3f71f9d66032d69e6304ba0858561fc823d73c61b63b4"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-viewmodel-savedstate-android@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1761707c1ddee002bd97e1a0889a5016f7cd6bd8e0b6b069bcba8b2523d63723"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-viewmodel-savedstate-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-viewmodel-savedstate.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "658d326b66a0768ccd35df85c7487494569c63951e090c3a1b019b97bb8a0110"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.11.0@658d326b66a0768ccd35df85c7487494569c63951e090c3a1b019b97bb8a0110"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.lifecycle/lifecycle-viewmodel@2.11.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0"
+        }
+      ],
+      "group": "androidx.lifecycle",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4b809cf9eb7323d200504e95921feb777ff080215cadb8237742d5ed0ba5b792"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "lifecycle-viewmodel",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "lifecycle-viewmodel-2.11.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "e22ea0fca36eed3f649120fdadcf1d96f7f9a47d58472059d234b0cc62c9f570"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.lifecycle:lifecycle-viewmodel:2.11.0@e22ea0fca36eed3f649120fdadcf1d96f7f9a47d58472059d234b0cc62c9f570"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.11.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.loader/loader@1.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://developer.android.com/tools/extras/support-library.html"
+        }
+      ],
+      "group": "androidx.loader",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "11f735cb3b55c458d470bed9e25254375b518b4b1bad6926783a7026db0f5025"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "loader",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "loader-1.0.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "c978d550808b47434aa49a63164110a50b55b0bcc6160a93a2e37d5110df8c5e"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.loader:loader:1.0.0@c978d550808b47434aa49a63164110a50b55b0bcc6160a93a2e37d5110df8c5e"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.localbroadcastmanager/localbroadcastmanager@1.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://developer.android.com/tools/extras/support-library.html"
+        }
+      ],
+      "group": "androidx.localbroadcastmanager",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e71c328ceef5c4a7d76f2d86df1b65d65fe2acf868b1a4efd84a3f34336186d8"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "localbroadcastmanager",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "localbroadcastmanager-1.0.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "a000041f5a1f79283c5175e1bb60cf3683780f401c6a9d34fbe9751253fa6ff9"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.localbroadcastmanager:localbroadcastmanager:1.0.0@a000041f5a1f79283c5175e1bb60cf3683780f401c6a9d34fbe9751253fa6ff9"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.navigation/navigation-common-android@2.9.8",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.9.8"
+        }
+      ],
+      "group": "androidx.navigation",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d43832772012afa0d5c71d03153aef764f1c5f683fe7605f0db77cada8515102"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "navigation-common-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "navigation-common-release.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "082f02f70f1601db91e91917d5a74581def4ca94a3fe98db5b0d67a19eba3b0b"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.navigation:navigation-common-android:2.9.8@082f02f70f1601db91e91917d5a74581def4ca94a3fe98db5b0d67a19eba3b0b"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.9.8"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.navigation/navigation-compose-android@2.9.8",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.9.8"
+        }
+      ],
+      "group": "androidx.navigation",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "53dccc442276cde3898751f53fcc869f335340fd677fb1ca5c6c0abc0575d180"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "navigation-compose-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "navigation-compose-release.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "c1d300bd50c63ce423b124b78ec03247d5ceff022a748a199ecf87d3d99407a1"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.navigation:navigation-compose-android:2.9.8@c1d300bd50c63ce423b124b78ec03247d5ceff022a748a199ecf87d3d99407a1"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.9.8"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.navigation/navigation-runtime-android@2.9.8",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.9.8"
+        }
+      ],
+      "group": "androidx.navigation",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7d741a3b0a299a8c8990712009c63bfca8d52d060afe8f5ad9c200619f113237"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "navigation-runtime-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "navigation-runtime-release.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "40d25c518ef11c9e8d1a0cc48b53adcb56c475c82f0b0b43f7c95d5d718c179c"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.navigation:navigation-runtime-android:2.9.8@40d25c518ef11c9e8d1a0cc48b53adcb56c475c82f0b0b43f7c95d5d718c179c"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.9.8"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.navigationevent/navigationevent-android@1.0.2",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/navigationevent#1.0.2"
+        }
+      ],
+      "group": "androidx.navigationevent",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "3fa191e3da2f6b601e944fb03a09a12278e49418dd1a9b22cd6b99f66e4283fd"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "navigationevent-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "navigationevent.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "ea1c8f593b94772d6a953af6a3734690ef928bdf41f6385c3ede0b2cae7637d3"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.navigationevent:navigationevent-android:1.0.2@ea1c8f593b94772d6a953af6a3734690ef928bdf41f6385c3ede0b2cae7637d3"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.2"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.navigationevent/navigationevent-compose-android@1.0.2",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/navigationevent#1.0.2"
+        }
+      ],
+      "group": "androidx.navigationevent",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6064ee738c2f3c99e1754f6aa380aabb57bf1ba973a4566276a3ecbbd2eaa3d0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "navigationevent-compose-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "navigationevent-compose.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "1f880fadcc77d281ebb1cbca9a7d4cf242d81a89afd334feebb4d43135b326c5"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.navigationevent:navigationevent-compose-android:1.0.2@1f880fadcc77d281ebb1cbca9a7d4cf242d81a89afd334feebb4d43135b326c5"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.2"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.print/print@1.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://developer.android.com/tools/extras/support-library.html"
+        }
+      ],
+      "group": "androidx.print",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1d5c7f3135a1bba661fc373fd72e11eb0a4adbb3396787826dd8e4190d5d9edd"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "print",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "print-1.0.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "62482c0594841bee24bb996abb6cb7b320a6a3b77dca9f0a0ba4fe3be5530aa7"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.print:print:1.0.0@62482c0594841bee24bb996abb6cb7b320a6a3b77dca9f0a0ba4fe3be5530aa7"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.profileinstaller/profileinstaller@1.4.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/profileinstaller#1.4.0"
+        }
+      ],
+      "group": "androidx.profileinstaller",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d502141fcce902430f62b674c32aecd0f75262e7ee2cd15c74adb617cd13130a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "profileinstaller",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "profileinstaller-1.4.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "d5fe39981a3b4b7c39585130da0bfc93835054c834a438d3e63e065e5f78be55"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.profileinstaller:profileinstaller:1.4.0@d5fe39981a3b4b7c39585130da0bfc93835054c834a438d3e63e065e5f78be55"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.4.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.savedstate/savedstate-android@1.4.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.4.0"
+        }
+      ],
+      "group": "androidx.savedstate",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1656ce62cd233d488bdbbd42e533b80b22435b7a690acae6dbe7302392512c14"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "savedstate-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "savedstate.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "b44b215b4cce24ca64b5faa58ff463f4b91abc02af95ba405ade488828f4f779"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.savedstate:savedstate-android:1.4.0@b44b215b4cce24ca64b5faa58ff463f4b91abc02af95ba405ade488828f4f779"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.4.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.savedstate/savedstate-compose-android@1.4.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.4.0"
+        }
+      ],
+      "group": "androidx.savedstate",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0f0ae3032d6c6eea834ee22179c8976160d09d841d30e47f53f56b1b3438774b"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "savedstate-compose-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "savedstate-compose.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "de19831dabb84a4d0e120e86dceb08cf62c08606b5d99e91a8f8e6b4a4658883"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.savedstate:savedstate-compose-android:1.4.0@de19831dabb84a4d0e120e86dceb08cf62c08606b5d99e91a8f8e6b4a4658883"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.4.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.savedstate/savedstate-ktx@1.4.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.4.0"
+        }
+      ],
+      "group": "androidx.savedstate",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "23593939446bc5a154a1e35fddd87b82f19e2adf072207f115bf29a8b431c1d3"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "savedstate-ktx",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "savedstate-ktx-1.4.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "b085af7cc4bb297ed0f25ca85d3629613ab253c0b532684c6cf77c2aee7471c5"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.savedstate:savedstate-ktx:1.4.0@b085af7cc4bb297ed0f25ca85d3629613ab253c0b532684c6cf77c2aee7471c5"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.4.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.security/security-crypto@1.1.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/security#1.1.0"
+        }
+      ],
+      "group": "androidx.security",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2831ec1b455e8cc2ff861e8384d7893b42b3307c00f3be843feb02af8ac04b56"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "security-crypto",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "security-crypto-1.1.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "70cdebe55ea7f84ff63ba7fdb6dc7186476da7a0806531cb8f859b94866f15ef"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.security:security-crypto:1.1.0@70cdebe55ea7f84ff63ba7fdb6dc7186476da7a0806531cb8f859b94866f15ef"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.1.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.startup/startup-runtime@1.1.1",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/startup#1.1.1"
+        }
+      ],
+      "group": "androidx.startup",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e0a6329a371262fe4c450372b70fdaf33b769ef6917094723787cfce896b1dd3"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "startup-runtime",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "startup-runtime-1.1.1.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "f4114b5c6859bb1bc3caf281cb6d6f25998fa7f7292c64ceaea74a93210e746b"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.startup:startup-runtime:1.1.1@f4114b5c6859bb1bc3caf281cb6d6f25998fa7f7292c64ceaea74a93210e746b"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.1.1"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.tracing/tracing@1.2.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/tracing#1.2.0"
+        }
+      ],
+      "group": "androidx.tracing",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6faa90390d1fdbf0adb9a99bf99de67b94c6c6f35aea9510593a9d17973736a2"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "tracing",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "tracing-1.2.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "f34bec4eb58871d31002901377108aaa1ebfe77fa6d882b8b86200b158e26ea1"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.tracing:tracing:1.2.0@f34bec4eb58871d31002901377108aaa1ebfe77fa6d882b8b86200b158e26ea1"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.2.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.transition/transition@1.6.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/transition#1.6.0"
+        }
+      ],
+      "group": "androidx.transition",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "248c45e1254d31181d2047b0b01394f09a2e539a5d9e89b773d53c62c96860f6"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "transition",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "transition-1.6.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "070d7795010071edefbef94b8c9d5a2cac5cb5f3b1a2c5e558546438177c8ef8"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.transition:transition:1.6.0@070d7795010071edefbef94b8c9d5a2cac5cb5f3b1a2c5e558546438177c8ef8"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.6.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.versionedparcelable/versionedparcelable@1.1.1",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://developer.android.com/tools/extras/support-library.html"
+        }
+      ],
+      "group": "androidx.versionedparcelable",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "57e8d93260d18d5b9007c9eed3c64ad159de90c8609ebfc74a347cbd514535a4"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "versionedparcelable",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "versionedparcelable-1.1.1.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "5f51e65873ca612de3838fa90d2ee95b8d040efd31b9c390a19bf94d615cdb2f"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.versionedparcelable:versionedparcelable:1.1.1@5f51e65873ca612de3838fa90d2ee95b8d040efd31b9c390a19bf94d615cdb2f"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.1.1"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.window/window-core-android@1.5.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/window#1.5.0"
+        }
+      ],
+      "group": "androidx.window",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d0d50db0756194a6d49a66ad8dafd17b24b4c5fbd8379375056e2eb9bdfeaf22"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "window-core-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "window-core.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "463c50b22a969c6274ebdb7b5f56ba1ea1dde352e9679f0a0ba90f3971dbcd57"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.window:window-core-android:1.5.0@463c50b22a969c6274ebdb7b5f56ba1ea1dde352e9679f0a0ba90f3971dbcd57"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.5.0"
+    },
+    {
+      "bom-ref": "pkg:maven/androidx.window/window@1.5.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/window#1.5.0"
+        }
+      ],
+      "group": "androidx.window",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "5de2d48aa578402f46deb5294a955cee62f0c7d8c1840ef626fc7afb8abe22f9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "window",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "window-1.5.0.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "d4f22b991a69600e2ffc36b42ac199626fd96d5f1648c3beeccd35de06fcc351"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "androidx.window:window:1.5.0@d4f22b991a69600e2ffc36b42ac199626fd96d5f1648c3beeccd35de06fcc351"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.5.0"
+    },
+    {
+      "bom-ref": "pkg:maven/com.google.code.gson/gson@2.8.9",
+      "group": "com.google.code.gson",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d3999291855de495c94c743761b8ab5176cfeabe281a5ab0d8e8d45326fd703e"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "gson",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "gson-2.8.9.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "afded6e6a690fbf3ad4ae65ada397f0a90a5f630b303d1b741b9c97926fdd4de"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "com.google.code.gson:gson:2.8.9@afded6e6a690fbf3ad4ae65ada397f0a90a5f630b303d1b741b9c97926fdd4de"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "2.8.9"
+    },
+    {
+      "bom-ref": "pkg:maven/com.google.crypto.tink/tink-android@1.8.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://github.com/tink-crypto/tink-java"
+        }
+      ],
+      "group": "com.google.crypto.tink",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "5efe8f1cb6e75814ae06793d5ff8d9b01e6f88ef97ecc062d14ebc27027dbf78"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "tink-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "tink-android-1.8.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "83e3b5cdd1fee04f3fad72c4ce584a54d0a637b93d2bb2bd85da4ae67a673e3e"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "com.google.crypto.tink:tink-android:1.8.0@83e3b5cdd1fee04f3fad72c4ce584a54d0a637b93d2bb2bd85da4ae67a673e3e"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.8.0"
+    },
+    {
+      "bom-ref": "pkg:maven/com.google.guava/listenablefuture@1.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/google/guava"
+        }
+      ],
+      "group": "com.google.guava",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e4ad7607e5c0477c6f890ef26a49cb8d1bb4dffb650bab4502afee64644e3069"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "listenablefuture",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "listenablefuture-1.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "53873caf26bc1ed8a567ea6c939ab2aaa3f47a5e32d5cade95ddf5080d23238a"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "inherited-upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "com.google.guava:listenablefuture:1.0@53873caf26bc1ed8a567ea6c939ab2aaa3f47a5e32d5cade95ddf5080d23238a;com.google.guava:guava-parent:26.0-android@f8698ab46ca996ce889c1afc8ca4f25eb8ac6b034dc898d4583742360016cc04"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0"
+    },
+    {
+      "bom-ref": "pkg:maven/com.googlecode.javaewah/JavaEWAH@1.2.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/lemire/javaewah"
+        }
+      ],
+      "group": "com.googlecode.javaewah",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d65226949713c4c61a784f41c51167e7b0316f93764398ebba9e4336b3d954c2"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache 2",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "JavaEWAH",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "JavaEWAH-1.2.3.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "e4ed6c669620366f993920659fe0ac7cbc83d753dbc0dc0eb1e529973af96f23"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "com.googlecode.javaewah:JavaEWAH:1.2.3@e4ed6c669620366f993920659fe0ac7cbc83d753dbc0dc0eb1e529973af96f23"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.2.3"
+    },
+    {
+      "bom-ref": "pkg:maven/com.squareup.okhttp3/okhttp@4.12.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://square.github.io/okhttp/"
+        }
+      ],
+      "group": "com.squareup.okhttp3",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b1050081b14bb7a3a7e55a4d3ef01b5dcfabc453b4573a4fc019767191d5f4e0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "okhttp",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "okhttp-4.12.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "7c737040a9419522e7c50cc027416a70fe7c7629e52b219935ade6b4119c7d38"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "com.squareup.okhttp3:okhttp:4.12.0@7c737040a9419522e7c50cc027416a70fe7c7629e52b219935ade6b4119c7d38"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "4.12.0"
+    },
+    {
+      "bom-ref": "pkg:maven/com.squareup.okio/okio-jvm@3.6.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/square/okio/"
+        }
+      ],
+      "group": "com.squareup.okio",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "67543f0736fc422ae927ed0e504b98bc5e269fda0d3500579337cb713da28412"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "okio-jvm",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "okio-jvm-3.6.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "61b4d7c515a0894ffad925fd7052620c1425a86433fd35113b5fab0de890a57f"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "com.squareup.okio:okio-jvm:3.6.0@61b4d7c515a0894ffad925fd7052620c1425a86433fd35113b5fab0de890a57f"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "3.6.0"
+    },
+    {
+      "bom-ref": "pkg:maven/commons-codec/commons-codec@1.17.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://commons.apache.org/proper/commons-codec/"
+        }
+      ],
+      "group": "commons-codec",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f700de80ac270d0344fdea7468201d8b9c805e5c648331c3619f2ee067ccfc59"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "commons-codec",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "commons-codec-1.17.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "c01c4cda5e408f41ed1d83e4a0a170cf53801b6338aba49f0f904786bc1214fc"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "inherited-upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "commons-codec:commons-codec:1.17.0@c01c4cda5e408f41ed1d83e4a0a170cf53801b6338aba49f0f904786bc1214fc;org.apache.commons:commons-parent:69@d50da9c39bdca823d618d1b4a03b73f196497fcb8616fd0da727c8623592a9bb;org.apache:apache:31@555d0c9eaa69c042aff924927b9381e8f8174136d355eead445224452e6291cc"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "2"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.17.0"
+    },
+    {
+      "bom-ref": "pkg:maven/dev.chrisbanes.haze/haze-android@1.5.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/chrisbanes/haze/"
+        }
+      ],
+      "group": "dev.chrisbanes.haze",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "09ceea81f0c66b8fee6301547a7360608428c8d474e8232a58abee5feeb5e33d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "haze-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "haze-release.aar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "9e11cdd0259fc7ba69f9d5904e9a489c29d06f5c35c48ec672ff3f2737c2f600"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "dev.chrisbanes.haze:haze-android:1.5.3@9e11cdd0259fc7ba69f9d5904e9a489c29d06f5c35c48ec672ff3f2737c2f600"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.5.3"
+    },
+    {
+      "bom-ref": "pkg:maven/org.eclipse.jgit/org.eclipse.jgit@6.10.0.202406032230-r",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "${jgit-url}"
+        }
+      ],
+      "group": "org.eclipse.jgit",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "43f92f3adb681a5f3006b979e8d341c12a8cfd8029f287c42bcf0a80377565ae"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause",
+            "url": "https://www.eclipse.org/org/documents/edl-v10.php"
+          }
+        }
+      ],
+      "name": "org.eclipse.jgit",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "org.eclipse.jgit-6.10.0.202406032230-r.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "05595442beb6a206108b673aa9c6692c83e41df183177dc67113b1cc3f5281dd"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "inherited-upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r@05595442beb6a206108b673aa9c6692c83e41df183177dc67113b1cc3f5281dd;org.eclipse.jgit:org.eclipse.jgit-parent:6.10.0.202406032230-r@f2d3539a0a7922fd7947082c1901d2090dae074986b22dabd973b4398cd1ea2e"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "6.10.0.202406032230-r"
+    },
+    {
+      "bom-ref": "pkg:maven/org.jetbrains.kotlin/kotlin-stdlib-jdk7@1.9.10",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://kotlinlang.org/"
+        }
+      ],
+      "group": "org.jetbrains.kotlin",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ac6361bf9ad1ed382c2103d9712c47cdec166232b4903ed596e8876b0681c9b7"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "kotlin-stdlib-jdk7",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "kotlin-stdlib-jdk7-1.9.10.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "c7fa67c7961320b89d85a3ca59a2e18c2c65850845595dcae4b46af6945edcd5"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.10@c7fa67c7961320b89d85a3ca59a2e18c2c65850845595dcae4b46af6945edcd5"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.9.10"
+    },
+    {
+      "bom-ref": "pkg:maven/org.jetbrains.kotlin/kotlin-stdlib-jdk8@1.9.10",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://kotlinlang.org/"
+        }
+      ],
+      "group": "org.jetbrains.kotlin",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a4c74d94d64ce1abe53760fe0389dd941f6fc558d0dab35e47c085a11ec80f28"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "kotlin-stdlib-jdk8",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "kotlin-stdlib-jdk8-1.9.10.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "5f4b94dd3065a7764c37fa15de2ad6d81f40d59f8cb33f17d181c6384fb7a72e"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10@5f4b94dd3065a7764c37fa15de2ad6d81f40d59f8cb33f17d181c6384fb7a72e"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.9.10"
+    },
+    {
+      "bom-ref": "pkg:maven/org.jetbrains.kotlin/kotlin-stdlib@2.3.21",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://kotlinlang.org/"
+        }
+      ],
+      "group": "org.jetbrains.kotlin",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6f64eac736db9434dd6925b4a518b9d1d17177652320c37916cf9ba3ce7d7d7a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "kotlin-stdlib",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "kotlin-stdlib-2.3.21.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "3e0b48daa14dc73f8029d8d9e15ed32940377caf7b915510f88d33219b350186"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.jetbrains.kotlin:kotlin-stdlib:2.3.21@3e0b48daa14dc73f8029d8d9e15ed32940377caf7b915510f88d33219b350186"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        },
+        {
+          "name": "phonecode:copyright-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:notice-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:supplement-license-expression",
+          "value": "Apache-2.0 AND BSD-3-Clause"
+        },
+        {
+          "name": "phonecode:supplement-review-scope",
+          "value": "coordinate-keyed-authenticated-supplement-only"
+        },
+        {
+          "name": "phonecode:supplement-source-sha256",
+          "value": "license/third_party/threetenbp_license.txt@d1bc53b493a3ab387b42717ed5c4b1976a5048996f81154278100bff86d39331"
+        },
+        {
+          "name": "phonecode:supplement-source-commit",
+          "value": "fea1ad8c18995b80d1ca0e3917056104613d23db:bbed3563e938dd26bdc2daeb5f5cccdd0f03eb61"
+        },
+        {
+          "name": "phonecode:third-party-license-expression",
+          "value": "BSD-3-Clause"
+        },
+        {
+          "name": "phonecode:third-party-origin",
+          "value": "ThreeTenBP-derived implementation in kotlin.time.Instant"
+        }
+      ],
+      "type": "library",
+      "version": "2.3.21"
+    },
+    {
+      "bom-ref": "pkg:maven/org.jetbrains.kotlinx/atomicfu-jvm@0.23.2",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/Kotlin/kotlinx.atomicfu"
+        }
+      ],
+      "group": "org.jetbrains.kotlinx",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "101ff43ff563fca167af5ade98c3b69bf569010eab745013b84d8955034d3b3c"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "atomicfu-jvm",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "atomicfu-jvm-0.23.2.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "593ad6654bedb8fd66e03ad07d0c4867ac775a380f4e260e148ea9dbaa53454e"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.jetbrains.kotlinx:atomicfu-jvm:0.23.2@593ad6654bedb8fd66e03ad07d0c4867ac775a380f4e260e148ea9dbaa53454e"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        },
+        {
+          "name": "phonecode:copyright-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:notice-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:supplement-license-expression",
+          "value": "Apache-2.0"
+        },
+        {
+          "name": "phonecode:supplement-review-scope",
+          "value": "coordinate-keyed-authenticated-supplement-only"
+        },
+        {
+          "name": "phonecode:supplement-source-sha256",
+          "value": "license/NOTICE.txt@2b1db3aa8302414ea2bb1be5391110268b4611a11c9c3d28e34bf3acfddc9ef4"
+        },
+        {
+          "name": "phonecode:supplement-source-commit",
+          "value": "7e640bab1db140a398f735be97e3f07f97019ac0:8a648f65adac22b7397f0788cc7a3d10172e2e11"
+        }
+      ],
+      "type": "library",
+      "version": "0.23.2"
+    },
+    {
+      "bom-ref": "pkg:maven/org.jetbrains.kotlinx/kotlinx-coroutines-android@1.9.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/Kotlin/kotlinx.coroutines"
+        }
+      ],
+      "group": "org.jetbrains.kotlinx",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "bd783acd2f9738845d58380f46f45b5cde95d0cb03027d56725338b26bfc4d72"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "kotlinx-coroutines-android",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "kotlinx-coroutines-android-1.9.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "be86020cd5b93b8a68ca43185a049b9b0baa345fd1be1fdaa014fdaef92d6e7c"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0@be86020cd5b93b8a68ca43185a049b9b0baa345fd1be1fdaa014fdaef92d6e7c"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        },
+        {
+          "name": "phonecode:copyright-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:notice-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:supplement-license-expression",
+          "value": "Apache-2.0"
+        },
+        {
+          "name": "phonecode:supplement-review-scope",
+          "value": "coordinate-keyed-authenticated-supplement-only"
+        },
+        {
+          "name": "phonecode:supplement-source-sha256",
+          "value": "license/NOTICE.txt@421d45acbd92670b4131621a28fcbb41ba0b747d3a336cb13fca38c0685426c4"
+        },
+        {
+          "name": "phonecode:supplement-source-commit",
+          "value": "d8d6f8f37978b8e202d93b34f23f101df9c5724d:01d81385e4ace2e64601668ea7021ca27cdbe376"
+        }
+      ],
+      "type": "library",
+      "version": "1.9.0"
+    },
+    {
+      "bom-ref": "pkg:maven/org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm@1.9.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/Kotlin/kotlinx.coroutines"
+        }
+      ],
+      "group": "org.jetbrains.kotlinx",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ad89c2892235e670f222d819cb3d81188143cb19a05b59df9889ae4269f5c70a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "kotlinx-coroutines-core-jvm",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "kotlinx-coroutines-core-jvm-1.9.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "19c4889941b3aa098bd57cc64f02f9adacc654d571a12a956de4b5bb148c6499"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.9.0@19c4889941b3aa098bd57cc64f02f9adacc654d571a12a956de4b5bb148c6499"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        },
+        {
+          "name": "phonecode:copyright-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:notice-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:supplement-license-expression",
+          "value": "Apache-2.0"
+        },
+        {
+          "name": "phonecode:supplement-review-scope",
+          "value": "coordinate-keyed-authenticated-supplement-only"
+        },
+        {
+          "name": "phonecode:supplement-source-sha256",
+          "value": "license/NOTICE.txt@421d45acbd92670b4131621a28fcbb41ba0b747d3a336cb13fca38c0685426c4"
+        },
+        {
+          "name": "phonecode:supplement-source-commit",
+          "value": "d8d6f8f37978b8e202d93b34f23f101df9c5724d:01d81385e4ace2e64601668ea7021ca27cdbe376"
+        }
+      ],
+      "type": "library",
+      "version": "1.9.0"
+    },
+    {
+      "bom-ref": "pkg:maven/org.jetbrains.kotlinx/kotlinx-serialization-core-jvm@1.7.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/Kotlin/kotlinx.serialization"
+        }
+      ],
+      "group": "org.jetbrains.kotlinx",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f0adde45864144475385cf4aa7e0b7feb27f61fcf9472665ed98cc971b06b1eb"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "kotlinx-serialization-core-jvm",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "kotlinx-serialization-core-jvm-1.7.3.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "734f5f749208dd0bef3d98caa594cf9222afdf0fee5b6843347a8fe64e240427"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.7.3@734f5f749208dd0bef3d98caa594cf9222afdf0fee5b6843347a8fe64e240427"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        },
+        {
+          "name": "phonecode:copyright-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:notice-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:supplement-license-expression",
+          "value": "Apache-2.0"
+        },
+        {
+          "name": "phonecode:supplement-review-scope",
+          "value": "coordinate-keyed-authenticated-supplement-only"
+        },
+        {
+          "name": "phonecode:supplement-source-sha256",
+          "value": "license/NOTICE.txt@ec77bba5c852830abfdefcdefbf4a22577ff4df79ec323a898d5100ca1d6f8d6"
+        },
+        {
+          "name": "phonecode:supplement-source-commit",
+          "value": "d4d066d72a9f92f06c640be5a36a22f75d0d7659:ee516ec09649791af5ff26c0346e748a881cacb7"
+        }
+      ],
+      "type": "library",
+      "version": "1.7.3"
+    },
+    {
+      "bom-ref": "pkg:maven/org.jetbrains.kotlinx/kotlinx-serialization-json-jvm@1.7.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/Kotlin/kotlinx.serialization"
+        }
+      ],
+      "group": "org.jetbrains.kotlinx",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b1e9138499ed8d20375edda3f2b1c95f3103a258eff6af9edc5ea07100f2b29c"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "kotlinx-serialization-json-jvm",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "kotlinx-serialization-json-jvm-1.7.3.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "d3345d280817be07e9c27acd6073d495e17bdff571c470034e0966420786a7dd"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.7.3@d3345d280817be07e9c27acd6073d495e17bdff571c470034e0966420786a7dd"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        },
+        {
+          "name": "phonecode:copyright-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:notice-status",
+          "value": "included"
+        },
+        {
+          "name": "phonecode:supplement-license-expression",
+          "value": "Apache-2.0"
+        },
+        {
+          "name": "phonecode:supplement-review-scope",
+          "value": "coordinate-keyed-authenticated-supplement-only"
+        },
+        {
+          "name": "phonecode:supplement-source-sha256",
+          "value": "license/NOTICE.txt@ec77bba5c852830abfdefcdefbf4a22577ff4df79ec323a898d5100ca1d6f8d6"
+        },
+        {
+          "name": "phonecode:supplement-source-commit",
+          "value": "d4d066d72a9f92f06c640be5a36a22f75d0d7659:ee516ec09649791af5ff26c0346e748a881cacb7"
+        }
+      ],
+      "type": "library",
+      "version": "1.7.3"
+    },
+    {
+      "bom-ref": "pkg:maven/org.jetbrains/annotations@23.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/JetBrains/java-annotations"
+        }
+      ],
+      "group": "org.jetbrains",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7b0f19724082cbfcbc66e5abea2b9bc92cf08a1ea11e191933ed43801eb3cd05"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache Software License, Version 2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "annotations",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "annotations-23.0.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "c9490f655132328df2cfbcfdf743f53fc3916d6c1d10437175a6ca6e3a67771c"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.jetbrains:annotations:23.0.0@c9490f655132328df2cfbcfdf743f53fc3916d6c1d10437175a6ca6e3a67771c"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "23.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/org.jspecify/jspecify@1.0.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://jspecify.org/"
+        }
+      ],
+      "group": "org.jspecify",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1fad6e6be7557781e4d33729d49ae1cdc8fdda6fe477bb0cc68ce351eafdfbab"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "The Apache License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
+        }
+      ],
+      "name": "jspecify",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "jspecify-1.0.0.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "cdab929a3b95211f43d2090c5e2d0dfe8465960e378bc32b35841dab324433a6"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.jspecify:jspecify:1.0.0@cdab929a3b95211f43d2090c5e2d0dfe8465960e378bc32b35841dab324433a6"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:maven/org.slf4j/slf4j-api@1.7.36",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.slf4j.org"
+        }
+      ],
+      "group": "org.slf4j",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d3ef575e3e4979678dc01bf1dcce51021493b4d11fb7f1be8ad982877c16a1c0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT License",
+            "url": "http://www.opensource.org/licenses/mit-license.php"
+          }
+        }
+      ],
+      "name": "slf4j-api",
+      "properties": [
+        {
+          "name": "phonecode:artifact-file",
+          "value": "slf4j-api-1.7.36.jar"
+        },
+        {
+          "name": "phonecode:maven-pom-sha256",
+          "value": "fb046a9c229437928bb11c2d27c8b5d773eb8a25e60cbd253d985210dedc2684"
+        },
+        {
+          "name": "phonecode:license-evidence",
+          "value": "inherited-upstream-pom-declaration"
+        },
+        {
+          "name": "phonecode:pom-evidence-chain",
+          "value": "org.slf4j:slf4j-api:1.7.36@fb046a9c229437928bb11c2d27c8b5d773eb8a25e60cbd253d985210dedc2684;org.slf4j:slf4j-parent:1.7.36@bb388d37fbcdd3cde64c3cede21838693218dc451f04040c5df360a78ed7e812"
+        },
+        {
+          "name": "phonecode:embedded-legal-files-included",
+          "value": "0"
+        },
+        {
+          "name": "phonecode:supplemental-legal-files-included",
+          "value": "1"
+        },
+        {
+          "name": "phonecode:complete-license-text-included",
+          "value": "true"
+        }
+      ],
+      "type": "library",
+      "version": "1.7.36"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "bom-ref": "pkg:generic/phonecode-android-runtime@0.4.0",
+      "name": "PhoneCode Android/JVM release runtime graph",
+      "type": "application",
+      "version": "0.4.0"
+    },
+    "properties": [
+      {
+        "name": "phonecode:configuration",
+        "value": "releaseRuntimeClasspath"
+      },
+      {
+        "name": "phonecode:license-scope",
+        "value": "upstream-pom-declarations-only"
+      },
+      {
+        "name": "phonecode:shared-apache-2.0-text-sha256",
+        "value": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      }
+    ]
+  },
+  "specVersion": "1.6",
+  "version": 1
+}

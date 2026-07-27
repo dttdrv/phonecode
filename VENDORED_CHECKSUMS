@@ -1,7 +1,7 @@
-d1d1a3fae5f4d6146e9742790a47fcb116199622cfb8439f218a4d5fbe5000da  app/src/main/assets/alpine-aarch64.rootfs
+d1d1a3fae5f4d6146e9742790a47fcb116199622cfb8439f218a4d5fbe5000da  app/src/debug/assets/alpine-aarch64.rootfs
 eda3a0ad572bbe69a318c1be0163e8233dd824f3f12939e5168feba207767151  app/src/main/assets/mermaid.min.js
-42a0313a04296d913279c55eccabf9082d31d0f8caf1960079d92342c4629e0c  app/src/main/jniLibs/arm64-v8a/libproot.so
-12d2b63e897fd91a334fce23edea5d2419cae4d5fd2a369f05d03ab75682add0  app/src/main/jniLibs/arm64-v8a/libproot-loader.so
+42a0313a04296d913279c55eccabf9082d31d0f8caf1960079d92342c4629e0c  app/src/debug/jniLibs/arm64-v8a/libproot.so
+12d2b63e897fd91a334fce23edea5d2419cae4d5fd2a369f05d03ab75682add0  app/src/debug/jniLibs/arm64-v8a/libproot-loader.so
 d22c4f3821d725eb01210d278d95dfcfcaadc34699a06658d47c8a5cc5830ada  app/src/main/res/font/jetbrainsmono_bold.ttf
 d16e6dc99672734698d629705f617c79f6eb6040f5113efe3a145204dc988109  app/src/main/res/font/jetbrainsmono_medium.ttf
 e6fd0d7e91550b3ed2b735d4312474362c4716edc4fc0577a0f61ed782d5aed1  app/src/main/res/font/jetbrainsmono_regular.ttf

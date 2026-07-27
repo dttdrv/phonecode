@@ -15,21 +15,74 @@ import kotlinx.serialization.json.putJsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.HttpUrl
+import okhttp3.Dns
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.concurrent.TimeUnit
+import java.net.Inet4Address
+import java.net.InetAddress
+import java.net.URI
 
-internal fun safeWebUrl(url: HttpUrl): Boolean = url.isHttps || url.scheme == "http" &&
-    url.host.lowercase() in setOf("localhost", "127.0.0.1", "::1")
+internal fun safeWebUrl(url: HttpUrl): Boolean = url.isHttps && !blockedWebHost(url.host)
 
-internal fun OkHttpClient.webToolClient(): OkHttpClient = newBuilder()
-    .callTimeout(90, TimeUnit.SECONDS)
-    .readTimeout(60, TimeUnit.SECONDS)
-    .followSslRedirects(false)
-    .addNetworkInterceptor { chain ->
-        require(safeWebUrl(chain.request().url)) { "remote web requests must use HTTPS" }
-        chain.proceed(chain.request())
+private fun blockedWebHost(host: String): Boolean {
+    val normalized = host.lowercase().trimEnd('.')
+    if (normalized == "localhost" || normalized.endsWith(".localhost")) return true
+    if (normalized.startsWith("::ffff:")) return true
+    val looksLikeLiteral = ':' in normalized || normalized.all { it.isDigit() || it == '.' }
+    if (!looksLikeLiteral) return false
+    val address = runCatching { InetAddress.getByName(normalized) }.getOrNull() ?: return true
+    return blockedWebAddress(address)
+}
+
+private fun blockedWebAddress(address: InetAddress): Boolean {
+    if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
+        address.isSiteLocalAddress || address.isMulticastAddress
+    ) return true
+    val bytes = address.address.map { it.toInt() and 0xff }
+    if (bytes.size == 16 && bytes.take(10).all { it == 0 } && bytes[10] == 0xff && bytes[11] == 0xff) return true
+    return if (address is Inet4Address) {
+        bytes[0] == 0 ||
+            bytes[0] == 100 && bytes[1] in 64..127 ||
+            bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 0 ||
+            bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 2 ||
+            bytes[0] == 192 && bytes[1] == 88 && bytes[2] == 99 ||
+            bytes[0] == 198 && bytes[1] in 18..19 ||
+            bytes[0] == 198 && bytes[1] == 51 && bytes[2] == 100 ||
+            bytes[0] == 203 && bytes[1] == 0 && bytes[2] == 113 ||
+            bytes[0] >= 240
+    } else {
+        bytes[0] and 0xfe == 0xfc ||
+            bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0d && bytes[3] == 0xb8
     }
-    .build()
+}
+
+private fun ipv4MappedIpv6Literal(url: String): Boolean {
+    val authority = runCatching { URI(url).rawAuthority }.getOrNull()?.substringAfterLast('@') ?: return false
+    if (!authority.startsWith('[')) return false
+    val end = authority.indexOf(']')
+    if (end < 0) return false
+    val literal = authority.substring(1, end)
+    return runCatching { InetAddress.getByName(literal) is Inet4Address }.getOrDefault(false)
+}
+
+internal fun OkHttpClient.webToolClient(): OkHttpClient {
+    val upstreamDns = dns
+    return newBuilder()
+        .dns(object : Dns {
+            override fun lookup(hostname: String): List<InetAddress> = upstreamDns.lookup(hostname).also { addresses ->
+                require(addresses.none(::blockedWebAddress)) { "remote web requests must resolve to public addresses" }
+            }
+        })
+        .callTimeout(90, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .addNetworkInterceptor { chain ->
+            require(safeWebUrl(chain.request().url)) { "remote web requests must use public HTTPS" }
+            chain.proceed(chain.request())
+        }
+        .build()
+}
 
 /**
  * Fetches a URL over HTTP(S) and returns its content as text (mirrors OpenCode `webfetch`). HTML is reduced
@@ -40,13 +93,13 @@ class WebFetchTool(http: OkHttpClient) : Tool {
     private val webHttp = http.webToolClient()
     override val name = "webfetch"
     override val description =
-        "Fetch an HTTPS URL or local HTTP URL and return its content. HTML is converted to readable text by default; " +
+        "Fetch a public HTTPS URL and return its content. HTML is converted to readable text by default; " +
             "pass format=html for raw HTML or format=text/markdown for text. Use to read docs or web pages."
     override val promptSnippet = "fetch a URL and read its content as text"
     override val parameters: JsonObject = buildJsonObject {
         put("type", "object")
         putJsonObject("properties") {
-            putJsonObject("url") { put("type", "string"); put("description", "The HTTPS URL, or localhost HTTP URL, to fetch.") }
+            putJsonObject("url") { put("type", "string"); put("description", "The public HTTPS URL to fetch.") }
             putJsonObject("format") {
                 put("type", "string")
                 put("description", "text (default) | markdown | html")
@@ -60,8 +113,8 @@ class WebFetchTool(http: OkHttpClient) : Tool {
         val url = (args["url"] as? JsonPrimitive)?.takeIf { it.isString }?.content
             ?: return ToolResult("webfetch: missing 'url'", isError = true)
         val target = url.toHttpUrlOrNull()
-        if (target == null || !safeWebUrl(target)) return ToolResult(
-            "webfetch: use HTTPS, or HTTP only for localhost",
+        if (target == null || ipv4MappedIpv6Literal(url) || !safeWebUrl(target)) return ToolResult(
+            "webfetch: use a public HTTPS URL",
             isError = true,
         )
         val format = (args["format"] as? JsonPrimitive)?.content ?: "text"

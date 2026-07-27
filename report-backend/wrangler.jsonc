@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "phonecode-report",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-07-22",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "dttdrv.xyz/api/phonecode/report*",
+      "zone_name": "dttdrv.xyz"
+    }
+  ],
+  "triggers": {
+    "crons": ["17 3 * * *"]
+  },
+  "vars": {
+    "RATE_LIMIT_MAX": "5"
+  },
+  "d1_databases": [
+    {
+      "binding": "REPORTS_DB",
+      "database_name": "phonecode-reports",
+      "database_id": "4de0d41a-6dbd-41f8-b73c-828988e0d3f4",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

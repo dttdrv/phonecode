@@ -16,6 +16,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeFalse
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -40,6 +41,18 @@ class ShellToolTest {
         if (System.getProperty("os.name").lowercase().contains("win")) listOf("cmd.exe", "/c")
         else listOf("/bin/sh", "-c")
 
+    private fun hostBackend(
+        environment: () -> Map<String, String> = { emptyMap() },
+        processManager: ProcessManager? = null,
+    ) = LocalShellBackend(
+        shellProvider = { hostShell() },
+        environmentProvider = environment,
+        processManager = processManager,
+    )
+
+    private fun unavailableTool() =
+        ShellTool(UnavailableShellBackend("bash: bundled Alpine environment is not ready"))
+
     private fun args(command: String, timeoutS: Int? = null) = buildJsonObject {
         put("command", command)
         timeoutS?.let { put("timeout_s", it) }
@@ -51,6 +64,16 @@ class ShellToolTest {
     }
 
     private fun isAlive(pid: Long) = ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)
+
+    @Test fun processTerminationBytecodeIsAndroidCompatible() {
+        val bytecode = checkNotNull(
+            ProcessManager::class.java.getResourceAsStream(
+                "/dev/phonecode/tools/shell/ProcessManagerKt.class",
+            ),
+        ).readBytes()
+
+        assertFalse(String(bytecode, Charsets.ISO_8859_1).contains("java/lang/ProcessHandle"))
+    }
 
     private suspend fun awaitStopped(vararg pids: Long) {
         withTimeout(5_000) {
@@ -100,27 +123,27 @@ class ShellToolTest {
 
     @Test fun runsACommandInTheWorkspace() = runBlocking {
         tmp.newFile("hello.txt")
-        val result = ShellTool({ hostShell() }).execute(args("dir") , context).let {
+        val result = ShellTool(hostBackend()).execute(args("dir") , context).let {
             // "dir" works on cmd; on sh use ls
-            if (it.isError) ShellTool({ hostShell() }).execute(args("ls"), context) else it
+            if (it.isError) ShellTool(hostBackend()).execute(args("ls"), context) else it
         }
         assertFalse(result.output, result.isError)
         assertTrue(result.output, result.output.contains("hello.txt"))
     }
 
     @Test fun nonZeroExitIsAnError() = runBlocking {
-        val result = ShellTool({ hostShell() }).execute(args("exit 3"), context)
+        val result = ShellTool(hostBackend()).execute(args("exit 3"), context)
         assertTrue(result.isError)
         assertTrue(result.output, result.output.contains("exit code 3"))
     }
 
     @Test fun missingCommandIsAnError() = runBlocking {
-        val result = ShellTool({ hostShell() }).execute(buildJsonObject { }, context)
+        val result = ShellTool(hostBackend()).execute(buildJsonObject { }, context)
         assertTrue(result.isError)
     }
 
     @Test fun refusesToUseAHostShellWhenAlpineIsUnavailable() = runBlocking {
-        val result = ShellTool().execute(args("echo unsafe"), context)
+        val result = unavailableTool().execute(args("echo unsafe"), context)
 
         assertTrue(result.isError)
         assertEquals("bash: bundled Alpine environment is not ready", result.output)
@@ -131,7 +154,7 @@ class ShellToolTest {
         val pidFile = File(tmp.root, "foreground.pid")
         val childFile = File(tmp.root, "foreground-child.pid")
         val running = async {
-            ShellTool({ hostShell() }).execute(
+            ShellTool(hostBackend()).execute(
                 args("echo \$\$ > foreground.pid; sleep 30 & child=\$!; echo \$child > foreground-child.pid; wait \$child"),
                 context,
             )
@@ -151,7 +174,7 @@ class ShellToolTest {
         assumeFalse(System.getProperty("os.name").lowercase().contains("win"))
         val childFile = File(tmp.root, "timeout-child.pid")
 
-        val result = ShellTool({ hostShell() }).execute(
+        val result = ShellTool(hostBackend()).execute(
             args("sleep 30 & child=\$!; echo \$child > timeout-child.pid; wait \$child", 1),
             context,
         )
@@ -166,23 +189,25 @@ class ShellToolTest {
     @Test fun injectedEnvironmentReachesTheProcess() = runBlocking {
         val isWin = System.getProperty("os.name").lowercase().contains("win")
         val echo = if (isWin) "echo %PC_TEST%" else "echo \$PC_TEST"
-        val result = ShellTool({ hostShell() }, { mapOf("PC_TEST" to "phonecode-env") }).execute(args(echo), context)
+        val result = ShellTool(
+            hostBackend(environment = { mapOf("PC_TEST" to "phonecode-env") }),
+        ).execute(args(echo), context)
         assertFalse(result.output, result.isError)
         assertTrue(result.output, result.output.contains("phonecode-env"))
     }
 
     @Test fun schemaRequiresCommand() {
-        val schema = ShellTool().parameters.toString()
+        val schema = unavailableTool().parameters.toString()
         assertTrue(schema, schema.contains("\"required\":[\"command\"]"))
         assertTrue(schema, schema.contains("\"background\""))
-        assertEquals("bash", ShellTool().name)
-        assertTrue(ShellTool().mutating)
+        assertEquals("bash", unavailableTool().name)
+        assertTrue(unavailableTool().mutating)
     }
 
     @Test fun managesBackgroundCommands() = runBlocking {
         assumeFalse(System.getProperty("os.name").lowercase().contains("win"))
         val manager = ProcessManager({ hostShell() })
-        val tool = ShellTool({ hostShell() }, processManager = manager)
+        val tool = ShellTool(hostBackend(processManager = manager))
         val started = tool.execute(backgroundArgs("printf ready; exec sleep 30"), context)
 
         assertFalse(started.output, started.isError)
@@ -196,7 +221,7 @@ class ShellToolTest {
     @Test fun reportsBackgroundStartupFailure() = runBlocking {
         assumeFalse(System.getProperty("os.name").lowercase().contains("win"))
         val manager = ProcessManager({ hostShell() })
-        val result = ShellTool({ hostShell() }, processManager = manager)
+        val result = ShellTool(hostBackend(processManager = manager))
             .execute(backgroundArgs("exit 7"), context)
 
         assertTrue(result.output, result.isError)
@@ -216,7 +241,7 @@ class ShellToolTest {
     @Test fun processInspectionIsReadOnlyAndScopedToTheWorkspace() = runBlocking {
         assumeFalse(System.getProperty("os.name").lowercase().contains("win"))
         val manager = ProcessManager({ hostShell() })
-        val tool = ProcessTool(manager)
+        val tool = ProcessTool(hostBackend(processManager = manager))
         val started = manager.start("exec sleep 30", context.workspacePath)
         val id = Regex("proc-\\d+").find(started.output)!!.value
         val other = tmp.newFolder("other").absolutePath
@@ -340,6 +365,83 @@ class ShellToolTest {
 
         awaitStopped(pid)
         assertFalse(isAlive(pid))
+    }
+
+    @Test fun completedBackgroundSessionDoesNotLeaveReparentedDescendantsRunning() = runBlocking {
+        assumeFalse(System.getProperty("os.name").lowercase().contains("win"))
+        assumeTrue("ownership-token verification requires procfs", File("/proc").isDirectory)
+        val childFile = File(tmp.root, "escaped-child.pid")
+        val manager = ProcessManager({ hostShell() })
+
+        val result = manager.start(
+            "/bin/sh -c 'sleep 30 & echo \$! > escaped-child.pid'",
+            context.workspacePath,
+        )
+        withTimeout(5_000) {
+            while (!childFile.isFile) delay(20)
+        }
+        val pid = childFile.readText().trim().toLong()
+
+        assertFalse(result.output, result.isError)
+        awaitStopped(pid)
+        assertFalse("completed sessions must not leave descendants running", isAlive(pid))
+    }
+
+    @Test fun shellBackgroundJobRemainsManagedUntilStopped() = runBlocking {
+        assumeFalse(System.getProperty("os.name").lowercase().contains("win"))
+        val childFile = File(tmp.root, "managed-shell-job.pid")
+        val manager = ProcessManager({ hostShell() })
+
+        val result = manager.start(
+            "sleep 30 & echo \$! > managed-shell-job.pid",
+            context.workspacePath,
+        )
+        val id = Regex("proc-\\d+").find(result.output)?.value ?: error(result.output)
+        withTimeout(5_000) {
+            while (!childFile.isFile) delay(20)
+        }
+        val pid = childFile.readText().trim().toLong()
+
+        assertFalse(result.output, result.isError)
+        assertTrue(result.output, result.output.contains("Started $id"))
+        assertFalse(manager.stop(id).isError)
+        awaitStopped(pid)
+    }
+
+    @Test fun terminationRescansForChildrenSpawnedByATermHandler() = runBlocking {
+        assumeFalse(System.getProperty("os.name").lowercase().contains("win"))
+        assumeTrue("ownership-token verification requires procfs", File("/proc").isDirectory)
+        val lateChildFile = File(tmp.root, "term-child.pid")
+        val manager = ProcessManager({ hostShell() })
+        val started = manager.start(
+            "trap 'sleep 30 & echo \$! > term-child.pid; wait' TERM; while :; do sleep 1; done",
+            context.workspacePath,
+        )
+        val id = Regex("proc-\\d+").find(started.output)?.value ?: error(started.output)
+
+        assertFalse(manager.stop(id).isError)
+        withTimeout(5_000) {
+            while (!lateChildFile.isFile) delay(20)
+        }
+        val pid = lateChildFile.readText().trim().toLong()
+        awaitStopped(pid)
+    }
+
+    @Test fun procTokenScanDistinguishesReadableRecordsFromAnUnavailableProcfs() {
+        val proc = tmp.newFolder("fake-proc")
+        val owned = File(proc, "101").apply { mkdirs() }
+        File(owned, "environ").writeBytes("A=1\u0000PHONECODE_PROCESS_TOKEN=owned\u0000".toByteArray())
+        val other = File(proc, "102").apply { mkdirs() }
+        File(other, "environ").writeBytes("A=1\u0000".toByteArray())
+        File(proc, "103").mkdirs()
+
+        val readable = procProcessPidsWithToken(proc, "PHONECODE_PROCESS_TOKEN=owned")
+        val unavailable = procProcessPidsWithToken(tmp.newFolder("empty-proc"), "PHONECODE_PROCESS_TOKEN=owned")
+
+        assertEquals(listOf(101L), readable.pids)
+        assertTrue(readable.readable)
+        assertTrue(unavailable.pids.isEmpty())
+        assertFalse(unavailable.readable)
     }
 
     @Test fun persistenceFailureDoesNotStartAnUnmanagedProcess() = runBlocking {

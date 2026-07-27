@@ -15,6 +15,8 @@ import dev.phonecode.agent.TaskTool
 import dev.phonecode.agent.TurnSettings
 import dev.phonecode.app.auth.CodexAuth
 import dev.phonecode.app.auth.GitHubAuth
+import dev.phonecode.app.auth.githubOAuthClientId
+import dev.phonecode.app.BuildConfig
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.data.AppSettings
 import dev.phonecode.app.data.AppSettingsStore
@@ -72,7 +74,6 @@ import dev.phonecode.tools.skills.SkillManifest
 import dev.phonecode.tools.skills.SkillTool
 import dev.phonecode.tools.shared.SharedReadTool
 import dev.phonecode.tools.shared.SharedWriteTool
-import dev.phonecode.tools.shell.ProcessManager
 import dev.phonecode.tools.shell.ProcessTool
 import dev.phonecode.tools.shell.ShellTool
 import dev.phonecode.tools.todo.TodoItem
@@ -156,8 +157,8 @@ data class ChatUiState(
     val isRunning: Boolean = false,
     val sessionLoading: Boolean = false,
     val queued: List<String> = emptyList(), // messages sent while a turn runs, awaiting pickup by the agent
-    val models: List<ModelOption> = builtInModels(),
-    val selected: ModelOption? = builtInModels().firstOrNull(),
+    val models: List<ModelOption> = builtInModels(BuildConfig.CODEX_OAUTH_ENABLED),
+    val selected: ModelOption? = builtInModels(BuildConfig.CODEX_OAUTH_ENABLED).firstOrNull(),
     val agentMode: AgentMode = AgentMode.BUILD,
     val effort: ReasoningEffort = ReasoningEffort.DEFAULT,
     val autoAccept: Boolean = false,
@@ -188,6 +189,7 @@ data class ChatUiState(
     val currentSessionId: String = "",
     val currentProjectId: String? = null,
     val lastCompletedAt: Long? = null,
+    val codexOAuthAvailable: Boolean = BuildConfig.CODEX_OAUTH_ENABLED,
     val codexConnected: Boolean = false,
     val githubLogin: String? = null,
     val githubAuthCode: String? = null,
@@ -215,17 +217,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // [workspace]). Set at send() start, cleared when that turn finishes.
     @Volatile private var turnWorkspace: File? = null
     private val keyStore = SecureKeyStore(app)
-    private val userland by lazy { EnvironmentBootstrap.ensure(app) }
     private val http = OkHttpClient.Builder()
         .callTimeout(0, TimeUnit.MILLISECONDS)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
-    private val reportHttp = http.newBuilder()
-        .callTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .build()
+    private val reportHttp = reportHttpClient(http)
     private val foregroundLeases = (app as PhoneCodeApplication).foregroundLeases
+    private val shellBackend = (app as PhoneCodeApplication).shellBackend
     private val turnLease = AtomicReference<String?>(null)
     private val todoStore = TodoStore()
     private val configDir = File(app.filesDir, "config")
@@ -233,24 +232,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val customProviders = CustomProviderRepository(configDir)
     private val sharedFolderStore = SharedFolderStore(File(app.filesDir, "shared_folders.json"))
     private val sharedFileAccess = AndroidSharedFileAccess(app, sharedFolderStore)
-    private val shellProvider: (String) -> List<String> = { workspacePath ->
-        userland.ensureLinux()
-        userland.shell(workspacePath)
-    }
-    private val shellEnvironment: () -> Map<String, String> = { userland.shellEnv() }
-    private val processManager = ProcessManager(
-        shellProvider = shellProvider,
-        environmentProvider = shellEnvironment,
-        onStarted = { foregroundLeases.acquire("process:$it") },
-        onStopped = { foregroundLeases.release("process:$it") },
-        storageDirectory = File(app.filesDir, "processes"),
-    )
     private val baseTools: List<Tool> =
         defaultFileTools() + ApplyPatchTool() + ExternalDirectoryTool() + QuestionTool() +
             SharedReadTool(sharedFileAccess) + SharedWriteTool(sharedFileAccess) +
             PlanExitTool { setAgentMode(AgentMode.BUILD) } + todoTools(todoStore) +
             WebFetchTool(http) + WebSearchTool(http) + TaskTool(::runSubagent) + gitTools { gitCredentials() } +
-            ShellTool(shellProvider, shellEnvironment, processManager) + ProcessTool(processManager) +
+            ShellTool(shellBackend) + ProcessTool(shellBackend) +
             ExtensionConfigReadTool(repo) { workspace } + ExtensionConfigWriteTool(repo) { workspace }
     @Volatile private var mcpTools: List<Tool> = emptyList()
     @Volatile private var discoveredSkills: List<SkillManifest> = emptyList()
@@ -266,20 +253,30 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         bundledFallback = { BUNDLED_CATALOG },
     )
     private val codexModelsClient = CodexModelsClient(http)
-    private val codexAuth by lazy { CodexAuth(http, store = keyStore::put, read = keyStore::get) }
+    private val codexAuth by lazy {
+        CodexAuth(
+            http,
+            store = keyStore::put,
+            read = keyStore::get,
+            enabled = BuildConfig.CODEX_OAUTH_ENABLED,
+        )
+    }
     @Volatile private var catalog: dev.phonecode.provider.catalog.Catalog = emptyMap()
     @Volatile private var codexModelMetadata: Map<String, CodexModelInfo> = emptyMap()
     @Volatile private var customPresets: Map<String, ProviderPreset> = emptyMap()
     @Volatile private var customLimits: Map<String, Long> = emptyMap()
 
     private fun providerFor(id: String): ProviderPreset? {
+        if (!providerAllowed(id, BuildConfig.CODEX_OAUTH_ENABLED)) return null
         val preset = BuiltInPresets.byId(id) ?: customPresets[id] ?: return null
         if (preset.wireFormat != WireFormat.OPENAI_COMPAT) return preset
         return preset.withCatalogApi(catalog[catalogProviderId(id)]?.api)
     }
 
     /** All providers for Settings: built-ins plus any agent-defined custom providers. */
-    fun allProviders(): List<ProviderPreset> = BuiltInPresets.all + customPresets.values.sortedBy { it.displayName }
+    fun allProviders(): List<ProviderPreset> =
+        BuiltInPresets.all.filter { providerAllowed(it.id, BuildConfig.CODEX_OAUTH_ENABLED) } +
+            customPresets.values.sortedBy { it.displayName }
 
     /** The selected model's token limits from the models.dev catalog, then the custom config, if known. */
     private fun limitFor(option: ModelOption?): dev.phonecode.provider.catalog.Limit? = option?.let {
@@ -350,9 +347,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         repo.seedBundledSkills(app.assets)
         refreshSkillsNow()
         refreshSessions()
-        foregroundLeases.registerStopHandler("processes", processManager::stopAll)
+        foregroundLeases.registerStopHandler("processes", shellBackend::stopAll)
         foregroundLeases.registerStopHandler("turn") { cancel() }
-        viewModelScope.launch(Dispatchers.IO) { userland.ensureLinux() }
+        viewModelScope.launch(Dispatchers.IO) { shellBackend.status(workspace.absolutePath) }
         viewModelScope.launch(Dispatchers.IO) {
             _state.update {
                 it.copy(
@@ -361,7 +358,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     disabledProviders = modelPrefs.disabledProviders(),
                     autoAccept = startupSettings.autoAccept,
                     agentMode = startupMode,
-                    codexConnected = keyStore.get("codex.access") != null,
+                    codexConnected = BuildConfig.CODEX_OAUTH_ENABLED && keyStore.get("codex.access") != null,
                     githubLogin = keyStore.get("github.login"),
                     currentSessionId = sessionId,
                     sharedFolders = sharedFolderStore.list(),
@@ -417,7 +414,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshModels(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis()
         val refreshCatalog = forceRefresh || now - lastCatalogRefreshAt >= CATALOG_REFRESH_TTL_MS
-        val refreshCodex = !keyStore.get("codex.access").isNullOrBlank() &&
+        val refreshCodex = BuildConfig.CODEX_OAUTH_ENABLED && !keyStore.get("codex.access").isNullOrBlank() &&
             (forceRefresh || now - lastCodexRefreshAt >= CODEX_REFRESH_TTL_MS)
         if (!refreshCatalog && !refreshCodex) return
         if (modelRefreshJob?.isActive == true) {
@@ -480,7 +477,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Build the picker from the catalog for our presets; fall back to built-ins per provider. */
     private fun catalogToOptions(catalog: Catalog): List<ModelOption> {
         val out = mutableListOf<ModelOption>()
-        BuiltInPresets.all.forEach { preset ->
+        BuiltInPresets.all.filter { providerAllowed(it.id, BuildConfig.CODEX_OAUTH_ENABLED) }.forEach { preset ->
             if (preset.id == "codex") {
                 val authenticated = codexModelMetadata.values
                     .sortedWith(compareBy<CodexModelInfo> { it.priority }.thenBy { it.displayName })
@@ -494,7 +491,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     ?.sortedByDescending { it.id }
                     ?.map { ModelOption("codex", it.id, "${preset.displayName} · ${it.name}") }
                     .orEmpty()
-                out += (live + builtInModels().filter { it.providerId == "codex" }).distinctBy { it.modelId }
+                out += (live + builtInModels(BuildConfig.CODEX_OAUTH_ENABLED).filter { it.providerId == "codex" }).distinctBy { it.modelId }
                 return@forEach
             }
             val info = catalog[catalogProviderId(preset.id)]
@@ -502,9 +499,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val live = info.models.values.sortedBy { it.name }.map { model ->
                     ModelOption(preset.id, model.id, "${preset.displayName} · ${model.name}")
                 }
-                out += (live + builtInModels().filter { it.providerId == preset.id }).distinctBy { it.modelId }
+                out += (live + builtInModels(BuildConfig.CODEX_OAUTH_ENABLED).filter { it.providerId == preset.id }).distinctBy { it.modelId }
             } else {
-                out += builtInModels().filter { it.providerId == preset.id }
+                out += builtInModels(BuildConfig.CODEX_OAUTH_ENABLED).filter { it.providerId == preset.id }
             }
         }
         return out
@@ -529,7 +526,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun recoverProjectWorkspace(project: Project): RecoveredWorkspace? {
         val source = workspacePathFor(project.id)
-        processManager.stopWorkspace(source.absolutePath)
+        shellBackend.stopWorkspace(source.absolutePath)
         if (!source.isDirectory || source.list().isNullOrEmpty()) {
             source.delete()
             return null
@@ -1311,9 +1308,34 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun keyFor(providerId: String): String = keyStore.get(providerSecretName(providerId)).orEmpty()
     fun setKey(providerId: String, key: String) = keyStore.put(providerSecretName(providerId), key.trim())
+    fun configureProviderKey(providerId: String, key: String): Boolean {
+        val trimmed = key.trim()
+        if (trimmed.isEmpty()) return false
+        setKey(providerId, trimmed)
+        if (keyFor(providerId) != trimmed) return false
+        return activateProvider(providerId)
+    }
+    fun activateProvider(providerId: String): Boolean {
+        val option = configuredModelForProviderActivation(
+            models = _state.value.models,
+            providerId = providerId,
+            hiddenModels = _state.value.hiddenModels,
+        ) ?: return false
+        if (providerId in _state.value.disabledProviders) toggleProviderDisabled(providerId)
+        selectModel(option)
+        return true
+    }
     fun providerConfigured(providerId: String): Boolean =
-        !keyStore.get(if (providerId == "codex") "codex.access" else providerSecretName(providerId)).isNullOrBlank()
-    fun hasConfiguredProvider(): Boolean = allProviders().any { providerConfigured(it.id) }
+        providerAllowed(providerId, BuildConfig.CODEX_OAUTH_ENABLED) &&
+            !keyStore.get(if (providerId == "codex") "codex.access" else providerSecretName(providerId)).isNullOrBlank()
+    fun hasConfiguredProvider(): Boolean =
+        configuredModelForActivation(_state.value.models, _state.value.selected, ::providerConfigured) != null
+    fun activateConfiguredModel(): Boolean {
+        val configured = configuredModelForActivation(_state.value.models, _state.value.selected, ::providerConfigured)
+            ?: return false
+        if (configured != _state.value.selected) selectModel(configured)
+        return true
+    }
     /** True when the device Keystore was unavailable and keys are stored UNENCRYPTED (warn on the providers screen). */
     fun secureStorageUnavailable(): Boolean = keyStore.secureStorageUnavailable
     fun clearError() = _state.update { it.copy(error = null, interruptedTurn = false) }
@@ -1379,6 +1401,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * for the UI to open in the browser. The exchange completes asynchronously; state flips when done.
      */
     fun startCodexSignIn(): String? {
+        if (!BuildConfig.CODEX_OAUTH_ENABLED) return null
         return runCatching {
             val url = codexAuth.buildAuthUrl()
             val verifier = requireNotNull(codexAuth.pendingVerifier)
@@ -1432,7 +1455,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // ----- GitHub (device-flow sign-in: code on screen, no tokens to paste) -----
 
-    private val githubAuth by lazy { GitHubAuth(http, store = keyStore::put, read = keyStore::get) }
+    private val githubAuth by lazy {
+        GitHubAuth(
+            http,
+            store = keyStore::put,
+            read = keyStore::get,
+            clientId = githubOAuthClientId(BuildConfig.GITHUB_OAUTH_CLIENT_ID, BuildConfig.DEBUG),
+        )
+    }
     @Volatile private var githubSignInActive = false
 
     fun startGitHubSignIn() {
@@ -1568,6 +1598,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun resolveQuestion(answers: List<UserAnswer>) { pendingQuestionDecision?.complete(answers) }
 
     private fun connectedProvider(preset: ProviderPreset): LlmProvider? {
+        if (!providerAllowed(preset.id, BuildConfig.CODEX_OAUTH_ENABLED)) return null
         val key = if (preset.id == "codex") codexAuth.accessToken() else keyStore.get(providerSecretName(preset.id))
         if (key.isNullOrBlank()) return null
         val resolved = if (preset.id == "codex") {
@@ -2173,7 +2204,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun environment(): AgentEnvironment {
-        val linuxReady = userland.ensureLinux()
+        val activeWorkspace = (turnWorkspace ?: workspace).absolutePath
+        val shell = shellBackend.status(activeWorkspace)
         val projectFolder = _state.value.projects.firstOrNull { it.id == currentProjectId }?.folderId?.let { folderId ->
             _state.value.sharedFolders.firstOrNull { it.id == folderId }
         }
@@ -2186,13 +2218,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             osVersion = "API ${Build.VERSION.SDK_INT}",
             // Match toolContext's workspaceProvider: a pinned turn workspace takes precedence over the live one,
             // so the path the prompt reports is the path tools actually write to.
-            workspacePath = (turnWorkspace ?: workspace).absolutePath,
-            shellAvailable = linuxReady,
-            shellDetail = if (linuxReady) {
-                "bundled Alpine Linux compatibility prototype; the workspace is /workspace; use only bundled commands and do not download executable packages.$projectDetail"
-            } else {
-                "The bundled Alpine environment could not be prepared.$projectDetail"
-            },
+            workspacePath = activeWorkspace,
+            shellAvailable = shell.available,
+            shellDetail = "${shell.detail}$projectDetail",
             configPath = File(getApplication<Application>().filesDir, "config").absolutePath,
         )
     }
@@ -2215,9 +2243,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         codexAuth.stopLoopback()
         foregroundLeases.unregisterStopHandler("turn")
         foregroundLeases.unregisterStopHandler("processes")
-        processManager.stopAll()
+        shellBackend.stopAll()
     }
 }
+
+internal fun reportHttpClient(base: OkHttpClient): OkHttpClient = base.newBuilder()
+    .callTimeout(20, TimeUnit.SECONDS)
+    .readTimeout(20, TimeUnit.SECONDS)
+    .followRedirects(false)
+    .followSslRedirects(false)
+    .build()
 
 internal fun aiReportPayload(
     category: String,
@@ -2295,9 +2330,27 @@ internal fun boundedTurnSettings(
     limit: dev.phonecode.provider.catalog.Limit?,
 ): TurnSettings = TurnSettings(model, effort, limit?.context, limit?.output)
 
+internal fun configuredModelForActivation(
+    models: List<ModelOption>,
+    current: ModelOption?,
+    providerConfigured: (String) -> Boolean,
+): ModelOption? = current?.takeIf { providerConfigured(it.providerId) }
+    ?: models.firstOrNull { providerConfigured(it.providerId) }
+
+internal fun configuredModelForProviderActivation(
+    models: List<ModelOption>,
+    providerId: String,
+    hiddenModels: Set<String>,
+): ModelOption? = models.firstOrNull {
+    it.providerId == providerId && "${it.providerId}/${it.modelId}" !in hiddenModels
+}
+
 private fun newSessionId(): String = "session-${UUID.randomUUID()}"
 
-fun builtInModels(): List<ModelOption> = listOf(
+internal fun providerAllowed(providerId: String, codexOAuthEnabled: Boolean): Boolean =
+    providerId != "codex" || codexOAuthEnabled
+
+fun builtInModels(codexOAuthEnabled: Boolean = BuildConfig.CODEX_OAUTH_ENABLED): List<ModelOption> = listOf(
     ModelOption("anthropic", "claude-opus-4-8", "Claude Opus 4.8"),
     ModelOption("anthropic", "claude-sonnet-4-6", "Claude Sonnet 4.6"),
     ModelOption("anthropic", "claude-haiku-4-5", "Claude Haiku 4.5"),
@@ -2321,7 +2374,7 @@ fun builtInModels(): List<ModelOption> = listOf(
     ModelOption("codex", "gpt-5.4", "ChatGPT · GPT-5.4"),
     ModelOption("codex", "gpt-5.4-mini", "ChatGPT · GPT-5.4 Mini"),
     ModelOption("codex", "gpt-5.2", "ChatGPT · GPT-5.2"),
-)
+).filter { providerAllowed(it.providerId, codexOAuthEnabled) }
 
 private const val CATALOG_REFRESH_TTL_MS = 6L * 60 * 60 * 1000
 private const val CODEX_REFRESH_TTL_MS = 5L * 60 * 1000

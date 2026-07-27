@@ -12,22 +12,29 @@ internal class ConfigHotReloadObserver(
     private val directories: () -> List<File>,
     private val onChange: suspend () -> Unit,
     private val debounceMillis: Long = 300,
+    private val enabled: Boolean = true,
 ) : AutoCloseable {
     private val lock = Any()
     private var observers = emptyList<FileObserver>()
     private var debounceJob: Job? = null
     private var started = false
 
-    fun start() = synchronized(lock) {
-        if (started) return@synchronized
-        started = true
-        rebuild()
+    fun start() {
+        if (!enabled) return
+        synchronized(lock) {
+            if (started) return@synchronized
+            started = true
+            rebuild()
+        }
     }
 
-    fun restart() = synchronized(lock) {
-        if (!started) return@synchronized
-        rebuild()
-        schedule()
+    fun restart() {
+        if (!enabled) return
+        synchronized(lock) {
+            if (!started) return@synchronized
+            rebuild()
+            schedule()
+        }
     }
 
     private fun schedule() = synchronized(lock) {

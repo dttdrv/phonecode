@@ -414,6 +414,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         scope = viewModelScope,
         directories = { repo.watchedDirectories(workspace) },
         onChange = { refreshRuntimeConfiguration() },
+        // Robolectric's FileObserver shadow allocates one Linux inotify instance per watched
+        // directory and does not reliably release application-scoped observers between tests.
+        enabled = Build.FINGERPRINT != "robolectric",
     )
     @Volatile private var lastCatalogRefreshAt = 0L
     @Volatile private var lastCodexRefreshAt = 0L

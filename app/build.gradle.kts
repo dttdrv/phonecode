@@ -466,6 +466,7 @@ val releaseGuestRuntimeFiles = listOf(
     file("src/release/assets/vm/vmlinuz"),
     file("src/release/assets/vm/initramfs.cpio.gz"),
     file("src/release/assets/vm/system.img"),
+    file("src/release/assets/vm/build-manifest.json"),
 )
 val releaseHostLicenseFiles = listOf(
     "QEMU-GPL-2.0.txt",

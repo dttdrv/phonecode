@@ -342,12 +342,9 @@ class AgentLoop(
 
     private fun summarize(call: ToolCallAccumulator): String {
         val raw = call.args.toString()
-        val visible = if (raw.length <= MAX_PERMISSION_SUMMARY_CHARS) {
-            raw
-        } else {
-            raw.take(MAX_PERMISSION_SUMMARY_CHARS / 2) + "\n…\n" + raw.takeLast(MAX_PERMISSION_SUMMARY_CHARS / 2)
-        }
-        return "${call.name}\n$visible"
+        // Keep the complete payload available to the approval UI. The UI may collapse long details for
+        // readability, but approval must never hide paths or destructive operations from the middle.
+        return "${call.name}\n$raw"
     }
 
     private fun ToolResult.limitOutput(): ToolResult = if (output.length <= MAX_TOOL_OUTPUT_CHARS) {
@@ -373,7 +370,6 @@ class AgentLoop(
         const val MAX_STREAMED_TURN_CHARS = 2_000_000L
         const val MAX_TOOL_CALLS_PER_TURN = 128
         const val MAX_TOOL_OUTPUT_CHARS = 64_000
-        const val MAX_PERMISSION_SUMMARY_CHARS = 600
         const val STREAM_LIMIT_MESSAGE =
             "Provider response exceeded PhoneCode's per-turn stream safety limit. Try again or switch models."
         const val MAX_STEPS_REMINDER =

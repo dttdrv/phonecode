@@ -1,6 +1,7 @@
 package dev.phonecode.app.ui
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -9,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasAnyDescendant
@@ -25,9 +27,12 @@ import dev.phonecode.app.data.PersistedMessage
 import dev.phonecode.app.data.PersistedPart
 import dev.phonecode.app.data.PersistedRole
 import dev.phonecode.app.data.PersistedSession
+import dev.phonecode.app.data.ManagedSkill
 import dev.phonecode.app.data.Project
 import dev.phonecode.app.data.ProjectStore
 import dev.phonecode.app.data.SessionStore
+import dev.phonecode.app.data.SkillScope
+import dev.phonecode.app.data.SkillStatus
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Rule
@@ -39,8 +44,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.serialization.json.JsonObject
 import dev.phonecode.tools.UserOption
 import dev.phonecode.tools.UserQuestion
+import dev.phonecode.tools.mcp.McpServerConfig
+import dev.phonecode.tools.mcp.McpServerSnapshot
+import dev.phonecode.tools.mcp.McpToolDef
+import dev.phonecode.tools.skills.SkillManifest
 
 /**
  * The design feedback loop: renders the REAL app (same composition as UiSmokeTest) to PNGs in
@@ -229,7 +239,7 @@ class ScreenshotTest {
         val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
         state.value = state.value.copy(
             pendingPermission = PermissionRequest(
-                tool = "shell",
+                tool = "bash",
                 summary = "Run ./gradlew assembleRelease in the current project",
             ),
         )
@@ -331,6 +341,138 @@ class ScreenshotTest {
     }
 
     @Test
+    fun extensionManagementGalleryShowsConnectedMcpAndSkillStates() {
+        awaitConversation()
+        val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        val original = state.value
+        state.value = original.copy(
+            mcpServers = linkedMapOf(
+                "Workspace Index" to McpServerConfig(
+                    url = "https://workspace-index.example/mcp",
+                    headers = mapOf("Authorization" to "Bearer ••••••••"),
+                ),
+                "Issue Tracker" to McpServerConfig(url = "https://issues.example/mcp"),
+                "Deploy Preview" to McpServerConfig(url = "https://preview.example/mcp"),
+                "Local Browser" to McpServerConfig(
+                    url = "http://localhost:4318/mcp",
+                    enabled = false,
+                ),
+            ),
+            mcpSnapshots = mapOf(
+                "Workspace Index" to McpServerSnapshot(
+                    connected = true,
+                    protocolVersion = "2025-06-18",
+                    serverName = "workspace-index",
+                    serverTitle = "Workspace Index",
+                    serverVersion = "2.4.0",
+                    capabilities = setOf("tools", "resources"),
+                    tools = listOf(
+                        McpToolDef("search_workspace", "Search workspace", "Find symbols and files across the current project.", JsonObject(emptyMap())),
+                        McpToolDef("read_source", "Read source", "Open a source file with stable line references.", JsonObject(emptyMap())),
+                        McpToolDef("dependency_graph", "Dependency graph", "Trace dependencies between project modules.", JsonObject(emptyMap())),
+                    ),
+                    instructions = "Use this server for project-wide source discovery.",
+                ),
+                "Issue Tracker" to McpServerSnapshot(
+                    connected = false,
+                    error = "Authentication required",
+                ),
+            ),
+            mcpConnecting = setOf("Deploy Preview"),
+            mcpToolCount = 3,
+            skills = listOf(
+                ManagedSkill(
+                    id = "global/release-pilot",
+                    name = "release-pilot",
+                    manifest = SkillManifest(
+                        name = "release-pilot",
+                        description = "Runs a careful release-readiness pass before publishing.",
+                        body = "## Workflow\n\n1. Verify the release build.\n2. Review store metadata.\n3. Report blockers before publishing.",
+                        license = "Apache-2.0",
+                        compatibility = "Android projects",
+                    ),
+                    location = "~/.phonecode/skills/release-pilot/SKILL.md",
+                    scope = SkillScope.GLOBAL,
+                    status = SkillStatus.ACTIVE,
+                ),
+                ManagedSkill(
+                    id = "project/legacy-deploy",
+                    name = "legacy-deploy",
+                    manifest = null,
+                    location = ".phonecode/skills/legacy-deploy/SKILL.md",
+                    scope = SkillScope.PROJECT,
+                    status = SkillStatus.INVALID,
+                    issue = "Invalid SKILL.md frontmatter",
+                ),
+                ManagedSkill(
+                    id = "project/code-review",
+                    name = "code-review",
+                    manifest = SkillManifest(
+                        name = "code-review",
+                        description = "Reviews a change for correctness and maintainability.",
+                        body = "Review the active change and report actionable findings.",
+                    ),
+                    location = ".phonecode/skills/code-review/SKILL.md",
+                    scope = SkillScope.PROJECT,
+                    status = SkillStatus.SHADOWED,
+                ),
+            ),
+        )
+        try {
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("Menu").performClick()
+            compose.onNodeWithContentDescription("Settings").performClick()
+            compose.onNodeWithText("MCP servers").performClick()
+
+            compose.onNodeWithText("Workspace Index").assertIsDisplayed()
+            compose.onNodeWithText("Connected · 3 tools").assertIsDisplayed()
+            compose.onNodeWithText("Failed · Authentication required").assertIsDisplayed()
+            compose.onNodeWithText("Connecting").assertIsDisplayed()
+            compose.onNodeWithText("Off").assertIsDisplayed()
+            compose.mainClock.advanceTimeBy(500)
+            compose.waitForIdle()
+            shoot("31-mcp-server-states")
+
+            compose.onNodeWithText("Workspace Index").performClick()
+            compose.onNodeWithText("Connected to Workspace Index").assertIsDisplayed()
+            compose.mainClock.advanceTimeBy(500)
+            compose.waitForIdle()
+            shootScreen("32-mcp-connected-editor")
+            compose.onNodeWithText("Trace dependencies between project modules.").performScrollTo().assertIsDisplayed()
+            compose.waitForIdle()
+            shoot("33-mcp-connected-tools")
+
+            compose.onNodeWithContentDescription("Back").performClick()
+            compose.mainClock.advanceTimeBy(300)
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("Back").performClick()
+            compose.mainClock.advanceTimeBy(300)
+            compose.waitForIdle()
+            compose.onNodeWithText("Skills").performClick()
+            compose.onNodeWithText("release-pilot").assertIsDisplayed()
+            compose.onNodeWithText("legacy-deploy").assertIsDisplayed()
+            compose.onNodeWithText("code-review").assertIsDisplayed()
+            compose.mainClock.advanceTimeBy(500)
+            compose.waitForIdle()
+            shootScreen("34-skills-mixed-states")
+
+            compose.onNodeWithText("release-pilot").performClick()
+            compose.onNodeWithText("Runs a careful release-readiness pass before publishing.").assertIsDisplayed()
+            compose.onNodeWithText("Edit skill").assertIsDisplayed()
+            compose.mainClock.advanceTimeBy(500)
+            compose.waitForIdle()
+            shootScreen("35-skill-active-detail")
+        } finally {
+            state.value = original
+        }
+    }
+
+    @Test
     @Config(qualifiers = "w640dp-h360dp-xhdpi")
     fun compactQuestionDialogKeepsActionsReachable() {
         awaitConversation()
@@ -367,6 +509,32 @@ class ScreenshotTest {
     }
 
     @Test
+    fun longApprovalDetailsStayReviewable() {
+        awaitConversation()
+        val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            pendingPermission = PermissionRequest(
+                tool = "apply_patch",
+                summary = "Update app/src/main/kotlin/dev/phonecode/app/ui/chat/ChatScreen.kt. ".repeat(50),
+            ),
+        )
+
+        compose.onNodeWithText("Section 1 of 2").performScrollTo().assertIsDisplayed()
+        compose.waitForIdle()
+        shootDialog("36-approval-long-details")
+        compose.onNodeWithText("Next section").performScrollTo().performClick()
+        compose.onNodeWithText("Section 2 of 2").performScrollTo().assertIsDisplayed()
+        compose.waitForIdle()
+        shootDialog("37-approval-long-details-next")
+        state.value = state.value.copy(pendingPermission = null)
+    }
+
+    @Test
     @Config(qualifiers = "w360dp-h640dp-xxxhdpi")
     fun playListingPhoneScreenshots() {
         awaitConversation()
@@ -389,8 +557,8 @@ class ScreenshotTest {
         val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
         state.value = state.value.copy(
             pendingPermission = PermissionRequest(
-                tool = "shell",
-                summary = "Run the release checks in the current project",
+                tool = "bash",
+                summary = "Run ./gradlew testDebugUnitTest for the dark-mode settings change",
             ),
         )
         compose.waitForIdle()

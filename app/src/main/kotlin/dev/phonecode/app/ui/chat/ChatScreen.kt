@@ -2158,8 +2158,23 @@ private fun DialogAction(text: String, emphasized: Boolean, enabled: Boolean = t
 @Composable
 private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, onDeny: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val clipboard = LocalClipboardManager.current
     val presentation = remember(request.tool) { approvalPresentation(request.tool) }
     var submitted by rememberSaveable(request) { mutableStateOf(false) }
+    var detailsPage by rememberSaveable(request) { mutableIntStateOf(0) }
+    val fullDetails = request.summary.ifBlank { "No additional details were provided." }
+    val detailsPageCount = ((fullDetails.length + APPROVAL_DETAILS_PAGE_CHARS - 1) /
+        APPROVAL_DETAILS_PAGE_CHARS).coerceAtLeast(1)
+    val pageStart = detailsPage.coerceIn(0, detailsPageCount - 1) * APPROVAL_DETAILS_PAGE_CHARS
+    val detailsSlice = fullDetails.substring(
+        pageStart,
+        (pageStart + APPROVAL_DETAILS_PAGE_CHARS).coerceAtMost(fullDetails.length),
+    )
+    val visibleDetails = buildString {
+        if (detailsPage > 0) append("… continued from previous section …\n")
+        append(detailsSlice)
+        if (detailsPage < detailsPageCount - 1) append("\n… continued in next section …")
+    }
     fun resolve(decision: () -> Unit) {
         if (submitted) return
         submitted = true
@@ -2198,6 +2213,57 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
             )
             Spacer(Modifier.height(Spacing.s))
             Text("DETAILS", style = MaterialTheme.typography.labelSmall, color = colors.tertiary)
+            if (detailsPageCount > 1) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Section ${detailsPage + 1} of $detailsPageCount",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.onSurfaceVariant,
+                    )
+                    TextButton(
+                        onClick = {
+                            clipboard.setText(
+                                AnnotatedString(
+                                    if (fullDetails.length <= APPROVAL_CLIPBOARD_CHARS) {
+                                        fullDetails
+                                    } else {
+                                        detailsSlice
+                                    },
+                                ),
+                            )
+                        },
+                    ) {
+                        Text(
+                            if (fullDetails.length <= APPROVAL_CLIPBOARD_CHARS) {
+                                "Copy full details"
+                            } else {
+                                "Copy this section"
+                            },
+                        )
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    TextButton(
+                        enabled = detailsPage > 0,
+                        onClick = { detailsPage-- },
+                    ) {
+                        Text("Previous section")
+                    }
+                    TextButton(
+                        enabled = detailsPage < detailsPageCount - 1,
+                        onClick = { detailsPage++ },
+                    ) {
+                        Text("Next section")
+                    }
+                }
+            }
             Box(
                 Modifier.fillMaxWidth().padding(top = 5.dp)
                     .heightIn(min = Spacing.touchTarget)
@@ -2205,11 +2271,13 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
                     .background(colors.surface)
                     .padding(Spacing.s),
             ) {
-                Text(
-                    request.summary.ifBlank { "No additional details were provided." },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = PcMono),
-                    color = colors.onBackground,
-                )
+                SelectionContainer {
+                    Text(
+                        visibleDetails,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = PcMono),
+                        color = colors.onBackground,
+                    )
+                }
             }
             Box(
                 Modifier.fillMaxWidth().padding(top = Spacing.s)
@@ -2240,6 +2308,9 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
     }
 }
 
+private const val APPROVAL_DETAILS_PAGE_CHARS = 2_000
+private const val APPROVAL_CLIPBOARD_CHARS = 64_000
+
 private data class ApprovalPresentation(
     val action: String,
     val risk: String,
@@ -2261,7 +2332,8 @@ private fun approvalPresentation(tool: String): ApprovalPresentation {
                 risk = "Connected service change",
                 guidance = "This enabled MCP server may send data to or change an external service.",
             )
-        normalized.contains("shell") || normalized.contains("terminal") || normalized.contains("process") ->
+        normalized == "bash" || normalized.contains("shell") ||
+            normalized.contains("terminal") || normalized.contains("process") ->
             ApprovalPresentation(
                 action = "Run a command",
                 risk = "Command execution",

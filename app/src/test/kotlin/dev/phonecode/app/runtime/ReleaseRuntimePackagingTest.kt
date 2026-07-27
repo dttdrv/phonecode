@@ -37,11 +37,26 @@ class ReleaseRuntimePackagingTest {
     @Test
     fun playGateCannotOpenBeforeGuestAndProductionIntegrationAreComplete() {
         val build = File(root, "app/build.gradle.kts").readText()
+        val guestRuntimeInputs = requireNotNull(
+            Regex(
+                """val releaseGuestRuntimeFiles = listOf\((.*?)\n\)""",
+                RegexOption.DOT_MATCHES_ALL,
+            ).find(build),
+        ) { "releaseGuestRuntimeFiles must remain an explicit fail-closed input list" }.groupValues[1]
 
         listOf(
             "src/release/assets/vm/vmlinuz",
             "src/release/assets/vm/initramfs.cpio.gz",
             "src/release/assets/vm/system.img",
+            "src/release/assets/vm/build-manifest.json",
+        ).forEach { requiredInput ->
+            assertTrue(
+                "Guest runtime gate is missing an input: $requiredInput",
+                guestRuntimeInputs.contains(requiredInput),
+            )
+        }
+
+        listOf(
             "native-runtime/out/symbols/arm64-v8a",
             "generated/phonecodeReleaseHostRuntime",
             "prepareReleaseHostEvidence",

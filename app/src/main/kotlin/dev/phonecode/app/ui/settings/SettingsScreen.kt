@@ -655,7 +655,7 @@ private fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
     if (confirmAutomaticApproval) {
         ConfirmActionDialog(
             title = "Enable automatic approval?",
-            message = "PhoneCode will run workspace writes, commands, Git operations, and mutating MCP actions without asking each time. Reads outside linked locations will still ask.",
+            message = "PhoneCode will run writes in the private workspace and linked phone folders, commands, Git operations, and mutating MCP actions without asking each time. Reads outside linked locations will still ask.",
             action = "Enable automatic approval",
             onDismiss = { confirmAutomaticApproval = false },
         ) {

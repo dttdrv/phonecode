@@ -17,6 +17,10 @@ class ExternalDirectoryToolTest {
 
     private val tool = ExternalDirectoryTool()
 
+    @Test fun permissionPromptsAreAlwaysSerialized() {
+        assertTrue(tool.sequential)
+    }
+
     /** A ToolContext whose permission gate is fixed to [allow] and records what it was asked about. */
     private class FakeCtx(private val allow: Boolean) : ToolContext {
         override val workspacePath = "/some/workspace"

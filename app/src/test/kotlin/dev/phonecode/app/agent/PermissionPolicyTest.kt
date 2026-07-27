@@ -9,6 +9,8 @@ class PermissionPolicyTest {
     fun automaticChangesNeverBypassExternalDirectoryReadApproval() {
         assertTrue(permissionCanAutoApprove(tool = "write", automaticChanges = true))
         assertFalse(permissionCanAutoApprove(tool = "external_directory", automaticChanges = true))
+        assertFalse(permissionCanAutoApprove(tool = "external_directory_read", automaticChanges = true))
+        assertFalse(permissionCanAutoApprove(tool = "doom_loop", automaticChanges = true))
         assertFalse(permissionCanAutoApprove(tool = "write", automaticChanges = false))
     }
 }

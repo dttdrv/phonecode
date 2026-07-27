@@ -23,6 +23,9 @@ import java.io.File
  */
 class ExternalDirectoryTool : Tool {
     override val name = "external_directory"
+    // Each invocation opens an explicit user approval. A batch must not overlap those prompts:
+    // ToolContext exposes one active decision channel, so parallel prompts could resolve the wrong path.
+    override val sequential = true
     override val description =
         "Read a file or list a directory at an ABSOLUTE path outside the workspace. Requires an absolute " +
             "path and asks the user for permission on every call. Use only when the user points you at a " +

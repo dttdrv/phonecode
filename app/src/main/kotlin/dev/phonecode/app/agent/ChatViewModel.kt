@@ -118,8 +118,13 @@ enum class ToolStatus { RUNNING, DONE, ERROR }
 
 data class PermissionRequest(val tool: String, val summary: String)
 
-internal fun permissionCanAutoApprove(tool: String, automaticChanges: Boolean): Boolean =
-    automaticChanges && !tool.equals("external_directory", ignoreCase = true)
+internal fun permissionCanAutoApprove(tool: String, automaticChanges: Boolean): Boolean {
+    if (!automaticChanges) return false
+    val normalized = tool.lowercase()
+    return normalized != "doom_loop" &&
+        normalized != "external_directory" &&
+        !normalized.startsWith("external_directory_")
+}
 
 data class QuestionRequest(val questions: List<UserQuestion>)
 data class RetryState(val attempt: Int, val message: String)
@@ -322,6 +327,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private var lastStreamFlushAt = 0L
     @Volatile private var generation = 0
     private val sessionWriteOrder = AtomicLong()
+    private val autoAcceptWriteOrder = AtomicLong()
     private var job: Job? = null
     private var sessionSwitchJob: Job? = null
     @Volatile private var loadingSessionId: String? = null
@@ -331,6 +337,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val runtimeReloadMutex = Mutex()
     private val mcpReloadMutex = Mutex()
     private val metadataMutationMutex = Mutex()
+    private val autoAcceptMutationLock = Any()
     @Volatile private var lastMcpFingerprint: String? = null
     @Volatile private var lastSkillsFingerprint: String? = null
     @Volatile private var lastProvidersFingerprint: String? = null
@@ -736,20 +743,46 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (effort in reasoningEfforts(it.selected)) it.copy(effort = effort) else it
     }
     fun setAutoAccept(value: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching { appSettings.update { it.copy(autoAccept = value) } }
-                .onSuccess { _state.update { state -> state.copy(autoAccept = value) } }
-                .onFailure {
-                    _state.update { state ->
-                        state.copy(
-                            error = if (value) {
-                                "Automatic approval could not be enabled; approval is still required."
-                            } else {
-                                "Ask-before-change could not be saved; automatic approval remains on."
-                            },
-                        )
-                    }
+        val writeOrder = autoAcceptWriteOrder.incrementAndGet()
+        if (!value) {
+            // Revocation is a safety boundary. Persist the tiny settings file before returning to the
+            // main loop, so the UI cannot show "Ask before each change" while disk still grants authority.
+            _state.update { state -> state.copy(autoAccept = false) }
+            val failure = synchronized(autoAcceptMutationLock) {
+                runCatching { appSettings.update { it.copy(autoAccept = false) } }.exceptionOrNull()
+            }
+            if (failure != null) {
+                _state.update { state ->
+                    state.copy(
+                        autoAccept = false,
+                        error = "Ask-before-change could not be saved; approval remains required for this session.",
+                    )
                 }
+            }
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            synchronized(autoAcceptMutationLock) {
+                // A newer tap superseded this write before it acquired the lock. Skipping it keeps the
+                // persisted setting in the same order as the visible setting.
+                if (autoAcceptWriteOrder.get() != writeOrder) return@synchronized
+                runCatching { appSettings.update { it.copy(autoAccept = true) } }
+                    .onSuccess {
+                        if (autoAcceptWriteOrder.get() == writeOrder) {
+                            _state.update { state -> state.copy(autoAccept = true) }
+                        }
+                    }
+                    .onFailure {
+                        if (autoAcceptWriteOrder.get() == writeOrder) {
+                            _state.update { state ->
+                                state.copy(
+                                    autoAccept = false,
+                                    error = "Automatic approval could not be enabled; approval is still required.",
+                                )
+                            }
+                        }
+                    }
+            }
         }
     }
 
@@ -1346,6 +1379,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     else -> "PhoneCode"
                 },
                 access = when {
+                    tool.name == "external_directory" ||
+                        tool.name.startsWith("external_directory_") -> "Approval every time"
                     tool.mutating -> "Approval required"
                     tool.name == "process" || tool.name == "git_branch" -> "Depends on action"
                     else -> "Read only"

@@ -66,8 +66,10 @@ class AgentLoopTest {
     private class FakeContext(private val allow: Boolean = true) : ToolContext {
         override val workspacePath = "/ws"
         val permissionRequests = mutableListOf<String>()
+        val permissionSummaries = mutableListOf<String>()
         override suspend fun requestPermission(tool: String, summary: String): Boolean {
             permissionRequests += tool
+            permissionSummaries += summary
             return allow
         }
     }
@@ -201,6 +203,29 @@ class AgentLoopTest {
         assertEquals(listOf("write"), ctx.permissionRequests)
         assertEquals(0, tool.executions)
         assertTrue(events.any { it is AgentEvent.ToolFinished && it.isError && it.output.contains("permission denied") })
+    }
+
+    @Test fun approvalRetainsTheCompleteToolArguments() = runTest {
+        val middle = "middle-path-that-must-remain-visible"
+        val args = """{"patch":"${"a".repeat(400)}$middle${"z".repeat(400)}"}"""
+        val provider = ScriptedProvider(
+            listOf(
+                listOf(
+                    StreamEvent.ToolCallStart(0, "c", "write"),
+                    StreamEvent.ToolCallArgsDelta(0, args),
+                    StreamEvent.Done(StopReason.TOOL_USE),
+                ),
+                finalText,
+            ),
+        )
+        val context = FakeContext()
+
+        loop(provider, listOf(RecordingTool("write", mutating = true)), context = context)
+            .run(emptyList(), "apply it")
+            .toList()
+
+        assertTrue(context.permissionSummaries.single().contains(middle))
+        assertTrue(context.permissionSummaries.single().contains(args))
     }
 
     @Test fun planExitApprovalUnlocksBuildModeMidRun() = runTest {

@@ -246,14 +246,14 @@ Original instruction.
         val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
         state.value = state.value.copy(
             pendingPermission = PermissionRequest(
-                tool = "shell",
+                tool = "bash",
                 summary = "Run ./gradlew assembleRelease in the current project",
             ),
         )
 
         compose.onNodeWithText("Approve agent action?").assertIsDisplayed()
         compose.onNodeWithText("Run a command").assertIsDisplayed()
-        compose.onNodeWithText("shell", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("bash", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Run ./gradlew assembleRelease in the current project").assertIsDisplayed()
         compose.onNodeWithText("Review this action before it runs.", substring = true).assertIsDisplayed()
 
@@ -292,6 +292,11 @@ Original instruction.
 
         compose.onNodeWithText("Deny").assertIsDisplayed()
         compose.onNodeWithText("Approve once").assertIsDisplayed()
+        compose.onNodeWithText("Section 1 of 2").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Next section").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Section 2 of 2").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Previous section").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Copy full details").performScrollTo().assertIsDisplayed()
         state.value = state.value.copy(pendingPermission = null)
     }
 
@@ -385,6 +390,7 @@ Original instruction.
         compose.onNodeWithText("Allow changes automatically").performClick()
         compose.onNodeWithText("Enable automatic approval?").assertIsDisplayed()
         compose.onNodeWithText("MCP actions", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("linked phone folders", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Enable automatic approval").performClick()
         compose.onNodeWithText("Allow changes automatically").assertIsSelected()
     }

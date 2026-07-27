@@ -115,6 +115,7 @@ import java.util.concurrent.TimeUnit
 data class ModelOption(val providerId: String, val modelId: String, val label: String)
 
 enum class ToolStatus { RUNNING, DONE, ERROR }
+enum class TurnOutcome { STOPPED, FAILED }
 
 data class PermissionRequest(val tool: String, val summary: String)
 
@@ -207,6 +208,7 @@ data class ChatUiState(
     val notice: String? = null,
     val error: String? = null,
     val interruptedTurn: Boolean = false,
+    val turnOutcome: TurnOutcome? = null,
     val draftPhotos: Map<String, List<MessagePart.Image>> = emptyMap(),
 )
 
@@ -354,6 +356,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // Messages sent while a turn is running: the agent loop drains them as steering (picked up at its next
     // step, so it can be redirected without stopping) or as a follow-up at the end - nothing is dropped.
     private val pendingMessages = java.util.concurrent.ConcurrentLinkedQueue<String>()
+    private val queueStateLock = Any()
     private val queueSource = MessageSource { generateSequence { pendingMessages.poll() }.toList() }
 
     init {
@@ -406,6 +409,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             currentProjectId = activeProjectId,
                             error = if (interrupted) TURN_INTERRUPTED_MESSAGE else it.error,
                             interruptedTurn = interrupted,
+                            turnOutcome = latest.turnOutcome?.let { saved ->
+                                runCatching { TurnOutcome.valueOf(saved) }.getOrNull()
+                            },
+                            queued = latest.queuedMessages,
                             sessionLoading = false,
                         )
                     }
@@ -889,6 +896,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 usageOutput = 0,
                 error = null,
                 interruptedTurn = false,
+                turnOutcome = null,
                 sessionLoading = false,
                 currentSessionId = sessionId,
                 currentProjectId = activeProjectId,
@@ -965,10 +973,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         usageOutput = 0,
                         error = if (interrupted) TURN_INTERRUPTED_MESSAGE else null,
                         interruptedTurn = interrupted,
+                        turnOutcome = loaded.turnOutcome?.let { saved ->
+                            runCatching { TurnOutcome.valueOf(saved) }.getOrNull()
+                        },
                         sessionLoading = false,
                         currentSessionId = sessionId,
                         currentProjectId = activeProjectId,
-                        queued = emptyList(),
+                        queued = loaded.queuedMessages,
                     )
                 }
                 true to activeProjectId
@@ -1445,6 +1456,42 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearNotice() = _state.update { it.copy(notice = null) }
 
+    fun clearQueuedMessages() {
+        synchronized(queueStateLock) {
+            pendingMessages.clear()
+            _state.update { it.copy(queued = emptyList()) }
+            checkpointQueuedMessages(emptyList(), activeTurn = false, turnOutcome = _state.value.turnOutcome)
+        }
+    }
+
+    private fun checkpointQueuedMessages(
+        queuedMessages: List<String>,
+        activeTurn: Boolean,
+        turnOutcome: TurnOutcome?,
+        expectedGeneration: Int? = null,
+    ) {
+        if (expectedGeneration != null && expectedGeneration != generation) return
+        val snapshot = history
+        if (snapshot.isEmpty()) return
+        val targetSessionId = sessionId
+        val targetProjectId = currentProjectId
+        val targetTodos = todoStore.snapshot()
+        val writeOrder = sessionWriteOrder.incrementAndGet()
+        (getApplication<Application>() as PhoneCodeApplication).turnScope.launch(Dispatchers.IO) {
+            persist(
+                snapshot = snapshot,
+                activeTurn = activeTurn,
+                targetSessionId = targetSessionId,
+                targetProjectId = targetProjectId,
+                targetTodos = targetTodos,
+                writeOrder = writeOrder,
+                expectedGeneration = expectedGeneration,
+                turnOutcome = turnOutcome,
+                queuedMessages = queuedMessages,
+            )
+        }
+    }
+
     fun setDraftPhotos(composerKey: String, photos: List<MessagePart.Image>) {
         _state.update { state ->
             state.copy(
@@ -1871,10 +1918,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 fail("Wait for the current turn before sending a photo.")
                 return false
             }
-            // Queue it for the running turn instead of dropping it; the agent picks it up at its next step.
-            pendingMessages.add(text)
-            _state.update { it.copy(queued = it.queued + text) }
-            return true
+            return synchronized(queueStateLock) {
+                if (!_state.value.isRunning) return@synchronized false
+                // Queue it for the running turn instead of dropping it; the agent picks it up at its next step.
+                pendingMessages.add(text)
+                _state.update { it.copy(queued = it.queued + text) }
+                checkpointQueuedMessages(_state.value.queued, activeTurn = true, turnOutcome = null)
+                true
+            }
+        }
+        if (_state.value.queued.isNotEmpty()) {
+            fail("Restore or clear the unsent follow-ups before sending another message.")
+            return false
         }
         val selected = _state.value.selected ?: run {
             fail("Select a model first.")
@@ -1903,6 +1958,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 retry = null,
                 error = null,
                 interruptedTurn = false,
+                turnOutcome = null,
             )
         }
         // Foreground lease for the whole turn: without it the OS suspends the process shortly
@@ -1995,11 +2051,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 throw cancelled
             } catch (error: Throwable) {
                 if (gen == generation) {
-                    commitStopped()
+                    commitStopped(turnOutcome = TurnOutcome.FAILED)
                     _state.update {
                         it.copy(
                             error = "The turn stopped unexpectedly: ${humanizeError(error.message ?: error.javaClass.simpleName)} Review workspace changes before retrying.",
                             interruptedTurn = false,
+                            turnOutcome = TurnOutcome.FAILED,
                         )
                     }
                 }
@@ -2025,6 +2082,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun redo() {
         if (_state.value.isRunning) return
+        if (_state.value.queued.isNotEmpty()) {
+            fail("Restore or clear the unsent follow-ups before retrying this turn.")
+            return
+        }
         val lastUser = _state.value.lines.filterIsInstance<ChatLine.User>().lastOrNull() ?: return
         val previousHistory = history
         val previousLines = _state.value.lines
@@ -2040,9 +2101,23 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancel() {
-        generation++ // invalidate the in-flight turn's events immediately, then clean up here (single owner)
-        val stoppedWriteOrder = sessionWriteOrder.incrementAndGet()
-        pendingMessages.clear() // stop means stop: don't let queued messages auto-run after a cancel
+        val (stoppedWriteOrder, stoppedQueued) = synchronized(queueStateLock) {
+            generation++ // invalidate the in-flight turn's events immediately, then clean up here (single owner)
+            val writeOrder = sessionWriteOrder.incrementAndGet()
+            val queued = _state.value.queued
+            pendingMessages.clear() // stop means stop: don't let queued messages auto-run after a cancel
+            _state.update {
+                it.copy(
+                    isRunning = false,
+                    retry = null,
+                    pendingPermission = null,
+                    pendingQuestion = null,
+                    interruptedTurn = false,
+                    turnOutcome = TurnOutcome.STOPPED,
+                )
+            }
+            writeOrder to queued
+        }
         // Cancel the job FIRST so an awaiting tool unwinds via CancellationException (no extra turn/side-effect);
         // completing the deferreds is then only a fallback to resume anything not yet at a cancellation point.
         job?.cancel()
@@ -2068,13 +2143,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         targetProjectId = stoppedProjectId,
                         targetTodos = stoppedTodos,
                         writeOrder = stoppedWriteOrder,
+                        turnOutcome = TurnOutcome.STOPPED,
+                        queuedMessages = stoppedQueued,
                     )
                 }
             } finally {
                 stoppedLease?.let(foregroundLeases::release)
             }
         }
-        _state.update { it.copy(isRunning = false, retry = null, pendingPermission = null, pendingQuestion = null, queued = emptyList(), interruptedTurn = false) }
     }
 
     /**
@@ -2083,7 +2159,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * ending on a bare user message, which read as lost context next message (and which Anthropic rejects
      * as two user turns in a row). Writing the partial assistant reply keeps the model's view = the screen.
      */
-    private fun commitStopped(persistChanges: Boolean = true) {
+    private fun commitStopped(
+        persistChanges: Boolean = true,
+        turnOutcome: TurnOutcome? = _state.value.turnOutcome,
+    ) {
         val streamed = commitStreaming()
         val parts = buildList {
             if (streamed.reasoning.isNotBlank()) add(MessagePart.Reasoning(streamed.reasoning))
@@ -2093,7 +2172,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (parts.isEmpty()) repaired else repaired + ChatMessage(Role.ASSISTANT, parts)
         }
         if (history.isNotEmpty() && persistChanges) {
-            persist()
+            persist(turnOutcome = turnOutcome)
         } else if (persistChanges) {
             sessionStore.setActiveTurn(sessionId, false, sessionWriteOrder.incrementAndGet())
         }
@@ -2106,7 +2185,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         targetProviderId: String,
         expectedGeneration: Int,
     ) {
-        when (event) {
+        synchronized(queueStateLock) {
+            // Serialize every admitted event with cancel/replacement transitions. The collector's outer
+            // generation check is only an optimization; this in-lock check is the correctness boundary.
+            if (expectedGeneration != generation) return
+            when (event) {
             is AgentEvent.TextDelta -> appendStreaming(text = event.text, expectedGeneration = expectedGeneration)
             is AgentEvent.ReasoningDelta -> appendStreaming(reasoning = event.text, expectedGeneration = expectedGeneration)
             is AgentEvent.Retrying -> _state.update {
@@ -2158,15 +2241,86 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             is AgentEvent.UserMessage -> {
                 // The agent just folded a queued message into the turn: flush the live reply, drop the
                 // message into the timeline in order, and clear it from the pending list.
-                commitStreaming()
-                _state.update { it.copy(lines = it.lines + ChatLine.User(event.text), queued = it.queued - event.text) }
+                synchronized(queueStateLock) {
+                    if (expectedGeneration == generation) {
+                        val streamed = commitStreaming()
+                        val assistantParts = buildList {
+                            if (streamed.reasoning.isNotBlank()) add(MessagePart.Reasoning(streamed.reasoning))
+                            if (streamed.text.isNotBlank()) add(MessagePart.Text(streamed.text))
+                        }
+                        if (assistantParts.isNotEmpty()) {
+                            history = history + ChatMessage(Role.ASSISTANT, assistantParts)
+                        }
+                        // Every UserMessage event represents a distinct queued submission, even when its
+                        // text matches the preceding prompt. Text equality is not message identity.
+                        history = history + ChatMessage(Role.USER, listOf(MessagePart.Text(event.text)))
+                        _state.update { it.copy(lines = it.lines + ChatLine.User(event.text), queued = it.queued - event.text) }
+                        checkpointQueuedMessages(
+                            _state.value.queued,
+                            activeTurn = true,
+                            turnOutcome = null,
+                            expectedGeneration = expectedGeneration,
+                        )
+                    }
+                }
             }
             is AgentEvent.Error -> {
-                val queuedWereDropped = _state.value.queued.isNotEmpty()
-                pendingMessages.clear()
-                // A failed turn that carried its accumulated messages preserves context (and persists it) so
-                // the next message continues the conversation instead of starting cold after a connection drop.
-                if (event.messages.isNotEmpty()) {
+                synchronized(queueStateLock) {
+                    if (expectedGeneration != generation) return
+                    pendingMessages.clear()
+                    _state.update {
+                        it.copy(
+                            error = humanizeError(event, targetProviderId),
+                            isRunning = false,
+                            retry = null,
+                            interruptedTurn = false,
+                            turnOutcome = TurnOutcome.FAILED,
+                        )
+                    }
+                    val terminalQueued = _state.value.queued
+                    // A failed turn that carried its accumulated messages preserves context (and persists it)
+                    // so the next message continues instead of starting cold after a connection drop.
+                    if (event.messages.isNotEmpty()) {
+                        history = event.messages
+                        commitStreaming()
+                        persist(
+                            event.messages,
+                            targetSessionId = targetSessionId,
+                            targetProjectId = targetProjectId,
+                            expectedGeneration = expectedGeneration,
+                            turnOutcome = TurnOutcome.FAILED,
+                            queuedMessages = terminalQueued,
+                        )
+                    } else {
+                        commitStreaming()
+                        if (history.isEmpty()) {
+                            sessionStore.setActiveTurn(targetSessionId, false, sessionWriteOrder.incrementAndGet())
+                        } else {
+                            persist(
+                                history,
+                                targetSessionId = targetSessionId,
+                                targetProjectId = targetProjectId,
+                                expectedGeneration = expectedGeneration,
+                                turnOutcome = TurnOutcome.FAILED,
+                                queuedMessages = terminalQueued,
+                            )
+                        }
+                    }
+                }
+            }
+            is AgentEvent.TurnComplete -> {
+                synchronized(queueStateLock) {
+                    if (expectedGeneration != generation) return
+                    pendingMessages.clear()
+                    _state.update {
+                        it.copy(
+                            isRunning = false,
+                            retry = null,
+                            interruptedTurn = false,
+                            turnOutcome = null,
+                        )
+                    }
+                    val terminalQueued = _state.value.queued
                     history = event.messages
                     commitStreaming()
                     persist(
@@ -2174,41 +2328,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         targetSessionId = targetSessionId,
                         targetProjectId = targetProjectId,
                         expectedGeneration = expectedGeneration,
-                    )
-                } else {
-                    commitStreaming()
-                    sessionStore.setActiveTurn(targetSessionId, false, sessionWriteOrder.incrementAndGet())
-                }
-                _state.update {
-                    it.copy(
-                        error = humanizeError(event, targetProviderId),
-                        isRunning = false,
-                        retry = null,
-                        interruptedTurn = false,
-                        queued = emptyList(),
-                        notice = if (queuedWereDropped) "Queued messages were not sent." else it.notice,
+                        queuedMessages = terminalQueued,
                     )
                 }
             }
-            is AgentEvent.TurnComplete -> {
-                val queuedWereDropped = _state.value.queued.isNotEmpty()
-                pendingMessages.clear()
-                history = event.messages
-                commitStreaming()
-                persist(
-                    event.messages,
-                    targetSessionId = targetSessionId,
-                    targetProjectId = targetProjectId,
-                    expectedGeneration = expectedGeneration,
-                )
-                _state.update {
-                    it.copy(
-                        retry = null,
-                        interruptedTurn = false,
-                        queued = emptyList(),
-                        notice = if (queuedWereDropped) "Queued messages were not sent." else it.notice,
-                    )
-                }
             }
         }
     }
@@ -2222,6 +2345,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         targetTodos: List<TodoItem> = todoStore.snapshot(),
         expectedGeneration: Int? = null,
         writeOrder: Long = sessionWriteOrder.incrementAndGet(),
+        turnOutcome: TurnOutcome? = _state.value.turnOutcome,
+        queuedMessages: List<String> = _state.value.queued,
     ) {
         if (snapshot.isEmpty()) return
         if (expectedGeneration != null && expectedGeneration != generation) return
@@ -2239,6 +2364,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     projectId = targetProjectId,
                     activeTurn = activeTurn,
                     todos = targetTodos,
+                    turnOutcome = turnOutcome?.name,
+                    queuedMessages = queuedMessages,
                 ),
                 writeOrder,
             )

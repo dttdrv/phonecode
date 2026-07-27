@@ -81,10 +81,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -100,7 +102,9 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -179,6 +183,7 @@ import dev.phonecode.app.agent.ModelOption
 import dev.phonecode.app.agent.PermissionRequest
 import dev.phonecode.app.agent.QuestionRequest
 import dev.phonecode.app.agent.ToolStatus
+import dev.phonecode.app.agent.TurnOutcome
 import dev.phonecode.app.ui.components.ContextRing
 import dev.phonecode.app.ui.components.PcButton
 import dev.phonecode.app.ui.components.PcDivider
@@ -451,7 +456,7 @@ fun ChatScreen(
                                         text = line.text,
                                         reasoning = reasoningBefore(state.lines, i),
                                         streaming = false,
-                                        showActions = i == lastAssistantIndex && !state.isRunning,
+                                        showActions = i == lastAssistantIndex && !state.isRunning && state.turnOutcome == null,
                                         showReport = !state.isRunning,
                                         completedAt = state.lastCompletedAt,
                                         onCopy = { },
@@ -601,8 +606,15 @@ fun ChatScreen(
                 label = "errorBanner",
             ) { error ->
                 if (error != null) ErrorBanner(
-                    text = error,
-                    actionLabel = if (state.interruptedTurn) "Retry" else null,
+                    text = if (state.turnOutcome == TurnOutcome.FAILED) {
+                        "$error Partial output may be incomplete."
+                    } else {
+                        error
+                    },
+                    actionLabel = if (
+                        state.queued.isEmpty() &&
+                        (state.interruptedTurn || state.turnOutcome == TurnOutcome.FAILED)
+                    ) "Retry" else null,
                     onAction = vm::redo,
                     onDismiss = vm::clearError,
                 )
@@ -634,8 +646,29 @@ fun ChatScreen(
                     LaunchedEffect(notice) { kotlinx.coroutines.delay(3500); vm.clearNotice() }
                 }
             }
+            if (state.error == null) {
+                state.turnOutcome?.let { outcome ->
+                    TurnOutcomeBanner(
+                        outcome = outcome,
+                        canRetry = outcome == TurnOutcome.FAILED && state.queued.isEmpty(),
+                        onRetry = vm::redo,
+                    )
+                }
+            }
             if (state.todos.isNotEmpty()) TodoPanel(state.todos)
-            if (state.queued.isNotEmpty()) QueuedMessages(state.queued)
+            if (state.queued.isNotEmpty()) {
+                QueuedMessages(
+                    queued = state.queued,
+                    recoverable = !state.isRunning,
+                    onRestore = {
+                        input = listOf(input.trim(), state.queued.joinToString("\n\n"))
+                            .filter { it.isNotBlank() }
+                            .joinToString("\n\n")
+                        vm.clearQueuedMessages()
+                    },
+                    onClear = vm::clearQueuedMessages,
+                )
+            }
             if (state.sessionLoading) NoticeBanner("Opening chat…")
             Composer(
                 state = state,
@@ -818,30 +851,68 @@ private fun EmptyState(
     }
 }
 
-/** Messages sent while the agent is working, shown faded above the composer until it picks each one up. */
+/** Messages sent while the agent is working, or recoverable drafts if the turn ended first. */
 @Composable
-private fun QueuedMessages(queued: List<String>) {
+private fun QueuedMessages(
+    queued: List<String>,
+    recoverable: Boolean,
+    onRestore: () -> Unit,
+    onClear: () -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
     Column(
-        Modifier.fillMaxWidth().padding(bottom = 6.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(colors.surface)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        for (text in queued) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Box(
-                    Modifier.widthIn(max = 280.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(colors.surfaceContainerHigh.copy(alpha = 0.45f))
-                        .padding(horizontal = 15.dp, vertical = 9.dp),
-                ) {
-                    Text(
-                        text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onBackground.copy(alpha = 0.55f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (recoverable) {
+                    "${queued.size} unsent ${if (queued.size == 1) "follow-up" else "follow-ups"}"
+                } else {
+                    "${queued.size} queued ${if (queued.size == 1) "follow-up" else "follow-ups"}"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = if (recoverable) colors.onSurface else colors.secondary,
+                modifier = Modifier.weight(1f),
+            )
+            if (recoverable) {
+                TextButton(onClick = onRestore, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                    Text("Restore")
                 }
+                TextButton(onClick = onClear, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                    Text("Clear")
+                }
+            }
+        }
+        if (!recoverable) {
+            queued.firstOrNull()?.let { text ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Box(
+                        Modifier.widthIn(max = 280.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(colors.surfaceContainerHigh.copy(alpha = 0.45f))
+                            .padding(horizontal = 15.dp, vertical = 9.dp),
+                    ) {
+                        Text(
+                            text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.onBackground.copy(alpha = 0.55f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            if (queued.size > 1) {
+                Text(
+                    "+${queued.size - 1} more",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.tertiary,
+                    modifier = Modifier.align(Alignment.End),
+                )
             }
         }
     }
@@ -1047,9 +1118,10 @@ private fun AiReportFlow(
     var error by remember { mutableStateOf<String?>(null) }
     val reportSuccessFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
-    val backMotion = rememberPredictiveBackMotion(onBack = onDismiss)
+    val dismissReport = { if (!submitting) onDismiss() }
+    val backMotion = rememberPredictiveBackMotion(onBack = dismissReport)
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = dismissReport,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(
@@ -1095,7 +1167,7 @@ private fun AiReportFlow(
                     error = error,
                     onCategory = { category = it; error = null },
                     onNote = { note = it.take(1000); error = null },
-                    onDismiss = onDismiss,
+                    onDismiss = dismissReport,
                     onSubmit = {
                         val chosen = category ?: return@ReportReview
                         submitting = true
@@ -1136,7 +1208,7 @@ private fun ReportReview(
             Modifier.fillMaxWidth().height(Spacing.navBarHeight),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            PcIconButton(Icons.Filled.Close, "Cancel report", onClick = onDismiss)
+            PcIconButton(Icons.Filled.Close, "Cancel report", enabled = !submitting, onClick = onDismiss)
             Text(
                 "Report AI response",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
@@ -1144,8 +1216,31 @@ private fun ReportReview(
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
             )
             TextButton(onClick = onSubmit, enabled = category != null && !submitting) {
-                Text(if (submitting) "Sending…" else "Send")
+                Text(
+                    if (submitting) "Sending…" else "Send",
+                    modifier = if (submitting) {
+                        Modifier.semantics {
+                            contentDescription = "Report submission in progress"
+                            liveRegion = LiveRegionMode.Polite
+                        }
+                    } else {
+                        Modifier
+                    },
+                )
             }
+        }
+        error?.let { message ->
+            Text(
+                message,
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.error,
+                modifier = Modifier.fillMaxWidth()
+                    .semantics {
+                        this.error(message)
+                        liveRegion = LiveRegionMode.Polite
+                    }
+                    .padding(vertical = 8.dp),
+            )
         }
         Column(
             Modifier.fillMaxSize().contentVerticalScroll(rememberScrollState())
@@ -1164,6 +1259,7 @@ private fun ReportReview(
                         title = option.title,
                         detail = option.detail,
                         selected = category == option.id,
+                        enabled = !submitting,
                         onClick = { onCategory(option.id) },
                     )
                 }
@@ -1173,6 +1269,7 @@ private fun ReportReview(
                 BasicTextField(
                     value = note,
                     onValueChange = onNote,
+                    enabled = !submitting,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onBackground),
                     cursorBrush = SolidColor(colors.onBackground),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp)
@@ -1189,13 +1286,9 @@ private fun ReportReview(
                 Text("${note.length}/1000", style = MaterialTheme.typography.labelSmall, color = colors.tertiary)
             }
             Text(
-                error ?: "The response, prompt, files, credentials, tool activity, chat history, and device identifiers are never attached.",
+                "The response, prompt, files, credentials, tool activity, chat history, and device identifiers are never attached.",
                 style = MaterialTheme.typography.labelMedium,
-                color = if (error != null) colors.error else colors.tertiary,
-                modifier = if (error == null) Modifier else Modifier.semantics {
-                    this.error(error)
-                    liveRegion = LiveRegionMode.Polite
-                },
+                color = colors.tertiary,
             )
         }
     }
@@ -1206,6 +1299,7 @@ private fun ReportChoice(
     title: String,
     detail: String,
     selected: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -1217,7 +1311,8 @@ private fun ReportChoice(
                 this.selected = selected
                 role = Role.RadioButton
             }
-            .clickable(onClick = onClick).padding(14.dp),
+            .graphicsLayer { alpha = if (enabled) 1f else 0.6f }
+            .clickable(enabled = enabled, onClick = onClick).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -1398,10 +1493,20 @@ private fun ToolActivityView(line: ChatLine.ToolActivity) {
     var detailsOpen by remember(line.id) { mutableStateOf(false) }
     val iconPulse = if (running) rememberNeuralBreath(1800) else null
     val interaction = remember { MutableInteractionSource() }
+    val statusLabel = when (line.status) {
+        ToolStatus.RUNNING -> "Running"
+        ToolStatus.DONE -> "Done"
+        ToolStatus.ERROR -> "Failed"
+    }
     Column(
         Modifier.fillMaxWidth().pressFeedback(interaction, pressedScale = 0.99f).clip(MaterialTheme.shapes.medium)
             .background(if (error) colors.errorContainer else colors.surfaceContainerLow)
             .heightIn(min = Spacing.touchTarget)
+            .semantics {
+                contentDescription = "${toolAction(line.name, line.status)}, $statusLabel"
+                stateDescription = statusLabel
+                liveRegion = LiveRegionMode.Polite
+            }
             .clickable(interactionSource = interaction, indication = ripple()) { detailsOpen = true },
     ) {
         Row(
@@ -1439,13 +1544,15 @@ private fun ToolActivityView(line: ChatLine.ToolActivity) {
                 }
             }
             Text(
-                when (line.status) {
-                    ToolStatus.RUNNING -> "Running"
-                    ToolStatus.DONE -> "Done"
-                    ToolStatus.ERROR -> "Failed"
-                },
+                statusLabel,
                 style = MaterialTheme.typography.labelSmall,
                 color = if (error) colors.onErrorContainer else colors.tertiary,
+            )
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                "Open tool details",
+                tint = if (error) colors.onErrorContainer else colors.tertiary,
+                modifier = Modifier.size(18.dp),
             )
         }
     }
@@ -1530,6 +1637,47 @@ private fun NoticeBanner(text: String) {
 }
 
 @Composable
+private fun TurnOutcomeBanner(
+    outcome: TurnOutcome,
+    canRetry: Boolean,
+    onRetry: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val text = when (outcome) {
+        TurnOutcome.STOPPED -> "Turn stopped · Partial output may be incomplete."
+        TurnOutcome.FAILED -> "Turn failed · Partial output may be incomplete."
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(colors.surface)
+            .semantics {
+                stateDescription = when (outcome) {
+                    TurnOutcome.STOPPED -> "Stopped"
+                    TurnOutcome.FAILED -> "Failed"
+                }
+                liveRegion = LiveRegionMode.Polite
+            }
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (outcome == TurnOutcome.STOPPED) Icons.Filled.Stop else Icons.Outlined.Flag,
+            null,
+            tint = if (outcome == TurnOutcome.FAILED) colors.error else colors.secondary,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(text, style = MaterialTheme.typography.labelMedium, color = colors.secondary, modifier = Modifier.weight(1f))
+        if (canRetry) {
+            TextButton(onClick = onRetry, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                Text("Retry")
+            }
+        }
+    }
+}
+
+@Composable
 private fun ErrorBanner(
     text: String,
     actionLabel: String? = null,
@@ -1561,8 +1709,17 @@ internal fun TodoPanel(todos: List<TodoItem>) {
     // Compact + collapsible: a one-line summary by default (it floats over the transcript, so a full list
     // was occluding the latest messages). Tap to expand the full plan, capped and scrollable.
     var expanded by remember { mutableStateOf(false) }
-    fun glyphOf(s: TodoStatus) = when (s) {
-        TodoStatus.PENDING -> "○"; TodoStatus.IN_PROGRESS -> "◐"; TodoStatus.COMPLETED -> "●"; TodoStatus.CANCELLED -> "✕"
+    fun iconOf(s: TodoStatus) = when (s) {
+        TodoStatus.PENDING -> Icons.Outlined.RadioButtonUnchecked
+        TodoStatus.IN_PROGRESS -> Icons.Outlined.Schedule
+        TodoStatus.COMPLETED -> Icons.Filled.CheckCircle
+        TodoStatus.CANCELLED -> Icons.Filled.Close
+    }
+    fun labelOf(s: TodoStatus) = when (s) {
+        TodoStatus.PENDING -> "Task pending"
+        TodoStatus.IN_PROGRESS -> "Task in progress"
+        TodoStatus.COMPLETED -> "Task completed"
+        TodoStatus.CANCELLED -> "Task cancelled"
     }
     fun colorOf(s: TodoStatus) = when (s) {
         TodoStatus.COMPLETED, TodoStatus.CANCELLED -> colors.tertiary
@@ -1585,7 +1742,12 @@ internal fun TodoPanel(todos: List<TodoItem>) {
         ) {
             Text("Tasks $done/${todos.size}", style = MaterialTheme.typography.labelSmall, color = colors.secondary)
             if (active != null) {
-                Text(glyphOf(active.status), style = MaterialTheme.typography.labelMedium.copy(fontFamily = PcMono), color = colorOf(active.status))
+                Icon(
+                    iconOf(active.status),
+                    labelOf(active.status),
+                    tint = colorOf(active.status),
+                    modifier = Modifier.size(16.dp),
+                )
                 Text(
                     active.content, style = MaterialTheme.typography.labelMedium, color = colors.onBackground,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
@@ -1607,7 +1769,12 @@ internal fun TodoPanel(todos: List<TodoItem>) {
             ) {
                 todos.forEach { todo ->
                     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(glyphOf(todo.status), style = MaterialTheme.typography.labelMedium.copy(fontFamily = PcMono), color = colorOf(todo.status))
+                        Icon(
+                            iconOf(todo.status),
+                            labelOf(todo.status),
+                            tint = colorOf(todo.status),
+                            modifier = Modifier.size(16.dp),
+                        )
                         Text(todo.content, style = MaterialTheme.typography.labelMedium, color = colorOf(todo.status))
                     }
                 }

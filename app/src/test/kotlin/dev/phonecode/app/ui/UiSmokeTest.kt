@@ -22,7 +22,20 @@ import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.agent.ChatUiState
 import dev.phonecode.app.agent.ChatLine
 import dev.phonecode.app.agent.PermissionRequest
+import dev.phonecode.app.agent.ToolStatus
+import dev.phonecode.app.agent.TurnOutcome
+import dev.phonecode.agent.AgentEvent
+import dev.phonecode.provider.domain.ChatMessage
+import dev.phonecode.provider.domain.MessagePart
+import dev.phonecode.provider.domain.Role
+import dev.phonecode.app.data.SessionStore
+import dev.phonecode.app.data.PersistedPart
+import dev.phonecode.app.data.PersistedRole
 import kotlinx.coroutines.flow.MutableStateFlow
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertEquals
@@ -31,6 +44,8 @@ import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Robolectric smoke tests over the REAL app composition: launch PhoneCodeApp and press everything
@@ -320,6 +335,492 @@ Original instruction.
     }
 
     @Test
+    fun queuedFollowUpIsCheckpointedBeforeTheRunningTurnEnds() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val historyField = vm.javaClass.getDeclaredField("history").apply { isAccessible = true }
+        historyField.set(
+            vm,
+            listOf(ChatMessage(Role.USER, listOf(MessagePart.Text("Active prompt")))),
+        )
+        state.value = state.value.copy(
+            isRunning = true,
+            lines = listOf(ChatLine.User("Active prompt")),
+        )
+        val storeField = vm.javaClass.getDeclaredField("sessionStore").apply { isAccessible = true }
+        val store = storeField.get(vm) as SessionStore
+
+        assertTrue(vm.send("Persist this follow-up"))
+        compose.waitUntil(5_000) {
+            store.load(state.value.currentSessionId)?.queuedMessages ==
+                listOf("Persist this follow-up")
+        }
+    }
+
+    @Test
+    fun consumedFollowUpIsPersistedInHistoryBeforeLeavingTheQueue() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val historyField = vm.javaClass.getDeclaredField("history").apply { isAccessible = true }
+        historyField.set(
+            vm,
+            listOf(ChatMessage(Role.USER, listOf(MessagePart.Text("Active prompt")))),
+        )
+        state.value = state.value.copy(
+            isRunning = true,
+            lines = listOf(ChatLine.User("Active prompt")),
+            queued = listOf("Consumed follow-up"),
+        )
+        val generationField = vm.javaClass.getDeclaredField("generation").apply { isAccessible = true }
+        val reduce = vm.javaClass.declaredMethods.single { it.name == "reduce" }.apply { isAccessible = true }
+        val storeField = vm.javaClass.getDeclaredField("sessionStore").apply { isAccessible = true }
+        val store = storeField.get(vm) as SessionStore
+
+        reduce.invoke(
+            vm,
+            AgentEvent.UserMessage("Consumed follow-up"),
+            state.value.currentSessionId,
+            state.value.currentProjectId,
+            "anthropic",
+            generationField.getInt(vm),
+        )
+        compose.waitUntil(5_000) {
+            val persisted = store.load(state.value.currentSessionId)
+            persisted?.queuedMessages?.isEmpty() == true &&
+                persisted.messages.lastOrNull()?.role == PersistedRole.USER &&
+                persisted.messages.lastOrNull()?.parts ==
+                listOf(PersistedPart.Text("Consumed follow-up"))
+        }
+    }
+
+    @Test
+    fun consumedFollowUpCheckpointsTheVisibleAssistantReplyBeforeIt() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val historyField = vm.javaClass.getDeclaredField("history").apply { isAccessible = true }
+        historyField.set(
+            vm,
+            listOf(ChatMessage(Role.USER, listOf(MessagePart.Text("Active prompt")))),
+        )
+        state.value = state.value.copy(
+            isRunning = true,
+            lines = listOf(ChatLine.User("Active prompt")),
+            queued = listOf("Consumed follow-up"),
+        )
+        val generationField = vm.javaClass.getDeclaredField("generation").apply { isAccessible = true }
+        val generation = generationField.getInt(vm)
+        val reduce = vm.javaClass.declaredMethods.single { it.name == "reduce" }.apply { isAccessible = true }
+        val storeField = vm.javaClass.getDeclaredField("sessionStore").apply { isAccessible = true }
+        val store = storeField.get(vm) as SessionStore
+
+        reduce.invoke(
+            vm,
+            AgentEvent.TextDelta("Visible assistant reply"),
+            state.value.currentSessionId,
+            state.value.currentProjectId,
+            "anthropic",
+            generation,
+        )
+        reduce.invoke(
+            vm,
+            AgentEvent.UserMessage("Consumed follow-up"),
+            state.value.currentSessionId,
+            state.value.currentProjectId,
+            "anthropic",
+            generation,
+        )
+
+        compose.waitUntil(5_000) {
+            store.load(state.value.currentSessionId)?.queuedMessages?.isEmpty() == true
+        }
+        val persisted = store.load(state.value.currentSessionId)
+        assertEquals(
+            listOf(PersistedRole.USER, PersistedRole.ASSISTANT, PersistedRole.USER),
+            persisted?.messages?.map { it.role },
+        )
+        assertEquals(
+            listOf(PersistedPart.Text("Visible assistant reply")),
+            persisted?.messages?.get(1)?.parts,
+        )
+    }
+
+    @Test
+    fun consumedFollowUpAfterCancellationCannotReactivateTheStoppedTurn() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val historyField = vm.javaClass.getDeclaredField("history").apply { isAccessible = true }
+        historyField.set(
+            vm,
+            listOf(ChatMessage(Role.USER, listOf(MessagePart.Text("Active prompt")))),
+        )
+        state.value = state.value.copy(
+            isRunning = true,
+            lines = listOf(ChatLine.User("Active prompt")),
+            queued = listOf("Do not consume after stop"),
+        )
+        val generationField = vm.javaClass.getDeclaredField("generation").apply { isAccessible = true }
+        val admittedGeneration = generationField.getInt(vm)
+        val reduce = vm.javaClass.declaredMethods.single { it.name == "reduce" }.apply { isAccessible = true }
+        val storeField = vm.javaClass.getDeclaredField("sessionStore").apply { isAccessible = true }
+        val store = storeField.get(vm) as SessionStore
+
+        vm.cancel()
+        reduce.invoke(
+            vm,
+            AgentEvent.UserMessage("Do not consume after stop"),
+            state.value.currentSessionId,
+            state.value.currentProjectId,
+            "anthropic",
+            admittedGeneration,
+        )
+
+        compose.waitUntil(5_000) {
+            store.load(state.value.currentSessionId)?.turnOutcome == TurnOutcome.STOPPED.name
+        }
+        val persisted = store.load(state.value.currentSessionId)
+        assertFalse(persisted?.activeTurn ?: true)
+        assertEquals(listOf("Do not consume after stop"), persisted?.queuedMessages)
+        assertEquals(listOf("Do not consume after stop"), state.value.queued)
+    }
+
+    @Test
+    fun staleErrorAfterCancellationCannotOverwriteStoppedState() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val historyField = vm.javaClass.getDeclaredField("history").apply { isAccessible = true }
+        historyField.set(
+            vm,
+            listOf(ChatMessage(Role.USER, listOf(MessagePart.Text("Active prompt")))),
+        )
+        state.value = state.value.copy(
+            isRunning = true,
+            lines = listOf(ChatLine.User("Active prompt")),
+            queued = listOf("Keep after stop"),
+        )
+        val generationField = vm.javaClass.getDeclaredField("generation").apply { isAccessible = true }
+        val admittedGeneration = generationField.getInt(vm)
+        val reduce = vm.javaClass.declaredMethods.single { it.name == "reduce" }.apply { isAccessible = true }
+
+        vm.cancel()
+        reduce.invoke(
+            vm,
+            AgentEvent.Error("stale failure"),
+            state.value.currentSessionId,
+            state.value.currentProjectId,
+            "anthropic",
+            admittedGeneration,
+        )
+
+        compose.waitForIdle()
+        assertFalse(state.value.isRunning)
+        assertEquals(TurnOutcome.STOPPED, state.value.turnOutcome)
+        assertEquals(listOf("Keep after stop"), state.value.queued)
+    }
+
+    @Test
+    fun staleTurnCompleteAfterCancellationCannotOverwriteStoppedStateOrHistory() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val historyField = vm.javaClass.getDeclaredField("history").apply { isAccessible = true }
+        val stoppedHistory = listOf(ChatMessage(Role.USER, listOf(MessagePart.Text("Active prompt"))))
+        historyField.set(vm, stoppedHistory)
+        state.value = state.value.copy(
+            isRunning = true,
+            lines = listOf(ChatLine.User("Active prompt")),
+            queued = listOf("Keep after stop"),
+        )
+        val generationField = vm.javaClass.getDeclaredField("generation").apply { isAccessible = true }
+        val admittedGeneration = generationField.getInt(vm)
+        val reduce = vm.javaClass.declaredMethods.single { it.name == "reduce" }.apply { isAccessible = true }
+        val staleHistory = stoppedHistory + ChatMessage(
+            Role.ASSISTANT,
+            listOf(MessagePart.Text("Stale completion")),
+        )
+
+        vm.cancel()
+        reduce.invoke(
+            vm,
+            AgentEvent.TurnComplete(staleHistory),
+            state.value.currentSessionId,
+            state.value.currentProjectId,
+            "anthropic",
+            admittedGeneration,
+        )
+
+        compose.waitForIdle()
+        assertFalse(state.value.isRunning)
+        assertEquals(TurnOutcome.STOPPED, state.value.turnOutcome)
+        assertEquals(listOf("Keep after stop"), state.value.queued)
+        assertEquals(stoppedHistory, historyField.get(vm))
+    }
+
+    @Test
+    fun staleHistoryCheckpointAfterCancellationCannotOverwriteStoppedHistory() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val historyField = vm.javaClass.getDeclaredField("history").apply { isAccessible = true }
+        val stoppedHistory = listOf(ChatMessage(Role.USER, listOf(MessagePart.Text("Active prompt"))))
+        historyField.set(vm, stoppedHistory)
+        state.value = state.value.copy(
+            isRunning = true,
+            lines = listOf(ChatLine.User("Active prompt")),
+            queued = listOf("Keep after stop"),
+        )
+        val generationField = vm.javaClass.getDeclaredField("generation").apply { isAccessible = true }
+        val admittedGeneration = generationField.getInt(vm)
+        val reduce = vm.javaClass.declaredMethods.single { it.name == "reduce" }.apply { isAccessible = true }
+        val staleHistory = stoppedHistory + ChatMessage(
+            Role.ASSISTANT,
+            listOf(MessagePart.Text("Stale tool call checkpoint")),
+        )
+
+        vm.cancel()
+        reduce.invoke(
+            vm,
+            AgentEvent.HistoryCheckpoint(staleHistory),
+            state.value.currentSessionId,
+            state.value.currentProjectId,
+            "anthropic",
+            admittedGeneration,
+        )
+
+        compose.waitForIdle()
+        assertEquals(TurnOutcome.STOPPED, state.value.turnOutcome)
+        assertEquals(listOf("Keep after stop"), state.value.queued)
+        assertEquals(stoppedHistory, historyField.get(vm))
+    }
+
+    @Test
+    fun identicalConsumedFollowUpIsPersistedAsADistinctUserMessage() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val historyField = vm.javaClass.getDeclaredField("history").apply { isAccessible = true }
+        historyField.set(
+            vm,
+            listOf(ChatMessage(Role.USER, listOf(MessagePart.Text("Repeat this")))),
+        )
+        state.value = state.value.copy(
+            isRunning = true,
+            lines = listOf(ChatLine.User("Repeat this")),
+            queued = listOf("Repeat this"),
+        )
+        val generationField = vm.javaClass.getDeclaredField("generation").apply { isAccessible = true }
+        val reduce = vm.javaClass.declaredMethods.single { it.name == "reduce" }.apply { isAccessible = true }
+        val storeField = vm.javaClass.getDeclaredField("sessionStore").apply { isAccessible = true }
+        val store = storeField.get(vm) as SessionStore
+
+        reduce.invoke(
+            vm,
+            AgentEvent.UserMessage("Repeat this"),
+            state.value.currentSessionId,
+            state.value.currentProjectId,
+            "anthropic",
+            generationField.getInt(vm),
+        )
+
+        compose.waitUntil(5_000) {
+            store.load(state.value.currentSessionId)?.queuedMessages?.isEmpty() == true
+        }
+        val persisted = store.load(state.value.currentSessionId)
+        assertEquals(2, persisted?.messages?.count { it.role == PersistedRole.USER })
+        assertEquals(
+            listOf(PersistedPart.Text("Repeat this")),
+            persisted?.messages?.lastOrNull()?.parts,
+        )
+    }
+
+    @Test
+    fun unsentFollowUpsBlockAReplacementTurnUntilRecovered() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            isRunning = false,
+            queued = listOf("Recover this first"),
+            selected = state.value.models.first { it.providerId == "anthropic" },
+        )
+
+        try {
+            assertFalse(vm.send("Do something else"))
+            assertEquals(
+                "Restore or clear the unsent follow-ups before sending another message.",
+                state.value.error,
+            )
+            assertEquals(listOf("Recover this first"), state.value.queued)
+        } finally {
+            if (state.value.isRunning) vm.cancel()
+        }
+    }
+
+    @Test
+    fun failedTurnOffersRetryAtTheFailedPrompt() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            lines = listOf(ChatLine.User("Try the request")),
+            error = "The connection failed.",
+            interruptedTurn = false,
+            turnOutcome = TurnOutcome.FAILED,
+        )
+
+        compose.onNodeWithText("Retry").assertIsDisplayed()
+    }
+
+    @Test
+    fun unsentFollowUpsCanBeRestoredWithoutLosingTheirText() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            isRunning = false,
+            queued = listOf("Keep the first follow-up", "Keep the second follow-up"),
+        )
+
+        compose.onNodeWithText("2 unsent follow-ups").assertIsDisplayed()
+        compose.onNodeWithText("Restore").performClick()
+        compose.onNodeWithContentDescription("Message")
+            .assertTextEquals("Keep the first follow-up\n\nKeep the second follow-up")
+        assertTrue(state.value.queued.isEmpty())
+    }
+
+    @Test
+    fun stoppingKeepsQueuedFollowUpsAndMarksPartialOutput() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            isRunning = true,
+            queued = listOf("Do not lose this"),
+        )
+
+        app.chatViewModel.cancel()
+        compose.waitForIdle()
+
+        assertEquals(listOf("Do not lose this"), state.value.queued)
+        compose.onNodeWithText("Turn stopped · Partial output may be incomplete.").assertIsDisplayed()
+        compose.onNodeWithText("1 unsent follow-up").assertIsDisplayed()
+    }
+
+    @Test
+    fun terminalAgentErrorKeepsQueuedFollowUpsRecoverable() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            isRunning = true,
+            lines = listOf(ChatLine.User("Start the turn")),
+            queued = listOf("Recover this follow-up"),
+        )
+        val generationField = vm.javaClass.getDeclaredField("generation").apply { isAccessible = true }
+        val reduce = vm.javaClass.declaredMethods.single { it.name == "reduce" }.apply { isAccessible = true }
+
+        reduce.invoke(
+            vm,
+            AgentEvent.Error("connection failed"),
+            state.value.currentSessionId,
+            state.value.currentProjectId,
+            "anthropic",
+            generationField.getInt(vm),
+        )
+        compose.waitForIdle()
+
+        assertEquals(listOf("Recover this follow-up"), state.value.queued)
+        compose.onNodeWithText("1 unsent follow-up").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("Retry").fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("Restore").performClick()
+        compose.onNodeWithText("Retry").assertIsDisplayed()
+    }
+
+    @Test
+    fun toolLifecycleIsAnnouncedAndItsDetailsAreDiscoverable() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            lines = listOf(
+                ChatLine.ToolActivity(
+                    id = "command-1",
+                    name = "bash",
+                    status = ToolStatus.RUNNING,
+                    detail = "./gradlew test",
+                ),
+            ),
+        )
+
+        compose.onNodeWithContentDescription("Running command, Running").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Open tool details").assertIsDisplayed()
+    }
+
+    @Test
     fun reportSelectionsExposeTheirState() {
         dismissOnboardingIfPresent()
         val app = androidx.test.core.app.ApplicationProvider
@@ -336,6 +837,108 @@ Original instruction.
         compose.onNodeWithText("Hate").performClick().assertIsSelected()
         compose.onNodeWithContentDescription("Optional report details").assertIsDisplayed()
         compose.onNodeWithContentDescription("Cancel report").performClick()
+    }
+
+    @Test
+    fun reportFailureStaysVisibleBesideTheSendAction() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(lines = listOf(ChatLine.Assistant("A response to review.")))
+        replaceReportClient(
+            vm,
+            OkHttpClient.Builder().addInterceptor { chain ->
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(500)
+                    .message("Unavailable")
+                    .body("{}".toResponseBody())
+                    .build()
+            }.build(),
+        )
+
+        try {
+            compose.onNodeWithContentDescription("Report AI response").performClick()
+            compose.onNodeWithText("Hate").performClick()
+            compose.onNodeWithText("Send").performClick()
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithText("Reporting is temporarily unavailable. Try again later.")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+
+            compose.onNodeWithText("Reporting is temporarily unavailable. Try again later.")
+                .assertIsDisplayed()
+            compose.onNodeWithText("Send").assertIsDisplayed()
+        } finally {
+            restoreReportClient(vm)
+        }
+    }
+
+    @Test
+    fun reportCannotDismissWhileSubmissionOutcomeIsUnknown() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val vm = app.chatViewModel
+        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(lines = listOf(ChatLine.Assistant("A response to review.")))
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        replaceReportClient(
+            vm,
+            OkHttpClient.Builder().addInterceptor { chain ->
+                started.countDown()
+                release.await(5, TimeUnit.SECONDS)
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(202)
+                    .message("Accepted")
+                    .body("""{"id":"report-test"}""".toResponseBody())
+                    .build()
+            }.build(),
+        )
+
+        try {
+            compose.onNodeWithContentDescription("Report AI response").performClick()
+            compose.onNodeWithText("Hate").performClick()
+            compose.onNodeWithText("Send").performClick()
+            assertTrue(started.await(5, TimeUnit.SECONDS))
+
+            compose.onNodeWithContentDescription("Cancel report").assertIsNotEnabled()
+            compose.onNodeWithText("Report AI response").assertIsDisplayed()
+            compose.onNodeWithText("Sending…").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Report submission in progress").assertIsDisplayed()
+        } finally {
+            release.countDown()
+            restoreReportClient(vm)
+        }
+    }
+
+    private var originalReportClient: OkHttpClient? = null
+
+    private fun replaceReportClient(vm: Any, client: OkHttpClient) {
+        vm.javaClass.getDeclaredField("reportHttp").apply {
+            isAccessible = true
+            if (originalReportClient == null) originalReportClient = get(vm) as OkHttpClient
+            set(vm, client)
+        }
+    }
+
+    private fun restoreReportClient(vm: Any) {
+        val original = originalReportClient ?: return
+        vm.javaClass.getDeclaredField("reportHttp").apply {
+            isAccessible = true
+            set(vm, original)
+        }
+        originalReportClient = null
     }
 
     @Test

@@ -9,6 +9,7 @@ import dev.phonecode.tools.todo.TodoStatus
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -53,6 +54,35 @@ class SessionStoreTest {
         val restored = store.load("session-1")!!.messages.map { it.toDomain() }
         assertEquals(sample, restored) // data-class equality proves every field survived the round trip
         assertEquals("hi there", store.list().single().preview)
+    }
+
+    @Test fun roundTripsTerminalTurnOutcomeThroughPersistence() {
+        val outcomeField = PersistedSession::class.java.declaredFields
+            .firstOrNull { it.name == "turnOutcome" }
+        assertNotNull("Persisted sessions must retain a stopped or failed turn outcome", outcomeField)
+        outcomeField!!.isAccessible = true
+        val session = PersistedSession("outcome", "Stopped chat", 1000L, sample.map { it.toPersisted() })
+        outcomeField.set(session, "STOPPED")
+
+        store.save(session)
+
+        assertEquals("STOPPED", outcomeField.get(store.load("outcome")))
+    }
+
+    @Test fun roundTripsRecoverableFollowUpsThroughPersistence() {
+        val queuedField = PersistedSession::class.java.declaredFields
+            .firstOrNull { it.name == "queuedMessages" }
+        assertNotNull("Persisted sessions must retain recoverable follow-ups", queuedField)
+        queuedField!!.isAccessible = true
+        val session = PersistedSession("queued", "Queued chat", 1000L, sample.map { it.toPersisted() })
+        queuedField.set(session, listOf("first unsent follow-up", "second unsent follow-up"))
+
+        store.save(session)
+
+        assertEquals(
+            listOf("first unsent follow-up", "second unsent follow-up"),
+            queuedField.get(store.load("queued")),
+        )
     }
 
     @Test fun listReturnsMetaNewestFirst() {

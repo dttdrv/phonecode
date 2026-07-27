@@ -733,6 +733,10 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
             Spacer(Modifier.height(6.dp))
         }
         PcSectionLabel("Providers")
+        Note(
+            "Switches control which providers appear in the model picker. " +
+                "Provider setup and sign-in are managed inside each provider.",
+        )
         if (vm.secureStorageUnavailable()) {
             ErrorText(
                 "Secure storage is unavailable on this device. PhoneCode will not save API keys or sign-in credentials.",
@@ -756,16 +760,26 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
                 val enabled = preset.id !in state.disabledProviders
                 val connected = preset.id == "codex" && state.codexConnected
                 val hasKey = connected || preset.id in keyedIds
+                val setupStatus = when {
+                    connected -> "Signed in with ChatGPT"
+                    hasKey -> "API key saved"
+                    else -> "Setup required"
+                }
+                val visibilityStatus = if (enabled) "Shown in model picker" else "Hidden from model picker"
                 PcRow(onClick = { onOpenProvider(preset.id) }) {
                     Column(Modifier.weight(1f)) {
                         Text(preset.displayName, style = MaterialTheme.typography.bodyLarge, color = if (enabled) colors.onBackground else colors.tertiary)
                         Text(
-                            if (connected) "Signed in with ChatGPT" else if (hasKey) "Key set" else "No key",
+                            "$setupStatus · $visibilityStatus",
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (hasKey) colors.onSurfaceVariant else colors.tertiary,
                         )
                     }
-                    PcToggle(enabled, { vm.toggleProviderDisabled(preset.id) }, "${preset.displayName} enabled")
+                    PcToggle(
+                        enabled,
+                        { vm.toggleProviderDisabled(preset.id) },
+                        "Show ${preset.displayName} in model picker",
+                    )
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(20.dp))
                 }
             }

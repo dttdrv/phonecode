@@ -6,8 +6,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -51,7 +55,11 @@ class TodoPanelRenderTest {
             }
         }
         compose.onRoot().captureRoboImage("screenshots/todo-panel-collapsed.png")
+        compose.onNodeWithContentDescription("Task in progress").assertIsDisplayed()
         compose.onNodeWithText("Tasks 1/4").performClick()
+        compose.onNodeWithContentDescription("Task completed").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Task in progress").onFirst().assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Task pending").onFirst().assertIsDisplayed()
         compose.onRoot().captureRoboImage("screenshots/todo-panel-expanded.png")
     }
 }

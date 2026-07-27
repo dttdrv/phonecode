@@ -21,8 +21,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.agent.ChatUiState
+import dev.phonecode.app.agent.ChatLine
 import dev.phonecode.app.agent.PermissionRequest
 import dev.phonecode.app.agent.QuestionRequest
+import dev.phonecode.app.agent.ToolStatus
+import dev.phonecode.app.agent.TurnOutcome
 import dev.phonecode.app.data.PersistedMessage
 import dev.phonecode.app.data.PersistedPart
 import dev.phonecode.app.data.PersistedRole
@@ -532,6 +535,49 @@ class ScreenshotTest {
         compose.waitForIdle()
         shootDialog("37-approval-long-details-next")
         state.value = state.value.copy(pendingPermission = null)
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h640dp-xhdpi")
+    fun liveTurnRecoveryStates() {
+        awaitConversation()
+        val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        val original = state.value
+        try {
+            state.value = original.copy(
+                lines = original.lines + ChatLine.ToolActivity(
+                    id = "release-check",
+                    name = "bash",
+                    status = ToolStatus.RUNNING,
+                    detail = "./gradlew verifyPlayRelease",
+                ),
+                isRunning = true,
+                error = null,
+                turnOutcome = null,
+                queued = listOf(
+                    "Also verify the store listing assets",
+                    "Keep the release notes concise",
+                    "Check the final bundle manifest",
+                ),
+            )
+            compose.waitForIdle()
+            shootScreen("38-chat-running-queue")
+
+            state.value = state.value.copy(
+                isRunning = false,
+                error = "The connection ended before the turn completed.",
+                turnOutcome = TurnOutcome.FAILED,
+            )
+            compose.waitForIdle()
+            shootScreen("39-chat-failed-recovery")
+        } finally {
+            state.value = original
+        }
     }
 
     @Test

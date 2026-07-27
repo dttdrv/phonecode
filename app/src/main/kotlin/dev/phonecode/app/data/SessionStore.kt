@@ -41,6 +41,8 @@ data class PersistedSession(
     val activeTurn: Boolean = false,
     val todos: List<TodoItem> = emptyList(),
     val branchInitialized: Boolean = false,
+    val turnOutcome: String? = null,
+    val queuedMessages: List<String> = emptyList(),
 )
 
 /** Lightweight catalog row for the sessions list (one-line preview, no full message bodies). */

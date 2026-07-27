@@ -70,11 +70,12 @@ class McpWorkflowPolishTest {
 
     private fun showMcp() {
         val application = app()
+        val settingsViewModel = SettingsViewModel(application)
         compose.activity.setContent {
             PhoneCodeTheme(darkTheme = false) {
                 SettingsScreen(
                     vm = application.chatViewModel,
-                    settingsVm = SettingsViewModel(application),
+                    settingsVm = settingsViewModel,
                     onBack = {},
                     initialPage = "mcp",
                 )

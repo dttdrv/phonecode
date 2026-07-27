@@ -1146,8 +1146,9 @@ Original instruction.
 
         compose.onNodeWithText("MCP servers").performClick()
         compose.onNodeWithText("Add server").performClick()
-        compose.onNodeWithText("Save").performClick()
-        compose.onNodeWithText("Name is required").assertIsDisplayed()
+        compose.onNodeWithText("Save").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Server name").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Remote URL").assertIsDisplayed()
     }
 
     @Test

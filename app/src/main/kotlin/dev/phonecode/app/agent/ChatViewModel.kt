@@ -202,6 +202,7 @@ data class ChatUiState(
     val notice: String? = null,
     val error: String? = null,
     val interruptedTurn: Boolean = false,
+    val draftPhotos: Map<String, List<MessagePart.Image>> = emptyMap(),
 )
 
 /** Orchestrates the agent loop for the chat UI: builds provider + tools + loop, streams events into UI state. */
@@ -1362,6 +1363,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun surfaceError(message: String) = fail(message)
 
     fun clearNotice() = _state.update { it.copy(notice = null) }
+
+    fun setDraftPhotos(composerKey: String, photos: List<MessagePart.Image>) {
+        _state.update { state ->
+            state.copy(
+                draftPhotos = if (photos.isEmpty()) {
+                    state.draftPhotos - composerKey
+                } else {
+                    state.draftPhotos + (composerKey to photos)
+                },
+            )
+        }
+    }
 
     suspend fun submitAiReport(category: String, note: String): AiReportSubmission = withContext(Dispatchers.IO) {
         val body = aiReportPayload(

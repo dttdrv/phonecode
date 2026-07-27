@@ -252,7 +252,7 @@ fun ChatScreen(
     val rootView = LocalView.current
     val composerKey = "${state.currentProjectId.orEmpty()}:${state.currentSessionId}"
     var input by rememberSaveable(composerKey) { mutableStateOf("") }
-    var photos by remember(composerKey) { mutableStateOf<List<MessagePart.Image>>(emptyList()) }
+    val photos = state.draftPhotos[composerKey].orEmpty()
     // Round-4: the custom morphing popouts are retired for standard M3 modal bottom sheets
     // ("improve the pop-out menus, substantially. Maybe use the default Material3 Expressive
     // for now") - platform motion and scrim, native back/swipe dismissal, zero morph jank.
@@ -277,7 +277,11 @@ fun ChatScreen(
             val mime = attachContext.contentResolver.getType(uri).orEmpty()
             if (mime.startsWith("image/")) {
                 val photo = withContext(Dispatchers.IO) { readPhoto(attachContext, uri) }
-                if (photo == null) vm.surfaceError("Couldn't read that photo.") else photos = listOf(photo)
+                if (photo == null) {
+                    vm.surfaceError("Couldn't read that photo.")
+                } else {
+                    vm.setDraftPhotos(composerKey, listOf(photo))
+                }
             } else {
                 val attached = withContext(Dispatchers.IO) { readAttachment(attachContext, uri) }
                 when (attached) {
@@ -634,7 +638,7 @@ fun ChatScreen(
                 input = input,
                 photos = photos,
                 onInput = { input = it },
-                onRemovePhoto = { photos = emptyList() },
+                onRemovePhoto = { vm.setDraftPhotos(composerKey, emptyList()) },
                 hazeState = hazeState,
                 hazeStyle = hazeStyle,
                 onUpload = { picker.launch(arrayOf("image/*", "text/*", "application/json", "application/xml")) },
@@ -648,7 +652,7 @@ fun ChatScreen(
                         }
                         rootView.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
                         input = ""
-                        photos = emptyList()
+                        vm.setDraftPhotos(composerKey, emptyList())
                     }
                 },
                 onStop = vm::cancel,

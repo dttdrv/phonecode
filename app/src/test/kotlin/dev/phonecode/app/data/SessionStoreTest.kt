@@ -62,6 +62,19 @@ class SessionStoreTest {
         assertEquals(listOf("b", "c", "a"), store.list().map { it.id })
     }
 
+    @Test fun externalRestoreInvalidatesCatalogBeforeNormalizationReads() {
+        store.save(PersistedSession("old", "Old", 1L, emptyList()))
+        assertEquals("old", store.list().single().id) // populate the catalog cache
+
+        store.reconcileExternalRestore(writeOrderBoundary = 1L) {
+            File(dir, "old.json").delete()
+            SessionStore(dir).save(PersistedSession("restored", "Restored", 2L, emptyList()))
+            assertEquals("restored", store.list().single().id)
+        }
+
+        assertEquals("restored", store.list().single().id)
+    }
+
     @Test fun deleteRemovesSession() {
         store.save(PersistedSession("x", "X", 1L, emptyList()))
         store.delete("x")

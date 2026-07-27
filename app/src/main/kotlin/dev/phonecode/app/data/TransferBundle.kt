@@ -36,6 +36,7 @@ object TransferBundle {
     private const val MAX_ENTRY_BYTES = 5L * 1024 * 1024 // a single chat/settings file should never be this big
     private const val MAX_TOTAL_BYTES = 100L * 1024 * 1024 // hard stop against zip bombs / disk fill
     private const val ROLLBACK_DIR = ".import-rollback"
+    private const val ROLLBACK_PREPARING_DIR = ".import-rollback-preparing"
     private const val ROLLBACK_JOURNAL = "journal"
     private const val COMMIT_MARKER = "commit-complete"
 
@@ -140,13 +141,20 @@ object TransferBundle {
                 .distinct()
                 .toList()
             val sessionsDir = File(filesDir, "sessions")
-            val rollbackDir = File(filesDir, ROLLBACK_DIR).apply { mkdirs() }
-            val previousRoot = File(rollbackDir, "previous")
+            val rollbackDir = File(filesDir, ROLLBACK_DIR)
+            val preparingDir = File(filesDir, ROLLBACK_PREPARING_DIR).apply {
+                deleteRecursively()
+                mkdirs()
+            }
             val journalLines = buildList {
                 add("sessions\t${sessionsDir.exists()}")
                 affectedFiles.forEach { name -> add("$name\t${File(filesDir, name).isFile}") }
             }
-            writeDurably(File(rollbackDir, ROLLBACK_JOURNAL), journalLines.joinToString("\n"))
+            writeDurably(File(preparingDir, ROLLBACK_JOURNAL), journalLines.joinToString("\n"))
+            // The recovery directory becomes authoritative atomically only after its journal is
+            // durable. A kill before this rename leaves harmless preparation residue.
+            moveReplacing(preparingDir, rollbackDir)
+            val previousRoot = File(rollbackDir, "previous")
             var rollbackComplete = false
             try {
                 if (sessionsDir.exists()) {
@@ -190,9 +198,16 @@ object TransferBundle {
      * new data won; otherwise the mapped previous tree is restored before any store is opened.
      */
     fun recoverInterruptedImport(filesDir: File) {
+        File(filesDir, ROLLBACK_PREPARING_DIR).deleteRecursively()
         val rollbackDir = File(filesDir, ROLLBACK_DIR)
         if (!rollbackDir.exists()) return
         if (File(rollbackDir, COMMIT_MARKER).isFile) {
+            rollbackDir.deleteRecursively()
+            return
+        }
+        if (!File(rollbackDir, ROLLBACK_JOURNAL).isFile &&
+            !File(rollbackDir, "previous").exists()
+        ) {
             rollbackDir.deleteRecursively()
             return
         }

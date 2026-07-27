@@ -181,6 +181,7 @@ private fun ChatUiState.settingsSnapshot(): ChatUiState = copy(
     contextLimit = null,
     lastCompletedAt = null,
     interruptedTurn = false,
+    draftPhotos = emptyMap(),
 )
 
 @Composable

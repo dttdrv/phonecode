@@ -179,8 +179,14 @@ class SessionStore(private val dir: File) {
     fun invalidateCatalog(): Unit = locked { metaCache = null }
 
     fun <T> reconcileExternalRestore(writeOrderBoundary: Long, restore: () -> T): T = locked {
-        val result = restore()
         metaCache = null
+        val result = try {
+            restore()
+        } finally {
+            // The callback replaces session files and may read them while normalizing. Neither a
+            // pre-import cache nor a cache built before rollback may cross this boundary.
+            metaCache = null
+        }
         cache().keys.forEach { id ->
             val key = deletionKey(id)
             deletionTombstones.remove(key)

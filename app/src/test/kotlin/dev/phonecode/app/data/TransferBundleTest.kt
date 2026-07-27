@@ -247,6 +247,16 @@ class TransferBundleTest {
         assertFalse(File(target, ".import-rollback").exists())
     }
 
+    @Test fun startupRecoveryDiscardsUnarmedPreparationResidue() {
+        File(target, ".import-rollback-preparing").mkdirs()
+        File(target, ".import-rollback").mkdirs()
+
+        TransferBundle.recoverInterruptedImport(target)
+
+        assertFalse(File(target, ".import-rollback-preparing").exists())
+        assertFalse(File(target, ".import-rollback").exists())
+    }
+
     @Test fun maliciousAndUnknownEntriesAreSkipped() {
         val zip = ByteArrayOutputStream()
         ZipOutputStream(zip).use { zos ->

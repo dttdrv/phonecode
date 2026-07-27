@@ -172,6 +172,7 @@ private fun ChatUiState.shellSnapshot(): ChatUiState = copy(
     contextLimit = null,
     lastCompletedAt = null,
     interruptedTurn = false,
+    draftPhotos = emptyMap(),
 )
 
 private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
@@ -337,25 +338,6 @@ fun PhoneCodeApp() {
                             }
                         },
                 ) {
-                    Box(
-                        Modifier.fillMaxSize()
-                            .then(if (route == "chat") Modifier else Modifier.clearAndSetSemantics {}),
-                    ) {
-                        if (route == "chat") {
-                            ChatScreen(
-                                vm = vm,
-                                onOpenDrawer = openDrawer,
-                                onOpenModelSetup = {
-                                    navController.navigate("model-setup") { launchSingleTop = true }
-                                },
-                                onOpenProviderSetup = { providerId ->
-                                    settingsInitial = "provider:$providerId"
-                                    navController.navigate("settings") { launchSingleTop = true }
-                                },
-                                sendOnEnter = settings.sendOnEnter,
-                            )
-                        }
-                    }
                     NavHost(
                         navController = navController,
                         startDestination = "chat",
@@ -369,7 +351,20 @@ fun PhoneCodeApp() {
                             slideOutHorizontally(tween(180, easing = PhoneEasings.easeInOut)) { it }
                         },
                     ) {
-                        composable("chat") {}
+                        composable("chat") {
+                            ChatScreen(
+                                vm = vm,
+                                onOpenDrawer = openDrawer,
+                                onOpenModelSetup = {
+                                    navController.navigate("model-setup") { launchSingleTop = true }
+                                },
+                                onOpenProviderSetup = { providerId ->
+                                    settingsInitial = "provider:$providerId"
+                                    navController.navigate("settings") { launchSingleTop = true }
+                                },
+                                sendOnEnter = settings.sendOnEnter,
+                            )
+                        }
                         composable("settings") {
                             SettingsScreen(vm, settingsVm, onBack = { navController.popBackStack() }, initialPage = settingsInitial)
                         }

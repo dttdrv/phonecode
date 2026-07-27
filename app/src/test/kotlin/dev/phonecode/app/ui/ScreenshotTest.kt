@@ -451,7 +451,7 @@ class ScreenshotTest {
             compose.onNodeWithText("Connected · 3 tools").assertIsDisplayed()
             compose.onNodeWithText("Failed · Authentication required").assertIsDisplayed()
             compose.onNodeWithText("Connecting").assertIsDisplayed()
-            compose.onNodeWithText("Off").assertIsDisplayed()
+            compose.onNodeWithText("Inactive").assertIsDisplayed()
             compose.mainClock.advanceTimeBy(500)
             compose.waitForIdle()
             shootPage("31-mcp-server-states", "MCP servers")

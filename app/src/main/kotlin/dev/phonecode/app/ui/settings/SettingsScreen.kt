@@ -2495,14 +2495,14 @@ private fun SkillStatus.label() = when (this) {
 private fun SkillFilter.label() = when (this) {
     SkillFilter.ALL -> "All skills"
     SkillFilter.ACTIVE -> "Active"
-    SkillFilter.OFF -> "Off and overridden"
+    SkillFilter.OFF -> "Inactive skills"
     SkillFilter.ISSUES -> "Needs attention"
 }
 
 private fun SkillFilter.shortLabel() = when (this) {
     SkillFilter.ALL -> "All"
     SkillFilter.ACTIVE -> "Active"
-    SkillFilter.OFF -> "Off"
+    SkillFilter.OFF -> "Inactive"
     SkillFilter.ISSUES -> "Issues"
 }
 

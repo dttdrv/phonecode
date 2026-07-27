@@ -427,7 +427,7 @@ class SettingsCompactLayoutTest {
             .assertIsDisplayed()
             .fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithText("Active").assertIsDisplayed()
-        val secondRowTop = compose.onNodeWithText("Off")
+        val secondRowTop = compose.onNodeWithText("Inactive")
             .assertIsDisplayed()
             .fetchSemanticsNode().boundsInRoot.top
         compose.onNodeWithText("Issues").assertIsDisplayed()

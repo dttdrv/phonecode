@@ -1245,7 +1245,7 @@ Original instruction.
         compose.onNodeWithText("Skills").performClick()
         compose.onNodeWithText("All").assertIsDisplayed()
         compose.onNodeWithText("Active").assertIsDisplayed()
-        compose.onNodeWithText("Off").assertIsDisplayed()
+        compose.onNodeWithText("Inactive").assertIsDisplayed()
         compose.onNodeWithText("Issues").assertIsDisplayed()
         compose.onNodeWithText("Skill files reload automatically", substring = true).assertIsDisplayed()
     }

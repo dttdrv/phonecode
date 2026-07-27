@@ -81,7 +81,7 @@ class ScreenshotTest {
             SessionStore(File(filesDir, "sessions")).save(
                 PersistedSession(
                     id = "session-screenshot",
-                    title = "Dark mode for settings",
+                    title = "Settings dark mode",
                     updatedAt = System.currentTimeMillis() + 3_600_000,
                     projectId = "project-screenshot",
                     messages = listOf(
@@ -150,13 +150,13 @@ class ScreenshotTest {
         compose.onNodeWithContentDescription("Menu").performClick()
         try {
             compose.waitUntil(15_000) {
-                compose.onAllNodesWithText("Dark mode for settings").fetchSemanticsNodes().isNotEmpty()
+                compose.onAllNodesWithText("Settings dark mode").fetchSemanticsNodes().isNotEmpty()
             }
         } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
             compose.onRoot().captureRoboImage("screenshots/debug-drawer-failure.png")
             throw e
         }
-        compose.onNodeWithText("Dark mode for settings").performClick()
+        compose.onNodeWithText("Settings dark mode").performClick()
         try {
             compose.waitUntil(15_000) { conversationVisible() }
         } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
@@ -581,7 +581,7 @@ class ScreenshotTest {
                 ),
             )
             compose.waitForIdle()
-            shootScreen("38-chat-running-queue", "Dark mode for settings")
+            shootScreen("38-chat-running-queue", "Settings dark mode")
 
             state.value = state.value.copy(
                 isRunning = false,

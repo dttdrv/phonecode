@@ -51,11 +51,11 @@ jobs:
           set -e
           printf '%s\n' "$output"
           if (( status == 0 )); then
-            echo "Play release gate unexpectedly passed before the VM runtime landed"
+            echo "Play release gate unexpectedly passed before the release evidence was complete"
             exit 1
           fi
           grep -F "Google Play release blocked:" <<<"$output"
-          grep -F "wire IsolatedVmController into the production turn runtime" <<<"$output"
+          grep -F "implement authenticated host-project workspace transport for the isolated VM runtime" <<<"$output"
       - name: Verify Play execution boundary
         shell: bash
         run: |

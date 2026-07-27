@@ -28,32 +28,17 @@ the model provider you choose. There is no general-purpose PhoneCode backend, te
 execution service, or required account. The only developer-operated endpoint accepts AI-output
 reports you explicitly submit. API keys live in the Android Keystore.
 
-## Built for real work
-
-<p align="center">
-  <img src=".github/assets/showcase/phonecode-projects.png" width="49%" alt="PhoneCode projects and sessions">
-  <img src=".github/assets/showcase/phonecode-skills.png" width="49%" alt="PhoneCode skills manager">
-</p>
-
-<p align="center"><sub>Folder-backed projects and sessions · Built-in, editable, hot-reloading skills</sub></p>
-
 ## Interface
 
 <p align="center">
   <img src=".github/assets/screens/conversation.png" width="30%" alt="PhoneCode conversation">
   &nbsp;
-  <img src=".github/assets/screens/attachment-menu.png" width="30%" alt="PhoneCode attachment menu">
+  <img src=".github/assets/screens/action-approval.png" width="30%" alt="PhoneCode action approval">
   &nbsp;
-  <img src=".github/assets/screens/project-sessions.png" width="30%" alt="PhoneCode projects drawer">
+  <img src=".github/assets/screens/model-providers.png" width="30%" alt="PhoneCode private model setup">
 </p>
 
-<p align="center">
-  <img src=".github/assets/screens/onboarding.png" width="30%" alt="PhoneCode onboarding">
-  &nbsp;
-  <img src=".github/assets/screens/settings.png" width="30%" alt="PhoneCode settings">
-</p>
-
-<p align="center"><sub>Conversation · Attachments · Projects · Guided setup · Settings</sub></p>
+<p align="center"><sub>Conversation · Explicit action approval · Private model setup</sub></p>
 
 PhoneCode is an independent project inspired by OpenCode and interoperable with it. It is not a
 build of OpenCode.

@@ -13,6 +13,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -183,6 +184,14 @@ private enum class SettingsNestedPage(val depth: Int) {
     EDITOR(2),
 }
 
+internal fun nestedBackgroundSemanticsHidden(
+    currentNested: Boolean,
+    targetNested: Boolean,
+): Boolean = currentNested || targetNested
+
+internal fun outgoingNestedContentSemanticsHidden(isTargetContent: Boolean): Boolean =
+    !isTargetContent
+
 private fun nestedSettingsTransition(
     initial: SettingsNestedPage,
     target: SettingsNestedPage,
@@ -289,7 +298,7 @@ fun SettingsScreen(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () 
 
     Box(Modifier.fillMaxSize()) {
         if (backMotion.active) {
-            Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().clearAndSetSemantics {}) {
                 SettingsPageContent(parentOf(page), vm, settingsVm, onBack = {}, navigate = {}, onNestedBackActive = {})
             }
         }
@@ -1268,10 +1277,18 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
             editing = null
         }
     }
+    val nestedTransition = updateTransition(
+        targetState = editing,
+        label = "mcpNestedPage",
+    )
+    val backgroundSemanticsHidden = nestedBackgroundSemanticsHidden(
+        currentNested = nestedTransition.currentState != null,
+        targetNested = nestedTransition.targetState != null,
+    )
     Box(Modifier.fillMaxSize()) {
     Box(
         Modifier.fillMaxSize().then(
-            if (editing != null) Modifier.clearAndSetSemantics {} else Modifier,
+            if (backgroundSemanticsHidden) Modifier.clearAndSetSemantics {} else Modifier,
         ),
     ) {
     Page("MCP servers", onBack) {
@@ -1427,8 +1444,7 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
         }
     }
     }
-    AnimatedContent(
-        targetState = editing,
+    nestedTransition.AnimatedContent(
         transitionSpec = {
             nestedSettingsTransition(
                 initial = if (initialState == null) SettingsNestedPage.LIST else SettingsNestedPage.EDITOR,
@@ -1436,11 +1452,19 @@ private fun McpPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive: (
                 predictiveCommit = predictiveCommit,
             )
         },
-        label = "mcpNestedPage",
         modifier = Modifier.fillMaxSize(),
+        contentKey = { it },
     ) { initialName ->
         if (initialName != null) {
-            Box(Modifier.fillMaxSize().predictiveBackTransform(detailBackMotion).background(colors.background)) {
+            val hideSemantics = outgoingNestedContentSemanticsHidden(
+                isTargetContent = initialName == nestedTransition.targetState,
+            )
+            Box(
+                Modifier.fillMaxSize()
+                    .then(if (hideSemantics) Modifier.clearAndSetSemantics {} else Modifier)
+                    .predictiveBackTransform(detailBackMotion)
+                    .background(colors.background),
+            ) {
                 McpServerPage(
                     vm = vm,
                     initialName = initialName,
@@ -1994,6 +2018,14 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
         onNestedBackActive(nested)
         onDispose { onNestedBackActive(false) }
     }
+    val nestedTransition = updateTransition(
+        targetState = nestedTarget,
+        label = "skillNestedPage",
+    )
+    val backgroundSemanticsHidden = nestedBackgroundSemanticsHidden(
+        currentNested = nestedTransition.currentState.first != SettingsNestedPage.LIST,
+        targetNested = nestedTransition.targetState.first != SettingsNestedPage.LIST,
+    )
     val filtered = remember(state.skills, query, filter) {
         state.skills.filter { skill ->
             val matchesQuery = query.isBlank() || skill.name.contains(query, true) ||
@@ -2010,7 +2042,7 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
     Box(Modifier.fillMaxSize()) {
     Box(
         Modifier.fillMaxSize().then(
-            if (nested) Modifier.clearAndSetSemantics {} else Modifier,
+            if (backgroundSemanticsHidden) Modifier.clearAndSetSemantics {} else Modifier,
         ),
     ) {
     Page(
@@ -2145,8 +2177,7 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
             }
         }
     }
-    AnimatedContent(
-        targetState = nestedTarget,
+    nestedTransition.AnimatedContent(
         transitionSpec = {
             nestedSettingsTransition(
                 initial = initialState.first,
@@ -2154,16 +2185,22 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
                 predictiveCommit = predictiveCommit,
             )
         },
-        label = "skillNestedPage",
         modifier = Modifier.fillMaxSize(),
+        contentKey = { it },
     ) { target ->
         val id = target.second
+        val hideSemantics = outgoingNestedContentSemanticsHidden(
+            isTargetContent = target == nestedTransition.targetState,
+        )
+        val contentSemantics =
+            if (hideSemantics) Modifier.clearAndSetSemantics {} else Modifier
         when (target.first) {
             SettingsNestedPage.LIST -> Unit
             SettingsNestedPage.DETAIL -> {
                 val skill = state.skills.firstOrNull { it.id == id } ?: return@AnimatedContent
                 Box(
                     Modifier.fillMaxSize()
+                        .then(contentSemantics)
                         .predictiveBackTransform(detailBackMotion)
                         .background(colors.background),
                 ) {
@@ -2180,6 +2217,7 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
                 val editorSkill = state.skills.firstOrNull { it.id == skillId }
                 Box(
                     Modifier.fillMaxSize()
+                        .then(contentSemantics)
                         .predictiveBackTransform(detailBackMotion)
                         .background(colors.background),
                 ) {

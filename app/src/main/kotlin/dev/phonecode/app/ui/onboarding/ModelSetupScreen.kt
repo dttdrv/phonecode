@@ -3,6 +3,8 @@ package dev.phonecode.app.ui.onboarding
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
@@ -11,6 +13,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.liveRegion
@@ -79,30 +84,57 @@ fun ModelSetupScreen(
         vm.allProviders().filter { it.id != "codex" }
     }
     var selectedProviderId by rememberSaveable { mutableStateOf<String?>(null) }
+    var predictiveCommit by remember { mutableStateOf(false) }
     val navigateBack = {
         if (selectedProviderId == null) onBack() else selectedProviderId = null
     }
     val detailBackMotion = rememberPredictiveBackMotion(enabled = selectedProviderId != null) {
+        predictiveCommit = true
         selectedProviderId = null
     }
+    LaunchedEffect(selectedProviderId) {
+        predictiveCommit = false
+    }
+    val pageTransition = updateTransition(
+        targetState = selectedProviderId,
+        label = "modelSetupPage",
+    )
 
     Box(
         Modifier.fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .imePadding(),
     ) {
-        AnimatedContent(
-            targetState = selectedProviderId,
+        if (detailBackMotion.active) {
+            Box(Modifier.fillMaxSize().clearAndSetSemantics {}) {
+                ProviderChoice(
+                    vm = vm,
+                    providers = providers,
+                    codexOAuthAvailable = state.codexOAuthAvailable,
+                    codexConnected = state.codexConnected,
+                    errorMessage = state.error,
+                    onDismissError = {},
+                    onBack = {},
+                    onSelectProvider = {},
+                    onConfigured = {},
+                )
+            }
+        }
+        pageTransition.AnimatedContent(
             transitionSpec = {
-                val forward = targetState != null
-                (slideInHorizontally(tween(220, easing = PhoneEasings.easeInOut)) {
-                    if (forward) it / 4 else -it / 4
-                } + fadeIn(tween(160, easing = PhoneEasings.easeOut))) togetherWith
-                    (slideOutHorizontally(tween(180, easing = PhoneEasings.easeInOut)) {
-                        if (forward) -it / 4 else it / 4
-                    } + fadeOut(tween(120, easing = PhoneEasings.easeOut)))
+                if (predictiveCommit) {
+                    EnterTransition.None togetherWith ExitTransition.None
+                } else {
+                    val forward = targetState != null
+                    (slideInHorizontally(tween(220, easing = PhoneEasings.easeInOut)) {
+                        if (forward) it / 4 else -it / 4
+                    } + fadeIn(tween(160, easing = PhoneEasings.easeOut))) togetherWith
+                        (slideOutHorizontally(tween(180, easing = PhoneEasings.easeInOut)) {
+                            if (forward) -it / 4 else it / 4
+                        } + fadeOut(tween(120, easing = PhoneEasings.easeOut)))
+                }
             },
-            label = "modelSetupPage",
+            contentKey = { it },
         ) { providerId ->
             val provider = providers.firstOrNull { it.id == providerId }
             if (provider == null) {

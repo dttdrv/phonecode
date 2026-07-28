@@ -44,7 +44,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -300,8 +299,12 @@ fun PhoneCodeApp() {
             Unit
         }
         val navigateFromDrawer: (String) -> Unit = { destination ->
-            closeDrawer()
-            navController.navigate(destination) { launchSingleTop = true }
+            drawerScope.launch {
+                focusManager.clearFocus()
+                drawerState.animateTo(DrawerValue.CLOSED, PhoneSprings.drawer)
+                navController.navigate(destination) { launchSingleTop = true }
+            }
+            Unit
         }
         val projectPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             if (uri != null) {
@@ -364,12 +367,16 @@ fun PhoneCodeApp() {
                         startDestination = "chat",
                         modifier = Modifier.fillMaxSize(),
                         enterTransition = {
-                            slideInHorizontally(tween(240, easing = PhoneEasings.easeOut)) { it }
+                            slideInHorizontally(tween(220, easing = PhoneEasings.easeOut)) { it }
                         },
-                        exitTransition = { androidx.compose.animation.ExitTransition.None },
-                        popEnterTransition = { androidx.compose.animation.EnterTransition.None },
+                        exitTransition = {
+                            slideOutHorizontally(tween(180, easing = PhoneEasings.easeOut)) { -it / 4 }
+                        },
+                        popEnterTransition = {
+                            slideInHorizontally(tween(200, easing = PhoneEasings.easeOut)) { -it / 4 }
+                        },
                         popExitTransition = {
-                            slideOutHorizontally(tween(180, easing = PhoneEasings.easeOut)) { it }
+                            slideOutHorizontally(tween(170, easing = PhoneEasings.easeOut)) { it }
                         },
                     ) {
                         composable("chat") {
@@ -783,45 +790,61 @@ private fun Sidebar(
         ) {
             val settingsInteraction = remember { MutableInteractionSource() }
             Box(
-                Modifier.size(48.dp).clip(CircleShape).background(colors.surfaceContainerHigh)
+                Modifier.size(Spacing.touchTarget).clip(CircleShape)
                     .pressFeedback(settingsInteraction, pressedScale = 0.96f)
                     .clickable(interactionSource = settingsInteraction, indication = ripple(), onClick = onOpenSettings),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Outlined.Settings, "Settings", tint = colors.onBackground, modifier = Modifier.size(21.dp))
+                Box(
+                    Modifier.size(Spacing.controlVisual).clip(CircleShape).background(colors.surfaceContainerHigh),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.Settings, "Settings", tint = colors.onBackground, modifier = Modifier.size(20.dp))
+                }
             }
             Spacer(Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val newProjectInteraction = remember { MutableInteractionSource() }
                 Box(
-                    Modifier.size(48.dp).clip(CircleShape).background(colors.surfaceContainerHigh)
+                    Modifier.size(Spacing.touchTarget).clip(CircleShape)
                         .pressFeedback(newProjectInteraction, pressedScale = 0.96f)
                         .clickable(interactionSource = newProjectInteraction, indication = ripple(), onClick = onNewProject),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Outlined.CreateNewFolder, "New project", tint = colors.onBackground, modifier = Modifier.size(21.dp))
+                    Box(
+                        Modifier.size(Spacing.controlVisual).clip(CircleShape).background(colors.surfaceContainerHigh),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Outlined.CreateNewFolder, "New project", tint = colors.onBackground, modifier = Modifier.size(20.dp))
+                    }
                 }
                 val newChatInteraction = remember { MutableInteractionSource() }
                 Box(
-                    Modifier.size(60.dp).clip(CircleShape).background(colors.primary)
+                    Modifier.size(Spacing.touchTarget).clip(CircleShape)
                         .pressFeedback(newChatInteraction, pressedScale = 0.96f)
                         .clickable(interactionSource = newChatInteraction, indication = ripple()) { vm.newChat(null); onOpenChat() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Outlined.Edit, "New chat", tint = colors.onPrimary, modifier = Modifier.size(25.dp))
+                    Box(
+                        Modifier.size(44.dp).clip(CircleShape).background(colors.primary),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Outlined.Edit, "New chat", tint = colors.onPrimary, modifier = Modifier.size(22.dp))
+                    }
                 }
             }
         }
 
         Column(
             Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                .statusBarsPadding()
+                .height(statusInset + 112.dp)
                 .shadow(if (listScrolled) 2.dp else 0.dp, RectangleShape, clip = false)
                 .then(if (blurChrome) Modifier.phoneHazeEffect(hazeState, hazeStyle) else Modifier)
                 .background(if (blurChrome) colors.background.copy(alpha = 0.35f) else colors.background),
         ) {
             Row(
-                Modifier.fillMaxWidth().height(56.dp).padding(start = 18.dp, end = 8.dp),
+                Modifier.fillMaxWidth().padding(top = statusInset).height(56.dp)
+                    .padding(start = 18.dp, end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {

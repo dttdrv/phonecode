@@ -37,7 +37,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -440,12 +439,11 @@ private fun Page(
         }
         Row(
             Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth()
-                .statusBarsPadding()
-                .height(Spacing.navBarHeight)
+                .height(statusInset + Spacing.navBarHeight)
                 .zIndex(1f)
                 .shadow(if (scrolled) 2.dp else 0.dp, RectangleShape, clip = false)
                 .background(colors.background)
-                .padding(horizontal = 8.dp),
+                .padding(start = 8.dp, top = statusInset, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             PcIconButton(
@@ -2211,9 +2209,9 @@ private fun SkillsPage(vm: ChatViewModel, onBack: () -> Unit, onNestedBackActive
                                 skill.manifest?.description?.takeIf { it.isNotBlank() }?.let {
                                     Text(
                                         it,
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = colors.onSurfaceVariant,
-                                        maxLines = 2,
+                                        maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 }
@@ -2773,18 +2771,23 @@ private fun SkillFilterButton(
     Box(
         modifier.heightIn(min = Spacing.touchTarget)
             .pressFeedback(interaction, pressedScale = 0.98f)
-            .clip(MaterialTheme.shapes.large)
-            .background(if (active) colors.primary else colors.surfaceContainerHigh)
             .semantics { this.selected = active; role = Role.Tab }
-            .clickable(interactionSource = interaction, indication = ripple(), role = Role.Tab, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .clickable(interactionSource = interaction, indication = ripple(), role = Role.Tab, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            filter.shortLabel(),
-            style = MaterialTheme.typography.labelMedium,
-            color = if (active) colors.onPrimary else colors.onBackground,
-        )
+        Box(
+            Modifier.fillMaxWidth().height(Spacing.compactVisual)
+                .clip(MaterialTheme.shapes.large)
+                .background(if (active) colors.primary else colors.surfaceContainerHigh)
+                .padding(horizontal = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                filter.shortLabel(),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (active) colors.onPrimary else colors.onBackground,
+            )
+        }
     }
 }
 

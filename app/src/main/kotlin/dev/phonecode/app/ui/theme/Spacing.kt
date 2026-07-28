@@ -10,6 +10,10 @@ object Spacing {
     val l = 20.dp
     val xl = 24.dp
     val xxl = 32.dp
+    /** Painted control size; the surrounding interactive target remains [touchTarget]. */
+    val controlVisual = 40.dp
+    /** Painted size for dense selectors and filter pills inside a 48dp target. */
+    val compactVisual = 36.dp
     val touchTarget = 48.dp
     val navBarHeight = 52.dp
 }

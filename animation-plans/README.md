@@ -1,10 +1,9 @@
-# Animation plans
+# PhoneCode animation plans
 
-| Plan | Title | Severity | Status |
-| --- | --- | --- | --- |
-| 001 | Make model setup a bottom-up modal with predictive back | HIGH | DONE |
+Plans are source-grounded motion and interaction fixes. Status reflects the
+current implementation pass.
 
-Execution order: 001.
-
-The plan is independent of the Skills/MCP visual redesign occurring in the
-main worktree.
+1. `001-model-setup-modal-predictive-back.md` — done
+2. `002-restore-hierarchical-back-motion.md` — done
+3. `003-compact-controls-with-accessible-hit-targets.md` — done
+4. `004-protected-system-chrome-and-scroll-stretch.md` — done

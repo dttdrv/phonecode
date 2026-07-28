@@ -40,8 +40,8 @@ jobs:
         run: npm run check:deploy
       - name: Test and lint
         run: ./gradlew --no-daemon test lintDebug :app:verifyLegalInventory :app:verifyPrototypeRuntimeBoundary
-      - name: Build development artifact
-        run: ./gradlew --no-daemon :app:assembleDebug
+      - name: Build optimized sideload artifact
+        run: ./gradlew --no-daemon :app:assembleSideload
       - name: Verify Play release gate
         shell: bash
         run: |
@@ -75,5 +75,5 @@ jobs:
       - name: Verify 16 KB compatibility
         shell: bash
         run: |
-          ./native-runtime/audit-apk-native-libs.sh app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 app/build/outputs/apk/debug/app-debug.apk
+          ./native-runtime/audit-apk-native-libs.sh app/build/outputs/apk/sideload/app-sideload.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 app/build/outputs/apk/sideload/app-sideload.apk

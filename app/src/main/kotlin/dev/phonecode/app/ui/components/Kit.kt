@@ -166,6 +166,7 @@ fun PcIconButton(
     contentDescription: String,
     modifier: Modifier = Modifier,
     tint: Color = MaterialTheme.colorScheme.onBackground,
+    containerColor: Color = Color.Transparent,
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
@@ -184,7 +185,14 @@ fun PcIconButton(
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription, tint = tint, modifier = Modifier.size(22.dp)) }
+    ) {
+        Box(
+            Modifier.size(Spacing.controlVisual).clip(ShapePill).background(containerColor),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription, tint = tint, modifier = Modifier.size(20.dp))
+        }
+    }
 }
 
 @Composable
@@ -207,10 +215,24 @@ fun PcRoundButton(
     Box(
         modifier.size(Spacing.touchTarget)
             .pressFeedback(interaction, pressedScale = 0.95f)
-            .clip(ShapePill).background(if (enabled) bg else colors.surfaceContainerHigh)
-            .clickable(interactionSource = interaction, indication = ripple(), enabled = enabled, role = Role.Button, onClick = onClick),
+            .clip(ShapePill)
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(radius = 20.dp),
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription, tint = fg, modifier = Modifier.size(20.dp)) }
+    ) {
+        Box(
+            Modifier.size(Spacing.controlVisual).clip(ShapePill)
+                .background(if (enabled) bg else colors.surfaceContainerHigh),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription, tint = fg, modifier = Modifier.size(19.dp))
+        }
+    }
 }
 
 /** Platform switch - Material's own component IS the native feel; the theme keeps it monochrome. */
@@ -237,7 +259,7 @@ fun PcToggle(
 fun PcGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)),
-        verticalArrangement = Arrangement.spacedBy(1.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
         content = content,
     )
 }
@@ -250,8 +272,8 @@ fun PcRow(
 ) {
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
-    val base = Modifier.fillMaxWidth().clip(RoundedCornerShape(2.dp)).background(colors.surface)
-        .heightIn(min = 52.dp)
+    val base = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).background(colors.surface)
+        .heightIn(min = Spacing.touchTarget)
     val clickableBase = if (onClick != null) {
         base.pressFeedback(interaction, pressedScale = 0.99f)
             .clickable(interactionSource = interaction, indication = ripple(), role = Role.Button, onClick = onClick)
@@ -375,19 +397,30 @@ fun PcButton(
         filled -> colors.onPrimary
         else -> colors.onBackground
     }
-    Row(
-        modifier.fillMaxWidth().pressFeedback(interaction, pressedScale = 0.97f).clip(ShapeButton)
-            .background(background)
-            .clickable(interactionSource = interaction, indication = ripple(), enabled = enabled, role = Role.Button, onClick = onClick)
-            .heightIn(min = Spacing.touchTarget).padding(horizontal = Spacing.m),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
+    Box(
+        modifier.fillMaxWidth().heightIn(min = Spacing.touchTarget).clip(ShapeButton)
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(),
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
     ) {
-        if (icon != null) {
-            Icon(icon, null, tint = foreground, modifier = Modifier.size(18.dp))
-            Box(Modifier.width(8.dp))
+        Row(
+            Modifier.fillMaxWidth().height(Spacing.controlVisual)
+                .pressFeedback(interaction, pressedScale = 0.97f)
+                .clip(ShapeButton).background(background).padding(horizontal = Spacing.m),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                Icon(icon, null, tint = foreground, modifier = Modifier.size(18.dp))
+                Box(Modifier.width(8.dp))
+            }
+            Text(text, style = MaterialTheme.typography.labelLarge, color = foreground)
         }
-        Text(text, style = MaterialTheme.typography.labelLarge, color = foreground)
     }
 }
 

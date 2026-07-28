@@ -22,14 +22,10 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -201,14 +197,11 @@ import dev.phonecode.app.ui.components.shortContentVerticalOverscroll
 import dev.phonecode.app.ui.components.pressFeedback
 import androidx.compose.material3.ripple
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.hazeSource
 import dev.phonecode.app.ui.theme.Ethereal
 import dev.phonecode.app.ui.theme.LocalNeuralPhase
 import dev.phonecode.app.ui.theme.blurFade
-import dev.phonecode.app.ui.theme.phoneHaze
 import dev.phonecode.app.ui.theme.phoneHazeBand
-import dev.phonecode.app.ui.theme.phoneHazeEffect
 import dev.phonecode.app.ui.theme.PcMono
 import dev.phonecode.app.ui.theme.PhoneEasings
 import dev.phonecode.app.ui.theme.PhoneSprings
@@ -277,7 +270,7 @@ fun ChatScreen(
     val listOverscroll = rememberContentOverscroll()
     val scope = rememberCoroutineScope()
     val empty = state.lines.isEmpty() && state.streaming.isEmpty() && state.streamingReasoning.isEmpty()
-    val blurChrome = !empty && listCanScroll
+    val blurBottomBand = !empty && listState.canScrollForward
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val attachContext = LocalContext.current
     var notificationRequested by rememberSaveable { mutableStateOf(false) }
@@ -317,10 +310,10 @@ fun ChatScreen(
         if (state.lines.lastOrNull() is ChatLine.User) followOutput = true
     }
 
-    LaunchedEffect(state.currentSessionId, state.lines.size, state.streaming.length, state.streamingReasoning.length, followOutput) {
-        val extra = if (state.streamingReasoning.isNotEmpty() || state.streaming.isNotEmpty()) 1 else 0
-        val count = state.lines.size + extra
-        if (count > 0 && followOutput) listState.scrollToItem(count - 1)
+    val autoScrollTarget = state.lines.size +
+        if (state.streamingReasoning.isNotEmpty() || state.streaming.isNotEmpty()) 1 else 0
+    LaunchedEffect(state.currentSessionId, autoScrollTarget, followOutput) {
+        if (autoScrollTarget > 0 && followOutput) listState.scrollToItem(autoScrollTarget - 1)
     }
 
     var observedCompletion by remember { mutableStateOf(state.lastCompletedAt) }
@@ -342,20 +335,6 @@ fun ChatScreen(
     // NOTE: no imePadding anywhere in this screen - the root container applies safeDrawing
     // (bars + IME) exactly once; adding it again here is what flung the composer off-screen.
     Box(Modifier.fillMaxSize().background(colors.background)) {
-        // Ethereal ambient mist: while the model runs, a slow breathing wash of light at the top
-        // of the screen - monochrome (white mist on black, soft shadow on white).
-        if (state.isRunning) {
-            val breath = rememberNeuralBreath(3000)
-            Box(
-                Modifier.fillMaxWidth().height(190.dp)
-                    .graphicsLayer { alpha = 0.4f + 0.5f * breath.value }
-                    .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(colors.onBackground.copy(alpha = 0.09f), androidx.compose.ui.graphics.Color.Transparent),
-                        ),
-                    ),
-            )
-        }
         // v2 chrome: NOTHING pads the top or bottom - the conversation fills the whole screen and
         // FEEDS the blur; every piece of chrome floats above it as an individually blurred pill
         // (signed prototype: design/v2.html).
@@ -364,10 +343,9 @@ fun ChatScreen(
         // buttons. Resting content must clear both rows; only user-driven scrolling goes beneath.
         val topChromeHeight = Spacing.navBarHeight + 34.dp
         val hazeState = remember { HazeState() }
-        val hazeStyle = phoneHaze()
         val bandStyle = phoneHazeBand()
         val chromeDensity = LocalDensity.current
-        Box(Modifier.fillMaxSize().then(if (blurChrome) Modifier.hazeSource(hazeState) else Modifier)) {
+        Box(Modifier.fillMaxSize().then(if (blurBottomBand) Modifier.hazeSource(hazeState) else Modifier)) {
             // New-chat transition: conversation fades out, empty state fades in (chatgpt-motion.md
             // - a fade, never a slide; exits faster than enters).
             AnimatedContent(
@@ -503,13 +481,18 @@ fun ChatScreen(
         Box(
             Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusInset + topChromeHeight)
                 .shadow(if (!empty && listState.canScrollBackward) 2.dp else 0.dp, RectangleShape, clip = false)
-                .then(if (blurChrome) Modifier.phoneHazeEffect(hazeState, hazeStyle) else Modifier)
-                // Keep text legible even when platform blur is unavailable or still warming up.
                 .background(colors.background),
         )
-        Box(Modifier.align(Alignment.TopStart).padding(top = statusInset + 6.dp, start = 12.dp).clip(ShapePill).background(colors.surfaceContainerHigh)) {
+        Box(Modifier.align(Alignment.TopStart).padding(top = statusInset + 6.dp, start = 12.dp)) {
             // Opening the drawer clears any open overlay so Back/scrim semantics stay unambiguous.
-            PcIconButton(Icons.Filled.Menu, "Menu") { modelOpen = false; onOpenDrawer() }
+            PcIconButton(
+                Icons.Filled.Menu,
+                "Menu",
+                containerColor = colors.surfaceContainerHigh,
+            ) {
+                modelOpen = false
+                onOpenDrawer()
+            }
         }
         Column(
             Modifier.align(Alignment.TopCenter).padding(top = statusInset + 6.dp),
@@ -526,28 +509,34 @@ fun ChatScreen(
                 )
             }
             // Model selector moved out of the composer into the title: tap to switch.
-            Row(
-                Modifier.padding(top = 3.dp).heightIn(min = 48.dp)
-                    .clip(ShapePill).background(colors.surfaceContainerHigh.copy(alpha = 0.72f))
+            Box(
+                Modifier.padding(top = 3.dp).height(Spacing.touchTarget)
                     .clickable(role = Role.Button) {
                         if (modelConfigured) modelOpen = true else onOpenModelSetup()
-                    }
-                    .padding(start = 11.dp, end = 7.dp, top = 3.dp, bottom = 3.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(1.dp),
+                    },
+                contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    if (modelConfigured) modelShortLabel(state) else "Set up model",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.secondary,
-                    maxLines = 1,
-                )
-                Icon(
-                    Icons.Filled.KeyboardArrowDown,
-                    if (modelConfigured) "Switch model" else "Set up model",
-                    tint = colors.secondary,
-                    modifier = Modifier.size(15.dp),
-                )
+                Row(
+                    Modifier.height(Spacing.compactVisual)
+                        .clip(ShapePill)
+                        .background(colors.surfaceContainerHigh.copy(alpha = 0.72f))
+                        .padding(start = 11.dp, end = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(1.dp),
+                ) {
+                    Text(
+                        if (modelConfigured) modelShortLabel(state) else "Set up model",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.secondary,
+                        maxLines = 1,
+                    )
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown,
+                        if (modelConfigured) "Switch model" else "Set up model",
+                        tint = colors.secondary,
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
             }
         }
         Row(
@@ -559,12 +548,23 @@ fun ChatScreen(
             val ctxUsed = state.usageInput + state.usageOutput
             val ctxFrac = state.contextLimit?.let { if (it > 0) ctxUsed.toFloat() / it else 0f } ?: 0f
             Box(
-                Modifier.size(48.dp).clip(ShapePill).background(colors.surfaceContainerHigh)
+                Modifier.size(Spacing.touchTarget).clip(ShapePill)
                     .clickable(role = Role.Button) { modelOpen = false; contextOpen = true }
                     .semantics { contentDescription = "Context usage ${(ctxFrac.coerceIn(0f, 1f) * 100).toInt()} percent" },
                 contentAlignment = Alignment.Center,
             ) {
-                ContextRing(fraction = ctxFrac, modifier = Modifier.size(22.dp), stroke = 2.5f, color = contextUsageColor(ctxFrac))
+                Box(
+                    Modifier.size(Spacing.controlVisual).clip(ShapePill)
+                        .background(colors.surfaceContainerHigh),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ContextRing(
+                        fraction = ctxFrac,
+                        modifier = Modifier.size(21.dp),
+                        stroke = 2.5f,
+                        color = contextUsageColor(ctxFrac),
+                    )
+                }
                 MorphingMenu(
                     expanded = contextOpen,
                     onDismiss = { contextOpen = false },
@@ -582,7 +582,7 @@ fun ChatScreen(
         // through both, frosting as it goes under (signed prototype; navbar must not be solid).
         // Same gating as the top: only while content can still scroll under the composer.
         androidx.compose.animation.AnimatedVisibility(
-            visible = !empty && listState.canScrollForward,
+            visible = blurBottomBand,
             enter = fadeIn(tween(180, easing = PhoneEasings.easeOut)),
             exit = fadeOut(tween(120, easing = PhoneEasings.easeOut)),
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -681,8 +681,6 @@ fun ChatScreen(
                 photos = photos,
                 onInput = { input = it },
                 onRemovePhoto = { vm.setDraftPhotos(composerKey, emptyList()) },
-                hazeState = hazeState,
-                hazeStyle = hazeStyle,
                 onUpload = { picker.launch(arrayOf("image/*", "text/*", "application/json", "application/xml")) },
                 onSend = {
                     if (vm.send(input, photos)) {
@@ -1015,14 +1013,10 @@ private fun AssistantTurn(
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 ThinkingDot(active = streaming, open = open)
-                AnimatedVisibility(
-                    visible = !open,
-                    enter = expandHorizontally(expandFrom = Alignment.Start, animationSpec = PhoneSprings.standardSpec()) + fadeIn(PhoneTweens.popEnter),
-                    exit = shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = PhoneSprings.standardSpec()) + fadeOut(PhoneTweens.popExit),
-                ) {
+                if (!open) {
                     if (streaming && text.isEmpty()) {
                         // Actively thinking (no answer text yet): the shimmer sweep.
-                        val phase by rememberNeuralPhase(3000)
+                        val phase = LocalNeuralPhase.current?.value ?: 0.5f
                         Text(
                             "Thinking",
                             style = MaterialTheme.typography.labelMedium.copy(
@@ -1038,8 +1032,8 @@ private fun AssistantTurn(
             }
             AnimatedVisibility(
                 visible = open,
-                enter = expandVertically(animationSpec = PhoneSprings.emphasizedSpec()) + fadeIn(PhoneTweens.popEnter),
-                exit = shrinkVertically(animationSpec = PhoneSprings.emphasizedSpec()) + fadeOut(PhoneTweens.popExit),
+                enter = fadeIn(PhoneTweens.popEnter),
+                exit = fadeOut(PhoneTweens.popExit),
             ) {
                 Row(Modifier.padding(start = 3.dp, top = 6.dp).height(IntrinsicSize.Min)) {
                     Box(Modifier.width(1.5.dp).fillMaxHeight().background(colors.outlineVariant))
@@ -1054,11 +1048,10 @@ private fun AssistantTurn(
         }
 
         if (text.isNotEmpty() || streaming) {
-            // ponytail: splitFenced re-scans the whole reply each token -> O(n^2) over a long stream.
-            // Bounded by reply length and dwarfed by markdown recomposition; settled segments are memoized
-            // downstream by String equality so they don't re-render. Upgrade path if profiling flags it:
-            // parse only the tail past the last settled fence boundary.
-            val segments = remember(text) { splitFenced(text) }
+            val fenceParser = remember { AppendOnlyFenceParser() }
+            val segments = remember(text, streaming) {
+                if (streaming) fenceParser.update(text) else splitFenced(text)
+            }
             Column(Modifier.fillMaxWidth().padding(top = if (reasoning != null) 11.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 segments.forEachIndexed { i, seg ->
                     val live = streaming && i == segments.lastIndex
@@ -1380,9 +1373,74 @@ private fun ActionIcon(icon: ImageVector, desc: String, onClick: () -> Unit) {
     PcIconButton(icon, desc, tint = MaterialTheme.colorScheme.secondary, onClick = onClick)
 }
 
-private data class Seg(val text: String, val isCode: Boolean, val lang: String)
+internal data class Seg(val text: String, val isCode: Boolean, val lang: String)
 
-private fun splitFenced(input: String): List<Seg> {
+/**
+ * Streaming fence parser that commits complete lines once. Token updates only rebuild the active
+ * tail segment instead of splitting and rescanning the whole response.
+ */
+internal class AppendOnlyFenceParser {
+    private val settled = mutableListOf<Seg>()
+    private val active = StringBuilder()
+    private var previous = ""
+    private var committedThrough = 0
+    private var inCode = false
+    private var language = ""
+
+    internal val settledCharacterCount: Int get() = committedThrough
+
+    fun update(input: String): List<Seg> {
+        if (!input.startsWith(previous)) reset()
+
+        var newline = input.indexOf('\n', committedThrough)
+        while (newline >= 0) {
+            commitLine(input.substring(committedThrough, newline))
+            committedThrough = newline + 1
+            newline = input.indexOf('\n', committedThrough)
+        }
+        previous = input
+
+        val result = settled.toMutableList()
+        val tail = buildString {
+            append(active)
+            append(input, committedThrough, input.length)
+        }
+        if (inCode || tail.isNotBlank()) result += Seg(tail, inCode, language)
+        return result
+    }
+
+    private fun commitLine(line: String) {
+        if (line.trimStart().startsWith("```")) {
+            flush()
+            if (inCode) {
+                inCode = false
+                language = ""
+            } else {
+                inCode = true
+                language = line.trimStart().removePrefix("```").trim()
+            }
+        } else {
+            active.append(line).append('\n')
+        }
+    }
+
+    private fun flush() {
+        val text = active.toString().removeSuffix("\n")
+        if (inCode || text.isNotBlank()) settled += Seg(text, inCode, language)
+        active.clear()
+    }
+
+    private fun reset() {
+        settled.clear()
+        active.clear()
+        previous = ""
+        committedThrough = 0
+        inCode = false
+        language = ""
+    }
+}
+
+internal fun splitFenced(input: String): List<Seg> {
     val out = mutableListOf<Seg>()
     val buf = StringBuilder()
     var inCode = false
@@ -1858,8 +1916,6 @@ private fun Composer(
     photos: List<MessagePart.Image>,
     onInput: (String) -> Unit,
     onRemovePhoto: () -> Unit,
-    hazeState: HazeState,
-    hazeStyle: HazeStyle,
     onUpload: () -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
@@ -1877,7 +1933,7 @@ private fun Composer(
                     .neuralRing(active = state.isRunning, shape = ShapeComposer)
                     .clip(ShapeComposer)
                     .background(colors.surfaceContainerHigh)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 6.dp, vertical = 0.dp),
             ) {
                 if (photos.isNotEmpty()) {
                     Box(Modifier.padding(start = 44.dp, end = 4.dp, top = 2.dp, bottom = 6.dp)) {

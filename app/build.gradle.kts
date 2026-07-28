@@ -80,6 +80,14 @@ android {
             )
             signingConfig = signingConfigs.findByName("release")
         }
+        create("sideload") {
+            initWith(getByName("release"))
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            buildConfigField("boolean", "CODEX_OAUTH_ENABLED", "true")
+        }
     }
 
     testOptions {
@@ -132,6 +140,13 @@ android {
             .asFile
         jniLibs.directories.add(generatedHostRuntime.resolve("jniLibs").absolutePath)
         assets.directories.add(generatedHostRuntime.resolve("assets").absolutePath)
+    }
+    sourceSets.getByName("sideload") {
+        manifest.srcFile("src/debug/AndroidManifest.xml")
+        kotlin.directories.add("src/debug/kotlin")
+        aidl.directories.add("src/debug/aidl")
+        assets.directories.add("src/debug/assets")
+        jniLibs.directories.add("src/debug/jniLibs")
     }
 }
 
@@ -532,6 +547,15 @@ val remainingPlaySubmissionBlockers = listOf(
     "complete signed-device VM lifecycle and Play artifact evidence",
 )
 val androidComponentsExtension = extensions.getByType<ApplicationAndroidComponentsExtension>()
+
+androidComponentsExtension.onVariants(
+    androidComponentsExtension.selector().withBuildType("sideload"),
+) { variant ->
+    variant.outputs.forEach { output ->
+        output.versionCode.set(52)
+        output.versionName.set("0.5.2")
+    }
+}
 
 fun cycloneDxComponents(file: File): List<Map<*, *>> {
     val document = JsonSlurper().parse(file) as? Map<*, *>

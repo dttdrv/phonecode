@@ -1,8 +1,11 @@
 package dev.phonecode.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.LocalOverscrollFactory
+import androidx.compose.foundation.rememberPlatformOverscrollFactory
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 
 /**
  * PhoneCode's monochrome, Apple-HIG-inspired theme (design/specs/design-tokens.md): AMOLED-dark and
@@ -14,10 +17,13 @@ fun PhoneCodeTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) phoneDarkColorScheme() else phoneLightColorScheme(),
-        typography = PhoneTypography,
-        shapes = PhoneShapes,
-        content = content,
-    )
+    val overscrollFactory = rememberPlatformOverscrollFactory()
+    CompositionLocalProvider(LocalOverscrollFactory provides overscrollFactory) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) phoneDarkColorScheme() else phoneLightColorScheme(),
+            typography = PhoneTypography,
+            shapes = PhoneShapes,
+            content = content,
+        )
+    }
 }

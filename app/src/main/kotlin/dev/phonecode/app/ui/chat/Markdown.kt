@@ -50,9 +50,9 @@ import dev.phonecode.app.ui.theme.PcMono
 
 // ---------- Block model ----------
 
-private enum class MdAlign { Start, Center, End }
+internal enum class MdAlign { Start, Center, End }
 
-private sealed interface MdBlock {
+internal sealed interface MdBlock {
     data class Paragraph(val text: String) : MdBlock
     data class Heading(val level: Int, val text: String) : MdBlock
     data class Bullet(val text: String) : MdBlock
@@ -83,7 +83,7 @@ private fun parseAligns(sep: String): List<MdAlign> =
         when { l && r -> MdAlign.Center; r -> MdAlign.End; else -> MdAlign.Start }
     }
 
-private fun parseBlocks(text: String): List<MdBlock> {
+internal fun parseBlocks(text: String): List<MdBlock> {
     val blocks = mutableListOf<MdBlock>()
     val lines = text.lines()
     val paragraph = StringBuilder()
@@ -133,6 +133,39 @@ private fun parseBlocks(text: String): List<MdBlock> {
     }
     flush()
     return blocks
+}
+
+/**
+ * Keeps blank-line-delimited blocks immutable while an append-only response streams. Only the
+ * unfinished tail is parsed for each token; edits or rewinds reset the cache conservatively.
+ */
+internal class AppendOnlyMarkdownParser {
+    private val settled = mutableListOf<MdBlock>()
+    private var previous = ""
+    private var settledThrough = 0
+
+    internal val settledCharacterCount: Int get() = settledThrough
+
+    fun update(text: String): List<MdBlock> {
+        if (!text.startsWith(previous)) reset()
+
+        val lastBlankLine = text.lastIndexOf("\n\n")
+        val stableEnd = if (lastBlankLine >= 0) lastBlankLine + 2 else 0
+        if (stableEnd > settledThrough) {
+            settled += parseBlocks(text.substring(settledThrough, stableEnd))
+            settledThrough = stableEnd
+        }
+        previous = text
+
+        val tail = text.substring(settledThrough)
+        return if (tail.isEmpty()) settled.toList() else settled + parseBlocks(tail)
+    }
+
+    private fun reset() {
+        settled.clear()
+        previous = ""
+        settledThrough = 0
+    }
 }
 
 // ---------- Inline parser ----------
@@ -242,7 +275,10 @@ fun MarkdownBlocks(
 ) {
     val styles = rememberMdStyles()
     val colors = MaterialTheme.colorScheme
-    val blocks = remember(text) { parseBlocks(text) }
+    val streamingParser = remember { AppendOnlyMarkdownParser() }
+    val blocks = remember(text, streaming) {
+        if (streaming) streamingParser.update(text) else parseBlocks(text)
+    }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
         blocks.forEachIndexed { index, block ->

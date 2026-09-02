@@ -13,7 +13,6 @@ data class AppSettings(
     val autoAccept: Boolean = false,
     val sendOnEnter: Boolean = true,
     val gitAutoBranch: Boolean = false,
-    val defaultMode: String = "BUILD",
     /** First-run onboarding shown and dismissed (round-4). */
     val onboarded: Boolean = false,
     val activeSessionId: String? = null,

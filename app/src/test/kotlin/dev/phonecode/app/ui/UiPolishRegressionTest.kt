@@ -54,17 +54,41 @@ class UiPolishRegressionTest {
     }
 
     @Test
-    fun settingsRowsAreRoundedAndSkillSummariesStayCompact() {
+    fun settingsRowsAreOpenAndSkillSummariesStayCompact() {
         val kit = source("app/src/main/kotlin/dev/phonecode/app/ui/components/Kit.kt")
         val settings = source(
             "app/src/main/kotlin/dev/phonecode/app/ui/settings/SettingsScreen.kt",
         )
 
-        assertFalse(kit.contains("clip(RoundedCornerShape(2.dp))"))
-        assertTrue(kit.contains("clip(MaterialTheme.shapes.small)"))
+        assertFalse(kit.contains("background(colors.surface)"))
+        assertTrue(kit.contains("HorizontalDivider"))
         assertTrue(settings.contains("style = MaterialTheme.typography.bodySmall,\n" +
             "                                        color = colors.onSurfaceVariant,\n" +
             "                                        maxLines = 1,"))
+    }
+
+    @Test
+    fun scrollingChromeUsesOneProgressiveEdgeDissolve() {
+        val settings = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/SettingsScreen.kt")
+        val blur = source("app/src/main/kotlin/dev/phonecode/app/ui/theme/Blur.kt")
+
+        assertTrue(settings.contains("hazeSource(hazeState)"))
+        assertTrue(settings.contains("progressiveBlurEdge("))
+        assertFalse(settings.contains(".shadow(if (scrolled) 2.dp"))
+        assertTrue(blur.contains("fun Modifier.progressiveBlurEdge("))
+    }
+
+    @Test
+    fun settingsExposeOneAgentWithoutAModeDashboard() {
+        val settings = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/SettingsScreen.kt")
+        val chat = source("app/src/main/kotlin/dev/phonecode/app/ui/chat/ChatScreen.kt")
+
+        assertFalse(settings.contains("GeneralPage("))
+        assertFalse(settings.contains("Default agent mode"))
+        assertFalse(chat.contains("AgentMode.entries"))
+        assertTrue(settings.contains("PcSectionLabel(\"Agent\")"))
+        assertTrue(settings.contains("PcSectionLabel(\"Capabilities\")"))
+        assertTrue(settings.contains("PcSectionLabel(\"App\")"))
     }
 
     @Test
@@ -102,7 +126,7 @@ class UiPolishRegressionTest {
         assertTrue(build.contains("signingConfig = signingConfigs.getByName(\"debug\")"))
         assertTrue(build.contains("sourceSets.getByName(\"sideload\")"))
         assertTrue(build.contains("withBuildType(\"sideload\")"))
-        assertTrue(build.contains("output.versionCode.set(52)"))
-        assertTrue(build.contains("output.versionName.set(\"0.5.2\")"))
+        assertTrue(build.contains("output.versionCode.set(53)"))
+        assertTrue(build.contains("output.versionName.set(\"0.6.0-alpha\")"))
     }
 }

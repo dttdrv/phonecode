@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -31,9 +30,8 @@ val LocalNeuralPhase = staticCompositionLocalOf<State<Float>?> { null }
 
 /**
  * The ethereal accent layer: Neural Expressive's "gradient = cognition" idea rendered entirely
- * in MONOCHROME light. No hues - just shades. On AMOLED black the model's activity reads as a
- * slow breathing mist and sweeping shimmer of white; on the white theme, as soft shadow. Strictly
- * reserved for moments the model is alive (thinking, streaming); all chrome stays static mono.
+ * in Misul cobalt. The accent is reserved for moments the model is alive (thinking, streaming);
+ * all general chrome and primary actions stay monochrome.
  */
 object Ethereal {
     /** Shimmer stops built from the theme's ink: bright → faint → mid → bright (seamless loop). */
@@ -93,7 +91,7 @@ fun neuralSweepBrush(phase: Float, ink: Color, extent: Float = 660f): Brush =
 @Composable
 fun Modifier.neuralRing(active: Boolean, shape: Shape, width: Dp = 1.dp): Modifier {
     if (!active) return this
-    val ink = MaterialTheme.colorScheme.onBackground
+    val ink = LocalMisulAccent.current
     val shared = LocalNeuralPhase.current
     val local = if (shared == null) rememberNeuralPhase() else null
     val phase = requireNotNull(shared ?: local)

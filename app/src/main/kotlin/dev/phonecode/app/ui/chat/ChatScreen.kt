@@ -172,7 +172,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.phonecode.agent.AgentMode
 import dev.phonecode.app.R
 import dev.phonecode.app.agent.ChatLine
 import dev.phonecode.app.agent.ChatUiState
@@ -199,8 +198,9 @@ import androidx.compose.material3.ripple
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.phonecode.app.ui.theme.Ethereal
+import dev.phonecode.app.ui.theme.LocalMisulAccent
 import dev.phonecode.app.ui.theme.LocalNeuralPhase
-import dev.phonecode.app.ui.theme.blurFade
+import dev.phonecode.app.ui.theme.progressiveBlurEdge
 import dev.phonecode.app.ui.theme.phoneHazeBand
 import dev.phonecode.app.ui.theme.PcMono
 import dev.phonecode.app.ui.theme.PhoneEasings
@@ -270,6 +270,7 @@ fun ChatScreen(
     val listOverscroll = rememberContentOverscroll()
     val scope = rememberCoroutineScope()
     val empty = state.lines.isEmpty() && state.streaming.isEmpty() && state.streamingReasoning.isEmpty()
+    val blurTopBand = !empty && listState.canScrollBackward
     val blurBottomBand = !empty && listState.canScrollForward
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val attachContext = LocalContext.current
@@ -345,7 +346,7 @@ fun ChatScreen(
         val hazeState = remember { HazeState() }
         val bandStyle = phoneHazeBand()
         val chromeDensity = LocalDensity.current
-        Box(Modifier.fillMaxSize().then(if (blurBottomBand) Modifier.hazeSource(hazeState) else Modifier)) {
+        Box(Modifier.fillMaxSize().then(if (blurTopBand || blurBottomBand) Modifier.hazeSource(hazeState) else Modifier)) {
             // New-chat transition: conversation fades out, empty state fades in (chatgpt-motion.md
             // - a fade, never a slide; exits faster than enters).
             AnimatedContent(
@@ -478,17 +479,23 @@ fun ChatScreen(
 
         }
 
-        Box(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusInset + topChromeHeight)
-                .shadow(if (!empty && listState.canScrollBackward) 2.dp else 0.dp, RectangleShape, clip = false)
-                .background(colors.background),
-        )
+        androidx.compose.animation.AnimatedVisibility(
+            visible = blurTopBand,
+            enter = fadeIn(tween(180, easing = PhoneEasings.easeOut)),
+            exit = fadeOut(tween(120, easing = PhoneEasings.easeOut)),
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            Box(
+                Modifier.fillMaxWidth().height(statusInset + topChromeHeight + 24.dp)
+                    .progressiveBlurEdge(hazeState, bandStyle, fromTop = true, edgeColor = colors.background),
+            )
+        }
         Box(Modifier.align(Alignment.TopStart).padding(top = statusInset + 6.dp, start = 12.dp)) {
             // Opening the drawer clears any open overlay so Back/scrim semantics stay unambiguous.
             PcIconButton(
                 Icons.Filled.Menu,
                 "Menu",
-                containerColor = colors.surfaceContainerHigh,
+                containerColor = Color.Transparent,
             ) {
                 modelOpen = false
                 onOpenDrawer()
@@ -498,7 +505,7 @@ fun ChatScreen(
             Modifier.align(Alignment.TopCenter).padding(top = statusInset + 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(Modifier.widthIn(max = 230.dp).clip(ShapePill).background(colors.surfaceContainerHigh.copy(alpha = 0.72f))) {
+            Box(Modifier.widthIn(max = 230.dp)) {
                 Text(
                     chatTitle(state),
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
@@ -518,8 +525,6 @@ fun ChatScreen(
             ) {
                 Row(
                     Modifier.height(Spacing.compactVisual)
-                        .clip(ShapePill)
-                        .background(colors.surfaceContainerHigh.copy(alpha = 0.72f))
                         .padding(start = 11.dp, end = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(1.dp),
@@ -590,7 +595,7 @@ fun ChatScreen(
             Box(
                 Modifier.fillMaxWidth()
                     .height(with(chromeDensity) { bottomOverlayHeight.toDp() } + 24.dp)
-                    .blurFade(hazeState, bandStyle, fromTop = false, edgeColor = colors.background),
+                    .progressiveBlurEdge(hazeState, bandStyle, fromTop = false, edgeColor = colors.background),
             )
         }
         Column(
@@ -808,10 +813,10 @@ private fun EmptyState(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    // Grok-style home: crisp mark + wordmark + starter chips. The chat stays quiet at rest -
-    // no halos, no gradients; the ethereal layer belongs to generation only (grok-design.md).
+    val accent = LocalMisulAccent.current
+    // Misul identity stays at the edge of the work: one cobalt mark, then quiet text-first actions.
     Column(modifier.padding(Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(painter = painterResource(R.drawable.ic_phonecode_mark), contentDescription = null, tint = colors.onBackground, modifier = Modifier.size(48.dp))
+        Icon(painter = painterResource(R.drawable.ic_misul_mark), contentDescription = null, tint = accent, modifier = Modifier.size(48.dp))
         Spacer(Modifier.height(14.dp))
         if (!modelConfigured) {
             Text(
@@ -836,27 +841,44 @@ private fun EmptyState(
             )
         } else {
             Text("What should we build?", style = MaterialTheme.typography.titleLarge, color = colors.onBackground)
-            Spacer(Modifier.height(20.dp))
-            listOf(
-                "Build a small web app",
-                "Explain an error message",
-                "Refactor a function",
-                "Set up a git project",
-            ).forEach { suggestion ->
-                val chipInteraction = remember(suggestion) { MutableInteractionSource() }
-                Text(
-                    suggestion,
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Normal),
-                    color = colors.secondary,
-                    modifier = Modifier
-                        .padding(vertical = 4.dp)
-                        .pressFeedback(chipInteraction, pressedScale = 0.96f)
-                        .clip(ShapePill)
-                        .clickable(interactionSource = chipInteraction, indication = ripple()) { onSuggestion(suggestion) }
-                        .background(colors.surfaceContainerHigh)
-                        .heightIn(min = 48.dp)
-                        .padding(horizontal = 18.dp, vertical = 12.dp),
-                )
+            Spacer(Modifier.height(16.dp))
+            val suggestions = listOf(
+                "Inspect this project",
+                "Explain a build failure",
+                "Plan a safe code change",
+            )
+            Column(Modifier.widthIn(max = 320.dp)) {
+                suggestions.forEachIndexed { index, suggestion ->
+                    val interaction = remember(suggestion) { MutableInteractionSource() }
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .pressFeedback(interaction, pressedScale = 0.98f)
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable(interactionSource = interaction, indication = ripple()) {
+                                onSuggestion(suggestion)
+                            }
+                            .heightIn(min = Spacing.touchTarget)
+                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            suggestion,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            color = colors.onBackground,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = colors.tertiary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    if (index < suggestions.lastIndex) {
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outline))
+                    }
+                }
             }
         }
     }
@@ -1020,7 +1042,7 @@ private fun AssistantTurn(
                         Text(
                             "Thinking",
                             style = MaterialTheme.typography.labelMedium.copy(
-                                brush = neuralSweepBrush(phase, ink = colors.onBackground, extent = 220f),
+                                brush = neuralSweepBrush(phase, ink = LocalMisulAccent.current, extent = 220f),
                                 fontWeight = FontWeight.SemiBold,
                             ),
                         )
@@ -1155,7 +1177,7 @@ private fun AiReportFlow(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Thank you. Your feedback will be used to improve PhoneCode's safeguards.",
+                        "Thank you. Your feedback will be used to improve Misul Agent's safeguards.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.secondary,
                     )
@@ -1256,7 +1278,7 @@ private fun ReportReview(
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Text(
-                "Choose what went wrong. PhoneCode sends only this category, your optional note, and basic app information.",
+                "Choose what went wrong. Misul Agent sends only this category, your optional note, and basic app information.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.secondary,
             )
@@ -1279,7 +1301,7 @@ private fun ReportReview(
                     onValueChange = onNote,
                     enabled = !submitting,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onBackground),
-                    cursorBrush = SolidColor(colors.onBackground),
+                    cursorBrush = SolidColor(LocalMisulAccent.current),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp)
                         .semantics { contentDescription = "Optional report details" }
                         .clip(MaterialTheme.shapes.medium)
@@ -1978,7 +2000,7 @@ private fun Composer(
                             onValueChange = onInput,
                             enabled = enabled && !state.sessionLoading,
                             textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onBackground),
-                            cursorBrush = SolidColor(colors.primary),
+                            cursorBrush = SolidColor(LocalMisulAccent.current),
                             maxLines = 6,
                             keyboardOptions = if (sendOnEnter) {
                                 KeyboardOptions(imeAction = ImeAction.Send)
@@ -2125,38 +2147,6 @@ private fun ModelSheet(
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Agent mode", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
-                Text(
-                    if (state.agentMode == AgentMode.PLAN) "Plan" else "Build",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.onBackground,
-                )
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                AgentMode.entries.forEach { mode ->
-                    val selected = state.agentMode == mode
-                    Box(
-                        Modifier.weight(1f).heightIn(min = Spacing.touchTarget).clip(ShapePill)
-                            .background(if (selected) colors.primary else colors.surfaceContainerHigh)
-                            .semantics {
-                                this.selected = selected
-                                role = Role.RadioButton
-                            }
-                            .clickable { vm.setAgentMode(mode) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            mode.name.lowercase().replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (selected) colors.onPrimary else colors.onBackground,
-                        )
-                    }
-                }
-            }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Reasoning", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
                 Text(
                     if (reasoningEfforts.isEmpty()) "Not available" else state.effort.display(),
@@ -2203,7 +2193,7 @@ private fun ModelSheet(
                 BasicTextField(
                     value = query, onValueChange = { query = it },
                     textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onBackground),
-                    cursorBrush = SolidColor(colors.primary), singleLine = true,
+                    cursorBrush = SolidColor(LocalMisulAccent.current), singleLine = true,
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Search models" },
                 )
             }
@@ -2657,7 +2647,7 @@ private fun approvalPresentation(tool: String): ApprovalPresentation {
             ApprovalPresentation(
                 action = "Read outside linked folders",
                 risk = "External file access",
-                guidance = "This reads the exact file or folder path shown above. PhoneCode always asks for this access.",
+                guidance = "This reads the exact file or folder path shown above. Misul Agent always asks for this access.",
             )
         normalized.startsWith("mcp_") ->
             ApprovalPresentation(
@@ -2695,7 +2685,7 @@ private fun approvalPresentation(tool: String): ApprovalPresentation {
             ApprovalPresentation(
                 action = tool.replace('_', ' ').replaceFirstChar { it.uppercase() },
                 risk = "Approval required",
-                guidance = "Only approve actions that match what you asked PhoneCode to do.",
+                guidance = "Only approve actions that match what you asked Misul Agent to do.",
             )
     }
 }

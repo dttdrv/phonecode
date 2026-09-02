@@ -31,7 +31,7 @@ class TurnService : Service() {
             "Agent activity",
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Shown while PhoneCode is working in the background."
+            description = "Shown while Misul Agent is working in the background."
         }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
@@ -56,7 +56,7 @@ class TurnService : Service() {
         )
         val notification = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("PhoneCode is working")
+            .setContentTitle("Misul Agent is working")
             .setContentText("Agent work and local processes remain active.")
             .setContentIntent(open)
             .setCategory(Notification.CATEGORY_SERVICE)

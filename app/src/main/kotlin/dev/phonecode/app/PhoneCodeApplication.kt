@@ -5,6 +5,7 @@ import android.os.Process
 import dev.phonecode.app.agent.ChatViewModel
 import dev.phonecode.app.agent.TurnService
 import dev.phonecode.app.data.TransferBundle
+import dev.phonecode.app.runtime.MisulRuntimeController
 import dev.phonecode.app.runtime.ShellBackendFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +32,10 @@ class PhoneCodeApplication : Application() {
     internal val shellBackend by lazy {
         requireMainUid()
         ShellBackendFactory.create(this, BuildConfig.DEBUG)
+    }
+    internal val misulRuntimeController by lazy {
+        requireMainUid()
+        MisulRuntimeController()
     }
 
     /**

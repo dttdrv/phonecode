@@ -43,7 +43,6 @@ data class PersistedSession(
     val branchInitialized: Boolean = false,
     val turnOutcome: String? = null,
     val queuedMessages: List<String> = emptyList(),
-    val agentMode: String? = null,
 )
 
 /** Lightweight catalog row for the sessions list (one-line preview, no full message bodies). */
@@ -56,7 +55,6 @@ data class SessionMeta(
     val pinned: Boolean = false,
     val archived: Boolean = false,
     val branchInitialized: Boolean = false,
-    val agentMode: String? = null,
 )
 
 /** Collapse basic markdown to plain text so drawer previews read clean (no **, *, `, #, >, lists, links). */
@@ -134,7 +132,6 @@ class SessionStore(private val dir: File) {
             pinned = s.pinned,
             archived = s.archived,
             branchInitialized = s.branchInitialized,
-            agentMode = s.agentMode,
         )
 
     /** Lazily scan the dir once into [metaCache] (the only full-parse pass); later calls reuse it. */
@@ -167,9 +164,6 @@ class SessionStore(private val dir: File) {
                 pinned = it.pinned,
                 archived = it.archived,
                 branchInitialized = it.branchInitialized,
-                // Transcript checkpoints are stale by design while a turn streams. Mode changes
-                // have their own authority path and must never be rolled back by one of them.
-                agentMode = it.agentMode ?: session.agentMode,
             )
         } ?: session
         save(updated)
@@ -266,12 +260,6 @@ class SessionStore(private val dir: File) {
 
     fun setBranchInitialized(id: String): Unit = locked {
         load(id)?.let { save(it.copy(branchInitialized = true)) }
-    }
-
-    fun setAgentMode(id: String, agentMode: String): Boolean = locked {
-        val session = load(id) ?: return@locked false
-        save(session.copy(agentMode = agentMode))
-        true
     }
 
     private fun acceptsWrite(id: String, writeOrder: Long?): Boolean {

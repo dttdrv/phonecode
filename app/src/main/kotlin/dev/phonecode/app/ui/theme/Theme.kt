@@ -18,7 +18,10 @@ fun PhoneCodeTheme(
     content: @Composable () -> Unit,
 ) {
     val overscrollFactory = rememberPlatformOverscrollFactory()
-    CompositionLocalProvider(LocalOverscrollFactory provides overscrollFactory) {
+    CompositionLocalProvider(
+        LocalOverscrollFactory provides overscrollFactory,
+        LocalMisulAccent provides if (darkTheme) MisulCobaltDark else MisulCobaltLight,
+    ) {
         MaterialTheme(
             colorScheme = if (darkTheme) phoneDarkColorScheme() else phoneLightColorScheme(),
             typography = PhoneTypography,

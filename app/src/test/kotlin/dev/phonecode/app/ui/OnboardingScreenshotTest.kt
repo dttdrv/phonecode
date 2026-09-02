@@ -51,7 +51,7 @@ class OnboardingScreenshotTest {
             }
         }
         compose.waitForIdle()
-        compose.onNodeWithText("PhoneCode").assertIsDisplayed()
+        compose.onNodeWithText("Misul Agent").assertIsDisplayed()
         compose.onNodeWithText("Get started").assertIsDisplayed()
         compose.onRoot().captureRoboImage("screenshots/15-onboarding-welcome.png")
         compose.onNodeWithText("Get started").performClick()

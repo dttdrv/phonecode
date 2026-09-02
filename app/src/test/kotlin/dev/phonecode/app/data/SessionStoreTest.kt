@@ -135,28 +135,6 @@ class SessionStoreTest {
         assertEquals(checkpoint, store.load("new"))
     }
 
-    @Test fun transcriptCheckpointCannotOverwriteIndependentlySavedAgentMode() {
-        val initial = PersistedSession(
-            id = "mode-race",
-            title = "Mode race",
-            updatedAt = 1L,
-            messages = sample.map { it.toPersisted() },
-            agentMode = "PLAN",
-        )
-        store.save(initial)
-        store.setAgentMode(initial.id, "BUILD")
-
-        store.checkpoint(
-            initial.copy(
-                updatedAt = 2L,
-                messages = sample.dropLast(1).map { it.toPersisted() },
-                agentMode = "PLAN",
-            ),
-        )
-
-        assertEquals("BUILD", store.load(initial.id)?.agentMode)
-    }
-
     @Test fun lateCancellationCannotRollbackImmediateResendCheckpoint() {
         val first = PersistedMessage(PersistedRole.USER, listOf(PersistedPart.Text("first")))
         val second = PersistedMessage(PersistedRole.USER, listOf(PersistedPart.Text("second")))

@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
@@ -72,6 +73,7 @@ import dev.phonecode.app.ui.theme.ShapeButton
 import dev.phonecode.app.ui.theme.Spacing
 import dev.phonecode.app.ui.theme.PhoneSprings
 import androidx.compose.material3.Icon
+import dev.phonecode.app.ui.theme.LocalMisulAccent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.collect
@@ -258,8 +260,7 @@ fun PcToggle(
 @Composable
 fun PcGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier.fillMaxWidth(),
         content = content,
     )
 }
@@ -270,22 +271,26 @@ fun PcRow(
     onClick: (() -> Unit)? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
-    val base = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).background(colors.surface)
-        .heightIn(min = Spacing.touchTarget)
+    val base = Modifier.fillMaxWidth().heightIn(min = Spacing.touchTarget)
     val clickableBase = if (onClick != null) {
         base.pressFeedback(interaction, pressedScale = 0.99f)
             .clickable(interactionSource = interaction, indication = ripple(), role = Role.Button, onClick = onClick)
     } else {
         base
     }
-    Row(
-        clickableBase.then(modifier).padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-        content = content,
-    )
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            clickableBase.then(modifier).padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+            content = content,
+        )
+        HorizontalDivider(
+            modifier = Modifier.padding(start = 48.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.52f),
+        )
+    }
 }
 
 @Composable
@@ -336,7 +341,7 @@ fun PcField(
                     onValueChange = onValueChange,
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onBackground),
-                    cursorBrush = SolidColor(colors.primary),
+                    cursorBrush = SolidColor(LocalMisulAccent.current),
                     singleLine = singleLine,
                     minLines = minLines,
                     visualTransformation = if (password && !passwordVisible) {

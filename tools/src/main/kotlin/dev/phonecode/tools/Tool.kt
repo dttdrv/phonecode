@@ -32,9 +32,6 @@ interface Tool {
 
     fun mutates(args: JsonObject): Boolean = mutating
 
-    /** True for tools only meaningful while planning (e.g. plan_exit); shown in PLAN mode, hidden in BUILD. */
-    val planOnly: Boolean get() = false
-
     /** If true, the loop serializes this tool's whole batch instead of running it in parallel. */
     val sequential: Boolean get() = mutating
 

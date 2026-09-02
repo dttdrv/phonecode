@@ -72,7 +72,9 @@ class ScreenshotTest {
     private val seedSession = object : ExternalResource() {
         override fun before() {
             val filesDir = ApplicationProvider.getApplicationContext<android.content.Context>().filesDir
-            UiTestSecureKeyStore.replaceWith(mapOf("anthropic" to "screenshot-fixture-key"))
+            UiTestSecureKeyStore.replaceWith(
+                mapOf("anthropic" to "screenshot-fixture-key", "openai" to "screenshot-openai-key"),
+            )
             // First-run onboarding would otherwise cover the app for every test.
             File(filesDir, "app_settings.json").writeText("""{"onboarded":true}""")
             ProjectStore(File(filesDir, "projects.json")).replace(
@@ -269,7 +271,6 @@ class ScreenshotTest {
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
         listOf(
-            "General" to "15-settings-general",
             "Files & permissions" to "16-settings-files-permissions",
             "Appearance" to "17-settings-appearance",
             "Personalization" to "18-settings-personalization",

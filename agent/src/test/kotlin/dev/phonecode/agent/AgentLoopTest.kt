@@ -13,8 +13,6 @@ import dev.phonecode.tools.Tool
 import dev.phonecode.tools.ToolContext
 import dev.phonecode.tools.ToolRegistry
 import dev.phonecode.tools.ToolResult
-import dev.phonecode.tools.UserAnswer
-import dev.phonecode.tools.UserQuestion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
@@ -75,12 +73,10 @@ class AgentLoopTest {
     }
 
     private fun config(
-        mode: AgentMode = AgentMode.BUILD,
         maxSteps: Int = 200,
         instructions: List<String> = emptyList(),
     ) = AgentConfig(
         model = "m",
-        mode = mode,
         environment = AgentEnvironment(workspacePath = "/ws"),
         maxSteps = maxSteps,
         projectInstructions = instructions,
@@ -186,13 +182,13 @@ class AgentLoopTest {
         assertTrue(events.any { it is AgentEvent.ToolFinished && it.isError && it.output.contains("unknown tool") })
     }
 
-    @Test fun planModeWithholdsMutatingTools() = runTest {
-        val provider = ScriptedProvider(listOf(listOf(StreamEvent.TextDelta("plan"), StreamEvent.Done(StopReason.END_TURN))))
+    @Test fun unifiedAgentExposesReadAndMutatingTools() = runTest {
+        val provider = ScriptedProvider(listOf(listOf(StreamEvent.TextDelta("ready"), StreamEvent.Done(StopReason.END_TURN))))
         val tools = listOf(RecordingTool("write", mutating = true), RecordingTool("read", mutating = false))
-        loop(provider, tools, cfg = config(mode = AgentMode.PLAN)).run(emptyList(), "explore").toList()
+        loop(provider, tools).run(emptyList(), "work").toList()
         val toolNames = provider.requests[0].tools.map { it.name }
         assertTrue(toolNames.contains("read"))
-        assertFalse(toolNames.contains("write"))
+        assertTrue(toolNames.contains("write"))
     }
 
     @Test fun mutatingToolPermissionDeniedIsReported() = runTest {
@@ -245,51 +241,6 @@ class AgentLoopTest {
 
         assertTrue(context.permissionSummaries.single().contains(middle))
         assertTrue(context.permissionSummaries.single().contains(args))
-    }
-
-    @Test fun planExitApprovalUnlocksBuildModeMidRun() = runTest {
-        // Turn 1: model calls plan_exit (approved). Turn 2: model calls the mutating write tool. Turn 3: wrap up.
-        val provider = ScriptedProvider(
-            listOf(
-                toolTurn(Triple(0, "c1", "plan_exit")),
-                toolTurn(Triple(0, "c2", "write")),
-                finalText,
-            ),
-        )
-        var mode = AgentMode.PLAN
-        val write = RecordingTool("write", mutating = true)
-        val planExit = PlanExitTool {
-            mode = AgentMode.BUILD
-            true
-        }
-        val approving = object : ToolContext {
-            override val workspacePath = "/ws"
-            override suspend fun requestPermission(tool: String, summary: String) = true
-            override suspend fun askUser(questions: List<UserQuestion>) =
-                questions.map { UserAnswer(it.question, listOf("Yes")) }
-        }
-        val events = AgentLoop(
-            provider, ToolRegistry(listOf(write, planExit)), approving, config(mode = AgentMode.PLAN),
-            modeProvider = { mode },
-        ).run(emptyList(), "plan then build").toList()
-
-        assertEquals(1, write.executions) // write ran - it would have been hard-blocked if still in PLAN
-        assertTrue(events.any { it is AgentEvent.ToolFinished && it.id == "c2" && !it.isError })
-        // PLAN turn hid the mutating tool and showed plan_exit; BUILD turn flipped both.
-        val planTurnTools = provider.requests[0].tools.map { it.name }
-        val buildTurnTools = provider.requests[1].tools.map { it.name }
-        assertTrue(planTurnTools.contains("plan_exit"))
-        assertFalse(planTurnTools.contains("write"))
-        assertTrue(buildTurnTools.contains("write"))
-        assertFalse(buildTurnTools.contains("plan_exit"))
-    }
-
-    @Test fun planModeHardBlocksMutatingExecution() = runTest {
-        val provider = ScriptedProvider(listOf(toolTurn(Triple(0, "c", "write")), finalText))
-        val tool = RecordingTool("write", mutating = true)
-        val events = loop(provider, listOf(tool), cfg = config(mode = AgentMode.PLAN)).run(emptyList(), "x").toList()
-        assertEquals(0, tool.executions)
-        assertTrue(events.any { it is AgentEvent.ToolFinished && it.isError && it.output.contains("PLAN") })
     }
 
     @Test fun providerFailureEmitsErrorAndStops() = runTest {
@@ -468,19 +419,16 @@ class AgentLoopTest {
         assertEquals("model-B", provider.requests[1].model)
     }
 
-    @Test fun systemPromptContainsBaseToolsInstructionsAndPlanReminder() = runTest {
+    @Test fun systemPromptContainsBaseToolsInstructionsWithoutModeReminder() = runTest {
         val provider = ScriptedProvider(listOf(listOf(StreamEvent.TextDelta("ok"), StreamEvent.Done(StopReason.END_TURN))))
-        val cfg = config(
-            mode = AgentMode.PLAN,
-            instructions = listOf("This repo uses 4-space indentation."),
-        )
+        val cfg = config(instructions = listOf("This repo uses 4-space indentation."))
         loop(provider, listOf(RecordingTool("read", snippet = "read a file by path")), cfg = cfg).run(emptyList(), "x").toList()
         val system = provider.requests[0].system!!
         assertTrue(system.contains("AI coding agent operating inside PhoneCode"))
         assertTrue(system.contains("- read: read a file by path"))
         assertTrue(system.contains("Workspace: /ws"))
         assertTrue(system.contains("This repo uses 4-space indentation."))
-        assertTrue(system.contains("PLAN MODE ACTIVE"))
+        assertFalse(system.contains("PLAN MODE ACTIVE"))
     }
 
     @Test fun doomLoopGuardStopsRepeatedIdenticalCalls() = runTest {

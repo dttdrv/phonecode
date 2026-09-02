@@ -4,15 +4,6 @@ import android.app.Application
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import dev.phonecode.agent.AgentConfig
-import dev.phonecode.agent.AgentEnvironment
-import dev.phonecode.agent.AgentEvent
-import dev.phonecode.agent.AgentLoop
-import dev.phonecode.agent.AgentMode
-import dev.phonecode.agent.MessageSource
-import dev.phonecode.agent.PlanExitTool
-import dev.phonecode.agent.TaskTool
-import dev.phonecode.agent.TurnSettings
 import dev.phonecode.app.auth.CodexAuth
 import dev.phonecode.app.auth.GitHubAuth
 import dev.phonecode.app.auth.githubOAuthClientId
@@ -43,17 +34,20 @@ import dev.phonecode.app.data.TransferBundle
 import dev.phonecode.app.data.toDomain
 import dev.phonecode.app.data.toPreset
 import dev.phonecode.app.data.toPersisted
+import dev.phonecode.app.data.writeTextAtomically
+import dev.phonecode.app.runtime.MisulModel
+import dev.phonecode.app.runtime.MisulProvider
+import dev.phonecode.app.runtime.MisulRuntimeEvent
+import dev.phonecode.app.runtime.MisulRuntimeSpec
+import dev.phonecode.app.runtime.toMisulImportSession
 import dev.phonecode.provider.catalog.Catalog
 import dev.phonecode.provider.catalog.CatalogLoader
 import dev.phonecode.provider.domain.ChatMessage
-import dev.phonecode.provider.domain.FailureKind
-import dev.phonecode.provider.domain.LlmProvider
 import dev.phonecode.provider.domain.MessagePart
 import dev.phonecode.provider.domain.ReasoningEffort
 import dev.phonecode.provider.domain.Role
 import dev.phonecode.provider.http.CodexModelInfo
 import dev.phonecode.provider.http.CodexModelsClient
-import dev.phonecode.provider.http.ProviderFactory
 import dev.phonecode.provider.preset.BuiltInPresets
 import dev.phonecode.provider.preset.CodexCompatibility
 import dev.phonecode.provider.preset.ProviderPreset
@@ -87,6 +81,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -126,58 +121,6 @@ internal fun permissionCanAutoApprove(tool: String, automaticChanges: Boolean): 
     return normalized != "doom_loop" &&
         normalized != "external_directory" &&
         !normalized.startsWith("external_directory_")
-}
-
-internal fun restoredAgentMode(
-    persistedMode: String?,
-    interrupted: Boolean,
-    fallback: AgentMode,
-): AgentMode {
-    if (interrupted) return AgentMode.PLAN
-    return persistedMode
-        ?.let { runCatching { AgentMode.valueOf(it) }.getOrNull() }
-        ?: fallback
-}
-
-internal data class AgentModePersistenceResult(
-    val durable: Boolean,
-    val current: Boolean,
-)
-
-/**
- * A mode request may be superseded while its atomic file write is in progress. Repair the durable
- * value to the newest authority before returning; if that repair transiently fails, retry Plan so
- * a later process restore cannot resurrect a superseded Build grant.
- */
-internal fun persistAgentModeWithLatestAuthority(
-    requestedMode: AgentMode,
-    previousMode: AgentMode?,
-    persist: (AgentMode) -> Boolean,
-    authoritativeMode: () -> AgentMode,
-): AgentModePersistenceResult {
-    var attemptedMode = requestedMode
-    var superseded = false
-    var retriedSafeMode = false
-    while (true) {
-        val stored = runCatching { persist(attemptedMode) }.getOrDefault(false)
-        val latestMode = authoritativeMode()
-        if (stored && latestMode == attemptedMode) {
-            return AgentModePersistenceResult(durable = true, current = !superseded)
-        }
-        if (latestMode != attemptedMode) {
-            superseded = true
-            attemptedMode = latestMode
-            retriedSafeMode = false
-            continue
-        }
-        val safeFallback = latestMode == AgentMode.PLAN || previousMode == AgentMode.PLAN
-        if (superseded && safeFallback && !retriedSafeMode) {
-            attemptedMode = AgentMode.PLAN
-            retriedSafeMode = true
-            continue
-        }
-        return AgentModePersistenceResult(durable = false, current = !superseded)
-    }
 }
 
 data class QuestionRequest(val questions: List<UserQuestion>)
@@ -228,7 +171,6 @@ data class ChatUiState(
     val queued: List<String> = emptyList(), // messages sent while a turn runs, awaiting pickup by the agent
     val models: List<ModelOption> = builtInModels(BuildConfig.CODEX_OAUTH_ENABLED),
     val selected: ModelOption? = builtInModels(BuildConfig.CODEX_OAUTH_ENABLED).firstOrNull(),
-    val agentMode: AgentMode = AgentMode.BUILD,
     val effort: ReasoningEffort = ReasoningEffort.DEFAULT,
     val autoAccept: Boolean = false,
     val pendingPermission: PermissionRequest? = null,
@@ -300,7 +242,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         .build()
     private val reportHttp = reportHttpClient(http)
     private val foregroundLeases = (app as PhoneCodeApplication).foregroundLeases
-    private val shellBackend = (app as PhoneCodeApplication).shellBackend
+    private val shellBackend by lazy { (app as PhoneCodeApplication).shellBackend }
+    private val misulRuntime by lazy { (app as PhoneCodeApplication).misulRuntimeController }
     private val turnLease = AtomicReference<String?>(null)
     private val todoStore = TodoStore()
     private val configDir = File(app.filesDir, "config")
@@ -308,20 +251,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val customProviders = CustomProviderRepository(configDir)
     private val sharedFolderStore = SharedFolderStore(File(app.filesDir, "shared_folders.json"))
     private val sharedFileAccess = AndroidSharedFileAccess(app, sharedFolderStore)
-    private val baseTools: List<Tool> =
+    private val baseTools: List<Tool> by lazy {
         defaultFileTools() + ApplyPatchTool() + ExternalDirectoryTool() + QuestionTool() +
             SharedReadTool(sharedFileAccess) + SharedWriteTool(sharedFileAccess) +
-            PlanExitTool { setAgentModeAndWait(AgentMode.BUILD) } + todoTools(todoStore) +
-            WebFetchTool(http) + WebSearchTool(http) + TaskTool(::runSubagent) + gitTools { gitCredentials() } +
+            todoTools(todoStore) +
+            WebFetchTool(http) + WebSearchTool(http) + gitTools { gitCredentials() } +
             ShellTool(shellBackend) + ProcessTool(shellBackend) +
             ExtensionConfigReadTool(repo) { workspace } + ExtensionConfigWriteTool(repo) { workspace }
+    }
     @Volatile private var mcpTools: List<Tool> = emptyList()
     @Volatile private var discoveredSkills: List<SkillManifest> = emptyList()
-    private val tools = ToolRegistry(baseTools)
+    private val tools by lazy { ToolRegistry(baseTools) }
     // MUST be initialized before the init block below: the MCP-connect coroutine it launches calls
     // rebuildTools() and can run before a later-declared field's initializer executes (NPE at launch).
     private val toolsLock = Any()
-    private val toolContext = AndroidToolContext({ (turnWorkspace ?: workspace).absolutePath }, ::askPermission, ::askUser)
     private val catalogLoader = CatalogLoader(
         http,
         FileCatalogCache(app.cacheDir),
@@ -345,14 +288,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun providerFor(id: String): ProviderPreset? {
         if (!providerAllowed(id, BuildConfig.CODEX_OAUTH_ENABLED)) return null
         val preset = BuiltInPresets.byId(id) ?: customPresets[id] ?: return null
-        if (preset.wireFormat != WireFormat.OPENAI_COMPAT) return preset
+        if (preset.wireFormat != WireFormat.OPENAI_COMPAT) return null
         return preset.withCatalogApi(catalog[catalogProviderId(id)]?.api)
     }
 
     /** All providers for Settings: built-ins plus any agent-defined custom providers. */
     fun allProviders(): List<ProviderPreset> =
-        BuiltInPresets.all.filter { providerAllowed(it.id, BuildConfig.CODEX_OAUTH_ENABLED) } +
-            customPresets.values.sortedBy { it.displayName }
+        BuiltInPresets.all + customPresets.values.sortedBy { it.displayName }
+
+    /** Whether the native Misul runtime can execute this provider in the current alpha. */
+    fun providerAvailableInMisul(providerId: String): Boolean =
+        providerAllowed(providerId, BuildConfig.CODEX_OAUTH_ENABLED) &&
+            allProviders().firstOrNull { it.id == providerId }?.wireFormat == WireFormat.OPENAI_COMPAT
 
     /** The selected model's token limits from the models.dev catalog, then the custom config, if known. */
     private fun limitFor(option: ModelOption?): dev.phonecode.provider.catalog.Limit? = option?.let {
@@ -369,11 +316,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val appSettings = AppSettingsStore(File(app.filesDir, "app_settings.json"))
     private val startupSettings = appSettings.load()
-    private val startupMode = runCatching { AgentMode.valueOf(startupSettings.defaultMode) }.getOrDefault(AgentMode.BUILD)
     private val _state = MutableStateFlow(
         ChatUiState(
             sessionLoading = true,
-            agentMode = startupMode,
             autoAccept = startupSettings.autoAccept,
         ),
     )
@@ -401,11 +346,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val runtimeReloadMutex = Mutex()
     private val mcpReloadMutex = Mutex()
     private val metadataMutationMutex = Mutex()
-    private val agentModeMutationMutex = Mutex()
-    private val agentModeRequestLock = Any()
-    private val agentModeRequestOrder = AtomicLong()
-    private val latestAgentModeRequests = mutableMapOf<String, Long>()
-    private val pendingAgentModes = mutableMapOf<String, AgentMode>()
     private val autoAcceptMutationLock = Any()
     @Volatile private var lastMcpFingerprint: String? = null
     @Volatile private var lastSkillsFingerprint: String? = null
@@ -420,23 +360,28 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     )
     @Volatile private var lastCatalogRefreshAt = 0L
     @Volatile private var lastCodexRefreshAt = 0L
-    private var pendingDecision: CompletableDeferred<Boolean>? = null
+    private val pendingNativeApprovalId = AtomicReference<String?>(null)
     private var pendingQuestionDecision: CompletableDeferred<List<UserAnswer>>? = null
 
     // Messages sent while a turn is running: the agent loop drains them as steering (picked up at its next
     // step, so it can be redirected without stopping) or as a follow-up at the end - nothing is dropped.
     private val pendingMessages = java.util.concurrent.ConcurrentLinkedQueue<String>()
     private val queueStateLock = Any()
-    private val queueSource = MessageSource { generateSequence { pendingMessages.poll() }.toList() }
 
     init {
-        configDir.mkdirs()
-        repo.seedBundledSkills(app.assets)
-        refreshSkillsNow()
-        refreshSessions()
-        foregroundLeases.registerStopHandler("processes", shellBackend::stopAll)
+        foregroundLeases.registerStopHandler("processes") { shellBackend.stopAll() }
         foregroundLeases.registerStopHandler("turn") { cancel() }
-        viewModelScope.launch(Dispatchers.IO) { shellBackend.status(workspace.absolutePath) }
+        viewModelScope.launch(Dispatchers.IO) {
+            delay(STARTUP_DEFER_MILLIS)
+            configDir.mkdirs()
+            repo.seedBundledSkills(app.assets)
+            refreshSkillsNow()
+            _state.update { it.copy(sessions = sessionStore.list(), projects = projectStore.list()) }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            delay(STARTUP_DEFER_MILLIS)
+            shellBackend.status(workspace.absolutePath)
+        }
         viewModelScope.launch(Dispatchers.IO) {
             _state.update {
                 it.copy(
@@ -481,7 +426,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             turnOutcome = latest.turnOutcome?.let { saved ->
                                 runCatching { TurnOutcome.valueOf(saved) }.getOrNull()
                             },
-                            agentMode = restoredAgentMode(latest.agentMode, interrupted, startupMode),
                             queued = latest.queuedMessages,
                             sessionLoading = false,
                         )
@@ -492,7 +436,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         latest.copy(
                             messages = restored.map { it.toPersisted() },
                             activeTurn = false,
-                            agentMode = AgentMode.PLAN.name,
                         ),
                     )
                 }
@@ -501,11 +444,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         // Load MCP config + discover skills, then connect remote MCP servers and fold their tools in.
         viewModelScope.launch(Dispatchers.IO) {
+            delay(STARTUP_DEFER_MILLIS)
             reconnectMcpNow(force = true)
             configHotReload.restart()
         }
-        configHotReload.start()
-        refreshModels()
+        viewModelScope.launch {
+            delay(STARTUP_DEFER_MILLIS)
+            refreshModels()
+        }
     }
 
     fun refreshModels(forceRefresh: Boolean = false) {
@@ -574,7 +520,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Build the picker from the catalog for our presets; fall back to built-ins per provider. */
     private fun catalogToOptions(catalog: Catalog): List<ModelOption> {
         val out = mutableListOf<ModelOption>()
-        BuiltInPresets.all.filter { providerAllowed(it.id, BuildConfig.CODEX_OAUTH_ENABLED) }.forEach { preset ->
+        BuiltInPresets.all.filter { it.wireFormat == WireFormat.OPENAI_COMPAT }.forEach { preset ->
             if (preset.id == "codex") {
                 val authenticated = codexModelMetadata.values
                     .sortedWith(compareBy<CodexModelInfo> { it.priority }.thenBy { it.displayName })
@@ -783,6 +729,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 provider.models.mapNotNull { (modelId, model) -> model.context?.let { "$providerId/$modelId" to it } }
             }.toMap()
             val customOptions = cfg.provider.flatMap { (providerId, provider) ->
+                if (customPresets[providerId]?.wireFormat != WireFormat.OPENAI_COMPAT) return@flatMap emptyList()
                 provider.models.map { (modelId, model) -> ModelOption(providerId, modelId, model.name.ifBlank { modelId }) }
             }
             applyModelOptions(catalogToOptions(catalog) + customOptions)
@@ -875,138 +822,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return owned.await()
     }
 
-    fun setAgentMode(mode: AgentMode) {
-        val visibleMode = _state.value.agentMode
-        val targetSessionId = sessionId
-        val requestOrder = registerAgentModeRequest(targetSessionId, mode, visibleMode) ?: return
-        val snapshot = history
-        val targetProjectId = currentProjectId
-        val targetTodos = todoStore.snapshot()
-        // Entering Plan is a safety boundary: close mutation access immediately. Build is granted
-        // only after the durable write succeeds off the UI thread.
-        if (mode == AgentMode.PLAN) {
-            _state.update { it.copy(agentMode = AgentMode.PLAN) }
-        }
-        viewModelScope.launch {
-            persistAgentModeChange(
-                targetSessionId = targetSessionId,
-                mode = mode,
-                requestOrder = requestOrder,
-                snapshot = snapshot,
-                targetProjectId = targetProjectId,
-                targetTodos = targetTodos,
-            )
-        }
-    }
-
-    private suspend fun setAgentModeAndWait(mode: AgentMode): Boolean {
-        val visibleMode = _state.value.agentMode
-        val targetSessionId = sessionId
-        val requestOrder = registerAgentModeRequest(targetSessionId, mode, visibleMode) ?: return true
-        val snapshot = history
-        val targetProjectId = currentProjectId
-        val targetTodos = todoStore.snapshot()
-        if (mode == AgentMode.PLAN) {
-            _state.update { it.copy(agentMode = AgentMode.PLAN) }
-        }
-        return persistAgentModeChange(
-            targetSessionId = targetSessionId,
-            mode = mode,
-            requestOrder = requestOrder,
-            snapshot = snapshot,
-            targetProjectId = targetProjectId,
-            targetTodos = targetTodos,
-        )
-    }
-
-    private fun registerAgentModeRequest(
-        targetSessionId: String,
-        mode: AgentMode,
-        visibleMode: AgentMode,
-    ): Long? = synchronized(agentModeRequestLock) {
-        if (pendingAgentModes[targetSessionId] == mode ||
-            (pendingAgentModes[targetSessionId] == null && visibleMode == mode)
-        ) {
-            return@synchronized null
-        }
-        agentModeRequestOrder.incrementAndGet().also { order ->
-            latestAgentModeRequests[targetSessionId] = order
-            pendingAgentModes[targetSessionId] = mode
-        }
-    }
-
-    private suspend fun persistAgentModeChange(
-        targetSessionId: String,
-        mode: AgentMode,
-        requestOrder: Long,
-        snapshot: List<ChatMessage>,
-        targetProjectId: String?,
-        targetTodos: List<TodoItem>,
-    ): Boolean = withContext(Dispatchers.IO) {
-        agentModeMutationMutex.withLock {
-            val stillLatest = synchronized(agentModeRequestLock) {
-                latestAgentModeRequests[targetSessionId] == requestOrder
-            }
-            if (!stillLatest) return@withLock false
-
-            val previousMode = sessionStore.load(targetSessionId)?.agentMode
-                ?.let { runCatching { AgentMode.valueOf(it) }.getOrNull() }
-            val persistence = persistAgentModeWithLatestAuthority(
-                requestedMode = mode,
-                previousMode = previousMode,
-                persist = { attemptedMode ->
-                    runCatching {
-                        if (!sessionStore.setAgentMode(targetSessionId, attemptedMode.name)) {
-                            val created = sessionStore.create(
-                                PersistedSession(
-                                    id = targetSessionId,
-                                    title = "New chat",
-                                    updatedAt = System.currentTimeMillis(),
-                                    messages = snapshot.map { it.toPersisted() },
-                                    projectId = targetProjectId,
-                                    todos = targetTodos,
-                                    agentMode = attemptedMode.name,
-                                ),
-                            )
-                            check(created || sessionStore.setAgentMode(targetSessionId, attemptedMode.name)) {
-                                "The chat mode could not be checkpointed"
-                            }
-                        }
-                    }.isSuccess
-                },
-                authoritativeMode = {
-                    synchronized(agentModeRequestLock) {
-                        if (latestAgentModeRequests[targetSessionId] == requestOrder) {
-                            mode
-                        } else {
-                            pendingAgentModes[targetSessionId] ?: AgentMode.PLAN
-                        }
-                    }
-                },
-            )
-
-            val isCurrentRequest = synchronized(agentModeRequestLock) {
-                (latestAgentModeRequests[targetSessionId] == requestOrder).also { current ->
-                    if (current) pendingAgentModes.remove(targetSessionId)
-                }
-            }
-            if (!isCurrentRequest) return@withLock false
-            if (sessionId == targetSessionId) {
-                if (persistence.durable) {
-                    _state.update { it.copy(agentMode = mode, sessions = sessionStore.list()) }
-                } else if (mode == AgentMode.PLAN) {
-                    _state.update {
-                        it.copy(error = "Plan mode could not be saved; this chat remains read-only for this session.")
-                    }
-                } else {
-                    _state.update {
-                        it.copy(error = "Build mode could not be saved; this chat remains in Plan mode.")
-                    }
-                }
-            }
-            persistence.durable
-        }
-    }
     fun setEffort(effort: ReasoningEffort) = _state.update {
         if (effort in reasoningEfforts(it.selected)) it.copy(effort = effort) else it
     }
@@ -1144,7 +959,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         resetStreamingBuffers()
         sessionId = newSessionId()
         val activeProjectId = setActiveProject(projectId)
-        val defaultMode = runCatching { AgentMode.valueOf(appSettings.load().defaultMode) }.getOrDefault(AgentMode.BUILD)
         todoStore.replace(emptyList())
         sessionStore.create(
             PersistedSession(
@@ -1153,7 +967,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 updatedAt = System.currentTimeMillis(),
                 messages = emptyList(),
                 projectId = activeProjectId,
-                agentMode = defaultMode.name,
             ),
         )
         appSettings.update { it.copy(activeSessionId = sessionId) }
@@ -1170,7 +983,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 sessionLoading = false,
                 currentSessionId = sessionId,
                 currentProjectId = activeProjectId,
-                agentMode = defaultMode,
                 queued = emptyList(),
                 sessions = sessionStore.list(),
             )
@@ -1246,7 +1058,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         turnOutcome = loaded.turnOutcome?.let { saved ->
                             runCatching { TurnOutcome.valueOf(saved) }.getOrNull()
                         },
-                        agentMode = restoredAgentMode(loaded.agentMode, interrupted, startupMode),
                         sessionLoading = false,
                         currentSessionId = sessionId,
                         currentProjectId = activeProjectId,
@@ -1261,7 +1072,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         messages = restored.map { it.toPersisted() },
                         activeTurn = false,
                         projectId = committed.second,
-                        agentMode = if (interrupted) AgentMode.PLAN.name else loaded.agentMode,
                     ),
                 )
             }
@@ -1284,10 +1094,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { it.copy(sessions = sessionStore.list()) }
             }
         }
-    }
-
-    private fun refreshSessions() {
-        viewModelScope.launch(Dispatchers.IO) { _state.update { it.copy(sessions = sessionStore.list(), projects = projectStore.list()) } }
     }
 
     fun createProject(uri: android.net.Uri) {
@@ -1726,7 +1532,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 source = when {
                     tool.name in remoteNames -> "MCP"
                     tool.name == "skill" -> "Skills"
-                    else -> "PhoneCode"
+                    else -> "Misul Agent"
                 },
                 access = when {
                     tool.name == "external_directory" ||
@@ -1815,7 +1621,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val targetSessionId = sessionId
         val targetProjectId = currentProjectId
         val targetTodos = todoStore.snapshot()
-        val targetAgentMode = _state.value.agentMode
         val writeOrder = sessionWriteOrder.incrementAndGet()
         (getApplication<Application>() as PhoneCodeApplication).turnScope.launch(Dispatchers.IO) {
             persist(
@@ -1824,7 +1629,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 targetSessionId = targetSessionId,
                 targetProjectId = targetProjectId,
                 targetTodos = targetTodos,
-                targetAgentMode = targetAgentMode,
                 writeOrder = writeOrder,
                 expectedGeneration = expectedGeneration,
                 turnOutcome = turnOutcome,
@@ -2100,12 +1904,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                 messages = repaired.map { it.toPersisted() },
                                 projectId = safeProjectId,
                                 activeTurn = false,
-                                agentMode = restoredAgentMode(
-                                    restored.agentMode,
-                                    restored.activeTurn,
-                                    runCatching { AgentMode.valueOf(saved.defaultMode) }
-                                        .getOrDefault(AgentMode.BUILD),
-                                ).name,
                             )
                             if (loaded == null) {
                                 sessionStore.create(normalized)
@@ -2144,13 +1942,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                 hiddenModels = restored.hiddenModels,
                                 disabledProviders = restored.disabledProviders,
                                 autoAccept = restored.settings.autoAccept,
-                                agentMode = restoredAgentMode(
-                                    restored.session.agentMode,
-                                    interrupted = false,
-                                    fallback = runCatching {
-                                        AgentMode.valueOf(restored.settings.defaultMode)
-                                    }.getOrDefault(AgentMode.BUILD),
-                                ),
                                 lines = restored.messages.toChatLines(),
                                 currentSessionId = restored.session.id,
                                 currentProjectId = activeProjectId,
@@ -2174,43 +1965,81 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
     }
-    fun resolvePermission(approved: Boolean) { pendingDecision?.complete(approved) }
-    fun resolveQuestion(answers: List<UserAnswer>) { pendingQuestionDecision?.complete(answers) }
-
-    private fun connectedProvider(preset: ProviderPreset): LlmProvider? {
-        if (!providerAllowed(preset.id, BuildConfig.CODEX_OAUTH_ENABLED)) return null
-        val key = if (preset.id == "codex") codexAuth.accessToken() else keyStore.get(providerSecretName(preset.id))
-        if (key.isNullOrBlank()) return null
-        val resolved = if (preset.id == "codex") {
-            codexAuth.accountId()
-                ?.let { preset.copy(extraHeaders = preset.extraHeaders + ("chatgpt-account-id" to it)) }
-                ?: preset
-        } else {
-            preset
+    fun resolvePermission(approved: Boolean) {
+        val approvalId = pendingNativeApprovalId.getAndSet(null) ?: return
+        _state.update { current ->
+            current.copy(
+                pendingPermission = null,
+                lines = current.lines.map { line ->
+                    if (line is ChatLine.ToolActivity && line.id == approvalId && line.status == ToolStatus.AWAITING_APPROVAL) {
+                        line.copy(
+                            status = if (approved) ToolStatus.RUNNING else ToolStatus.STOPPED,
+                            detail = if (approved) "Approved" else "Denied",
+                        )
+                    } else {
+                        line
+                    }
+                },
+            )
         }
-        return ProviderFactory.create(resolved, key, http)
-    }
-
-    private suspend fun askPermission(tool: String, summary: String): Boolean {
-        // Authoritative read from the persisted settings file - the same source the settings
-        // toggle displays. The in-memory copy diverged on devices that carried an older value
-        // (device feedback: "auto-accept on even though it's off in settings").
-        // The execution state changes synchronously on revocation. Reading the file here allowed
-        // one last mutation to auto-run while the UI already said "Ask before each change."
-        val automaticChanges = _state.value.autoAccept
-        if (permissionCanAutoApprove(tool, automaticChanges)) return true
-        val deferred = CompletableDeferred<Boolean>()
-        pendingDecision = deferred
-        _state.update { it.copy(pendingPermission = PermissionRequest(tool, summary)) }
-        return try {
-            deferred.await()
-        } finally {
-            // Only clear if still current - a cancel->resend can install a newer deferred before this runs.
-            if (pendingDecision === deferred) {
-                pendingDecision = null
-                _state.update { it.copy(pendingPermission = null) }
+        (getApplication<Application>() as PhoneCodeApplication).turnScope.launch {
+            try {
+                misulRuntime.respondToApproval(approvalId, approved)
+            } catch (_: Throwable) {
+                runCatching { misulRuntime.abort() }
+                fail("Could not send the approval decision to Misul.")
             }
         }
+    }
+    fun resolveQuestion(answers: List<UserAnswer>) { pendingQuestionDecision?.complete(answers) }
+
+    private fun misulRuntimeSpec(
+        preset: ProviderPreset,
+        selected: ModelOption,
+        pinnedWorkspace: File,
+        credential: String,
+    ): MisulRuntimeSpec {
+        require(preset.wireFormat == WireFormat.OPENAI_COMPAT) { "${preset.displayName} is not available in this alpha" }
+        val limits = limitFor(selected)
+        val contextWindow = (limits?.context ?: 128_000L).coerceAtLeast(1)
+        val outputLimit = (limits?.output ?: minOf(32_000L, contextWindow)).coerceIn(1, contextWindow)
+        val reasoning = when (_state.value.effort) {
+            ReasoningEffort.DEFAULT, ReasoningEffort.NONE -> null
+            ReasoningEffort.ULTRA, ReasoningEffort.MAX -> "max"
+            else -> _state.value.effort.wireValue
+        }?.takeIf { supportsReasoning(selected) }
+        val instructions = loadProjectInstructions(pinnedWorkspace, appSettings.load().customInstructions)
+        val systemPrompt = buildString {
+            append("You are Misul Agent, a coding agent running directly on the user's Android phone. ")
+            append("Work in the provided workspace, use tools when they improve correctness, preserve user data, and report results plainly.")
+            if (instructions.isNotEmpty()) append("\n\n").append(instructions.joinToString("\n\n"))
+        }
+        return MisulRuntimeSpec(
+            workspaceRoot = pinnedWorkspace,
+            stateRoot = File(getApplication<Application>().filesDir, "misul/state"),
+            systemPrompt = systemPrompt,
+            model = MisulModel(
+                id = selected.modelId,
+                name = selected.label.substringAfter(" · ", selected.modelId),
+                provider = selected.providerId,
+                contextWindow = contextWindow,
+                outputLimit = outputLimit,
+                reasoning = reasoning,
+                toolCall = catalogModel(selected)?.toolCall ?: true,
+            ),
+            provider = MisulProvider(
+                id = selected.providerId,
+                endpoint = preset.baseUrl,
+                credential = credential,
+                dialect = when (selected.providerId) {
+                    "openrouter" -> "openrouter_chat"
+                    "deepseek" -> "deepseek_chat"
+                    else -> "openai_chat"
+                },
+                headers = preset.extraHeaders,
+            ),
+            allowMutatingTools = _state.value.autoAccept,
+        )
     }
 
     /** Suspend until the user answers the agent's question(s). Cancelling the turn resolves them as unanswered. */
@@ -2228,54 +2057,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /**
-     * Runs a [TaskTool] subagent: a fresh child [AgentLoop] on the same provider, with `task` and
-     * plan_exit removed (no recursion, no UI-mode side effects) and inheriting the parent's live mode
-     * (so a PLAN parent can only spawn a read-only child). Returns the child's accumulated text.
-     */
-    private suspend fun runSubagent(description: String, prompt: String, subagentType: String): String {
-        val selected = _state.value.selected ?: return "no model selected"
-        val preset = providerFor(selected.providerId) ?: return "unknown provider: ${selected.providerId}"
-        val provider = connectedProvider(preset)
-            ?: return if (preset.id == "codex") "ChatGPT sign-in expired" else "no API key configured for ${preset.displayName}"
-        val parentMode = _state.value.agentMode // capture so the child can't escalate PLAN->BUILD mid-subtask
-        val childEffort = if (supportsReasoning(selected)) _state.value.effort else ReasoningEffort.DEFAULT
-        val childLimit = limitFor(selected)
-        val childConfig = AgentConfig(
-            model = selected.modelId,
-            mode = parentMode,
-            environment = environment(),
-            reasoningEffort = childEffort,
-            mcpInstructions = mcpInstructions(),
-            sessionId = "phonecode-sub-${java.util.UUID.randomUUID()}",
-            projectInstructions = loadProjectInstructions(turnWorkspace ?: workspace, appSettings.load().customInstructions),
-        )
-        val childTools = ToolRegistry(tools.all().filterNot { it.name == "task" || it.planOnly })
-        val childLoop = AgentLoop(
-            provider, childTools, toolContext, childConfig,
-            turnSettings = { boundedTurnSettings(selected.modelId, childEffort, childLimit) },
-            modeProvider = { parentMode },
-            toolProvider = {
-                refreshRuntimeConfiguration()
-                ToolRegistry(tools.all().filterNot { it.name == "task" || it.planOnly })
-            },
-            mcpInstructionsProvider = { mcpInstructions() },
-        )
-        val out = StringBuilder()
-        var childError: String? = null
-        childLoop.run(emptyList(), prompt).collect { event ->
-            when (event) {
-                is AgentEvent.TextDelta -> out.append(event.text)
-                is AgentEvent.Error -> childError = event.message // surface child failure instead of a blank result
-                else -> Unit
-            }
-        }
-        return childError?.let { "subagent error: $it" } ?: out.toString()
-    }
-
     fun send(input: String, images: List<MessagePart.Image> = emptyList()): Boolean {
         val text = input.trim()
         if (text.isEmpty() && images.isEmpty()) return false
+        if (images.isNotEmpty()) {
+            fail("Photos are not available through the Misul runtime in this alpha yet.")
+            return false
+        }
         if (_state.value.sessionLoading) {
             fail("Wait for this chat to finish opening.")
             return false
@@ -2339,7 +2127,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         val turnSessionId = sessionId
         val turnProjectId = currentProjectId
-        val turnAgentMode = _state.value.agentMode
         val gen = ++generation
         // Pin this turn's workspace so a mid-stream project move/delete can't redirect the agent's
         // file/git tools into a different directory (data-integrity guard).
@@ -2364,57 +2151,145 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     activeTurn = true,
                     targetSessionId = turnSessionId,
                     targetProjectId = turnProjectId,
-                    targetAgentMode = turnAgentMode,
                     expectedGeneration = gen,
                 )
             }
-            val custom = appSettings.load().customInstructions.trim()
-            // Drive the reasoning param off the model's own "thinking" config (from the models.dev catalog -
-            // OpenCode's source). Send an effort only to models that actually reason; force DEFAULT otherwise
-            // so we never send a control a model rejects.
-            val reasons = supportsReasoning(selected)
-            val config = AgentConfig(
-                model = selected.modelId,
-                mode = _state.value.agentMode,
-                environment = environment(),
-                reasoningEffort = if (reasons) _state.value.effort else ReasoningEffort.DEFAULT,
-                mcpInstructions = mcpInstructions(),
-                sessionId = turnSessionId,
-                projectInstructions = loadProjectInstructions(pinnedWorkspace, custom),
-            )
-            val limit = limitFor(selected) // context/output token limits drive the gauge + compaction
             try {
-                val provider = connectedProvider(preset)
-                if (provider == null) {
+                val credential = keyStore.get(providerSecretName(selected.providerId))
+                if (credential.isNullOrBlank()) {
                     sessionStore.setActiveTurn(turnSessionId, false, sessionWriteOrder.incrementAndGet())
-                    fail(if (isCodex) "Sign in with ChatGPT again in Settings." else "Set an API key for ${preset.displayName} in Settings.")
+                    fail("Set an API key for ${preset.displayName} in Settings.")
                     return@launch
                 }
-                val loop = AgentLoop(
-                    provider, tools, toolContext, config,
-                    steering = queueSource, // messages queued mid-turn are picked up at the next step (steer)
-                    followUp = queueSource, // ...or run as a follow-up turn if queued right as the turn ends
-                    turnSettings = {
-                        boundedTurnSettings(
-                            config.model,
-                            if (reasons) _state.value.effort else ReasoningEffort.DEFAULT,
-                            limit,
-                        )
-                    },
-                    modeProvider = { _state.value.agentMode }, // live so a plan_exit approval flips PLAN→BUILD mid-run
-                    toolProvider = {
-                        refreshRuntimeConfiguration()
-                        tools
-                    },
-                    mcpInstructionsProvider = { mcpInstructions() },
-                )
                 if (sessionStore.list().none { it.id == turnSessionId && it.branchInitialized } &&
                     autoBranchIfEnabled(pinnedWorkspace, turnSessionId)
                 ) {
                     sessionStore.setBranchInitialized(turnSessionId)
                 }
-                loop.run(startingHistory, userParts).collect { event ->
-                    if (gen == generation) reduce(event, turnSessionId, turnProjectId, selected.providerId, gen)
+                val runtimeSpec = misulRuntimeSpec(preset, selected, pinnedWorkspace, credential)
+                importLegacySessionsOnce(runtimeSpec, turnSessionId, startingHistory)
+                var promptText = text
+                while (gen == generation) {
+                    val completeText = StringBuilder()
+                    val completeReasoning = StringBuilder()
+                    val settlement = misulRuntime.prompt(
+                        spec = runtimeSpec,
+                        sessionId = turnSessionId,
+                        prompt = promptText,
+                    ) { event ->
+                        if (gen != generation) return@prompt
+                        when (event) {
+                            is MisulRuntimeEvent.Text -> {
+                                completeText.append(event.delta)
+                                appendStreaming(text = event.delta, expectedGeneration = gen)
+                            }
+                            is MisulRuntimeEvent.Reasoning -> {
+                                completeReasoning.append(event.delta)
+                                appendStreaming(reasoning = event.delta, expectedGeneration = gen)
+                            }
+                            is MisulRuntimeEvent.ProtocolError -> throw IllegalStateException(event.message)
+                            is MisulRuntimeEvent.ToolStarted -> {
+                                commitStreaming()
+                                _state.update { current ->
+                                    current.copy(lines = current.lines + ChatLine.ToolActivity(
+                                        id = event.id,
+                                        name = event.name,
+                                        status = ToolStatus.RUNNING,
+                                        detail = summarizeArgs(event.input),
+                                        input = boundedToolInput(event.input),
+                                    ))
+                                }
+                            }
+                            is MisulRuntimeEvent.ToolFinished -> _state.update { current ->
+                                val index = current.lines.indexOfLast {
+                                    it is ChatLine.ToolActivity && it.id == event.id && it.status == ToolStatus.RUNNING
+                                }
+                                if (index < 0) current else current.copy(lines = current.lines.toMutableList().also { lines ->
+                                    lines[index] = (lines[index] as ChatLine.ToolActivity).copy(
+                                        status = if (event.isError) ToolStatus.ERROR else ToolStatus.DONE,
+                                        detail = if (event.isError) "Tool failed" else "Completed",
+                                    )
+                                })
+                            }
+                            is MisulRuntimeEvent.ApprovalRequested -> {
+                                pendingNativeApprovalId.set(event.id)
+                                _state.update { current ->
+                                    current.copy(
+                                        pendingPermission = PermissionRequest(event.name, summarizeArgs(event.input)),
+                                        lines = current.lines.map { line ->
+                                            if (line is ChatLine.ToolActivity && line.id == event.id) {
+                                                line.copy(status = ToolStatus.AWAITING_APPROVAL)
+                                            } else {
+                                                line
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                            is MisulRuntimeEvent.Started, is MisulRuntimeEvent.Ended -> Unit
+                        }
+                    }
+                    if (gen != generation) break
+
+                    commitStreaming()
+                    val assistantParts = buildList {
+                        completeReasoning.toString().takeIf(String::isNotBlank)?.let { add(MessagePart.Reasoning(it)) }
+                        settlement.content.ifBlank { completeText.toString() }
+                            .takeIf(String::isNotBlank)?.let { add(MessagePart.Text(it)) }
+                    }
+                    if (assistantParts.isNotEmpty()) history = history + ChatMessage(Role.ASSISTANT, assistantParts)
+
+                    val failed = settlement.status != "completed"
+                    if (failed) {
+                        persist(
+                            history,
+                            targetSessionId = turnSessionId,
+                            targetProjectId = turnProjectId,
+                            expectedGeneration = gen,
+                            turnOutcome = TurnOutcome.FAILED,
+                            queuedMessages = _state.value.queued,
+                        )
+                        _state.update {
+                            it.copy(
+                                isRunning = false,
+                                interruptedTurn = false,
+                                turnOutcome = TurnOutcome.FAILED,
+                                error = "Misul stopped this turn: ${settlement.failure}.",
+                            )
+                        }
+                        break
+                    }
+
+                    val followUp = synchronized(queueStateLock) {
+                        pendingMessages.poll()?.also {
+                            _state.update { current -> current.copy(queued = current.queued.drop(1)) }
+                        }
+                    }
+                    if (followUp == null) {
+                        persist(
+                            history,
+                            targetSessionId = turnSessionId,
+                            targetProjectId = turnProjectId,
+                            expectedGeneration = gen,
+                        )
+                        _state.update {
+                            it.copy(isRunning = false, interruptedTurn = false, turnOutcome = null, error = null)
+                        }
+                        break
+                    }
+
+                    history = history + ChatMessage(Role.USER, listOf(MessagePart.Text(followUp)))
+                    _state.update { it.copy(lines = it.lines + ChatLine.User(followUp)) }
+                    persist(
+                        history,
+                        activeTurn = true,
+                        targetSessionId = turnSessionId,
+                        targetProjectId = turnProjectId,
+                        expectedGeneration = gen,
+                        queuedMessages = _state.value.queued,
+                    )
+                    resetStreamingBuffers()
+                    promptText = followUp
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
@@ -2497,21 +2372,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             writeOrder to queued
         }
-        // Cancel the job FIRST so an awaiting tool unwinds via CancellationException (no extra turn/side-effect);
-        // completing the deferreds is then only a fallback to resume anything not yet at a cancellation point.
+        (getApplication<Application>() as PhoneCodeApplication).turnScope.launch {
+            runCatching { misulRuntime.abort() }
+        }
         job?.cancel()
         val stoppedLease = turnLease.getAndSet(null)
         // The cancelled job's finally skips the pin clear (generation moved on) - release it here
         // so no stale workspace pin outlives the turn.
         turnWorkspace = null
-        pendingDecision?.complete(false)
+        pendingNativeApprovalId.set(null)
         pendingQuestionDecision?.complete(emptyList())
         commitStopped(persistChanges = false)
         val stoppedSessionId = sessionId
         val stoppedProjectId = currentProjectId
         val stoppedHistory = history
         val stoppedTodos = todoStore.snapshot()
-        val stoppedAgentMode = _state.value.agentMode
         (getApplication<Application>() as PhoneCodeApplication).turnScope.launch {
             try {
                 if (stoppedHistory.isEmpty()) {
@@ -2522,7 +2397,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         targetSessionId = stoppedSessionId,
                         targetProjectId = stoppedProjectId,
                         targetTodos = stoppedTodos,
-                        targetAgentMode = stoppedAgentMode,
                         writeOrder = stoppedWriteOrder,
                         turnOutcome = TurnOutcome.STOPPED,
                         queuedMessages = stoppedQueued,
@@ -2557,199 +2431,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (parts.isEmpty()) repaired else repaired + ChatMessage(Role.ASSISTANT, parts)
         }
         if (history.isNotEmpty() && persistChanges) {
-            persist(targetAgentMode = _state.value.agentMode, turnOutcome = turnOutcome)
+            persist(turnOutcome = turnOutcome)
         } else if (persistChanges) {
             sessionStore.setActiveTurn(sessionId, false, sessionWriteOrder.incrementAndGet())
-        }
-    }
-
-    private fun reduce(
-        event: AgentEvent,
-        targetSessionId: String,
-        targetProjectId: String?,
-        targetProviderId: String,
-        expectedGeneration: Int,
-    ) {
-        synchronized(queueStateLock) {
-            // Serialize every admitted event with cancel/replacement transitions. The collector's outer
-            // generation check is only an optimization; this in-lock check is the correctness boundary.
-            if (expectedGeneration != generation) return
-            when (event) {
-            is AgentEvent.TextDelta -> appendStreaming(text = event.text, expectedGeneration = expectedGeneration)
-            is AgentEvent.ReasoningDelta -> appendStreaming(reasoning = event.text, expectedGeneration = expectedGeneration)
-            is AgentEvent.Retrying -> _state.update {
-                it.copy(retry = RetryState(event.attempt, event.message.take(100)))
-            }
-            is AgentEvent.HistoryCheckpoint -> {
-                history = event.messages
-                persist(
-                    event.messages,
-                    activeTurn = true,
-                    targetSessionId = targetSessionId,
-                    targetProjectId = targetProjectId,
-                    targetAgentMode = _state.value.agentMode,
-                    expectedGeneration = expectedGeneration,
-                )
-            }
-            is AgentEvent.ToolAwaitingApproval -> {
-                commitStreaming()
-                _state.update {
-                    it.copy(
-                        retry = null,
-                        lines = it.lines + ChatLine.ToolActivity(
-                            event.id,
-                            event.name,
-                            ToolStatus.AWAITING_APPROVAL,
-                            summarizeArgs(event.argsJson),
-                            boundedToolInput(event.argsJson),
-                        ),
-                    )
-                }
-            }
-            is AgentEvent.ToolStarted -> {
-                commitStreaming()
-                _state.update { state ->
-                    val index = state.lines.indexOfLast {
-                        it is ChatLine.ToolActivity &&
-                            it.id == event.id &&
-                            it.status == ToolStatus.AWAITING_APPROVAL
-                    }
-                    if (index < 0) {
-                        state.copy(
-                            retry = null,
-                            lines = state.lines + ChatLine.ToolActivity(
-                                event.id,
-                                event.name,
-                                ToolStatus.RUNNING,
-                                summarizeArgs(event.argsJson),
-                                boundedToolInput(event.argsJson),
-                            ),
-                        )
-                    } else {
-                        val updated = state.lines.toMutableList()
-                        updated[index] = (updated[index] as ChatLine.ToolActivity).copy(status = ToolStatus.RUNNING)
-                        state.copy(retry = null, lines = updated)
-                    }
-                }
-            }
-            is AgentEvent.ToolFinished -> _state.update { state ->
-                // Update only the most recent active line with this id (synthetic ids can repeat across turns).
-                val index = state.lines.indexOfLast {
-                    it is ChatLine.ToolActivity &&
-                        it.id == event.id &&
-                        (it.status == ToolStatus.RUNNING || it.status == ToolStatus.AWAITING_APPROVAL)
-                }
-                if (index < 0) {
-                    state
-                } else {
-                    val updated = state.lines.toMutableList()
-                    updated[index] = (updated[index] as ChatLine.ToolActivity).copy(
-                        status = if (event.isError) ToolStatus.ERROR else ToolStatus.DONE,
-                        detail = event.output,
-                    )
-                    state.copy(lines = updated)
-                }
-            }
-            // Latest turn's tokens = current context occupancy (input already includes history), not a session sum.
-            is AgentEvent.Usage -> _state.update { it.copy(usageInput = event.input, usageOutput = event.output, retry = null) }
-            is AgentEvent.UserMessage -> {
-                // The agent just folded a queued message into the turn: flush the live reply, drop the
-                // message into the timeline in order, and clear it from the pending list.
-                synchronized(queueStateLock) {
-                    if (expectedGeneration == generation) {
-                        val streamed = commitStreaming()
-                        val assistantParts = buildList {
-                            if (streamed.reasoning.isNotBlank()) add(MessagePart.Reasoning(streamed.reasoning))
-                            if (streamed.text.isNotBlank()) add(MessagePart.Text(streamed.text))
-                        }
-                        if (assistantParts.isNotEmpty()) {
-                            history = history + ChatMessage(Role.ASSISTANT, assistantParts)
-                        }
-                        // Every UserMessage event represents a distinct queued submission, even when its
-                        // text matches the preceding prompt. Text equality is not message identity.
-                        history = history + ChatMessage(Role.USER, listOf(MessagePart.Text(event.text)))
-                        _state.update { it.copy(lines = it.lines + ChatLine.User(event.text), queued = it.queued - event.text) }
-                        checkpointQueuedMessages(
-                            _state.value.queued,
-                            activeTurn = true,
-                            turnOutcome = null,
-                            expectedGeneration = expectedGeneration,
-                        )
-                    }
-                }
-            }
-            is AgentEvent.Error -> {
-                synchronized(queueStateLock) {
-                    if (expectedGeneration != generation) return
-                    pendingMessages.clear()
-                    _state.update {
-                        it.copy(
-                            error = humanizeError(event, targetProviderId),
-                            isRunning = false,
-                            retry = null,
-                            interruptedTurn = false,
-                            turnOutcome = TurnOutcome.FAILED,
-                        )
-                    }
-                    val terminalQueued = _state.value.queued
-                    // A failed turn that carried its accumulated messages preserves context (and persists it)
-                    // so the next message continues instead of starting cold after a connection drop.
-                    if (event.messages.isNotEmpty()) {
-                        history = event.messages
-                        commitStreaming()
-                        persist(
-                            event.messages,
-                            targetSessionId = targetSessionId,
-                            targetProjectId = targetProjectId,
-                            targetAgentMode = _state.value.agentMode,
-                            expectedGeneration = expectedGeneration,
-                            turnOutcome = TurnOutcome.FAILED,
-                            queuedMessages = terminalQueued,
-                        )
-                    } else {
-                        commitStreaming()
-                        if (history.isEmpty()) {
-                            sessionStore.setActiveTurn(targetSessionId, false, sessionWriteOrder.incrementAndGet())
-                        } else {
-                            persist(
-                                history,
-                                targetSessionId = targetSessionId,
-                                targetProjectId = targetProjectId,
-                                targetAgentMode = _state.value.agentMode,
-                                expectedGeneration = expectedGeneration,
-                                turnOutcome = TurnOutcome.FAILED,
-                                queuedMessages = terminalQueued,
-                            )
-                        }
-                    }
-                }
-            }
-            is AgentEvent.TurnComplete -> {
-                synchronized(queueStateLock) {
-                    if (expectedGeneration != generation) return
-                    pendingMessages.clear()
-                    _state.update {
-                        it.copy(
-                            isRunning = false,
-                            retry = null,
-                            interruptedTurn = false,
-                            turnOutcome = null,
-                        )
-                    }
-                    val terminalQueued = _state.value.queued
-                    history = event.messages
-                    commitStreaming()
-                    persist(
-                        event.messages,
-                        targetSessionId = targetSessionId,
-                        targetProjectId = targetProjectId,
-                        targetAgentMode = _state.value.agentMode,
-                        expectedGeneration = expectedGeneration,
-                        queuedMessages = terminalQueued,
-                    )
-                }
-            }
-            }
         }
     }
 
@@ -2760,7 +2444,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         targetSessionId: String = sessionId,
         targetProjectId: String? = currentProjectId,
         targetTodos: List<TodoItem> = todoStore.snapshot(),
-        targetAgentMode: AgentMode,
         expectedGeneration: Int? = null,
         writeOrder: Long = sessionWriteOrder.incrementAndGet(),
         turnOutcome: TurnOutcome? = _state.value.turnOutcome,
@@ -2784,7 +2467,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     todos = targetTodos,
                     turnOutcome = turnOutcome?.name,
                     queuedMessages = queuedMessages,
-                    agentMode = targetAgentMode.name,
                 ),
                 writeOrder,
             )
@@ -2883,6 +2565,33 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return snapshot
     }
 
+    private suspend fun importLegacySessionsOnce(
+        spec: MisulRuntimeSpec,
+        activeSessionId: String,
+        activeHistoryBeforePrompt: List<ChatMessage>,
+    ) {
+        val receipt = File(spec.stateRoot, LEGACY_SESSION_IMPORT_RECEIPT)
+        if (receipt.isFile) return
+        val sessions = sessionStore.list().mapNotNull { meta ->
+            sessionStore.load(meta.id)?.let { session ->
+                if (session.id == activeSessionId) {
+                    session.copy(messages = activeHistoryBeforePrompt.map { it.toPersisted() })
+                } else {
+                    session
+                }
+            }
+        }.map { session ->
+            session.toMisulImportSession(
+                provider = spec.provider.id,
+                model = spec.model.id,
+                api = spec.provider.dialect,
+            )
+        }
+        val imported = misulRuntime.importSessions(spec, sessions)
+        receipt.parentFile?.mkdirs()
+        receipt.writeTextAtomically("schema=phonecode-misul-legacy-import-v1\nsessions=${sessions.size}\nimported=$imported\n")
+    }
+
     private fun fail(message: String) = _state.update { it.copy(error = humanizeError(message), interruptedTurn = false) }
 
     /**
@@ -2908,50 +2617,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 "The provider is overloaded right now - try again shortly."
             else -> raw
         }
-    }
-
-    private fun humanizeError(error: AgentEvent.Error, providerId: String): String {
-        val retry = error.retryAfterMillis?.let { " Try again in ${formatDuration(it)}." }.orEmpty()
-        return when (error.kind) {
-            FailureKind.AUTH -> if (providerId == "codex") {
-                "Your ChatGPT sign-in expired. Sign in again in Settings > Providers."
-            } else {
-                "The provider rejected your API key. Check it in Settings > Providers."
-            }
-            FailureKind.RATE_LIMIT -> "The provider is rate limiting requests.$retry"
-            FailureKind.QUOTA -> if (providerId == "opencode-go") {
-                "OpenCode Go usage limit reached.$retry You can enable Zen balance fallback in the OpenCode console."
-            } else {
-                "The provider usage limit has been reached.$retry"
-            }
-            FailureKind.INVALID_REQUEST -> error.message
-            FailureKind.SERVER -> "The provider is unavailable right now.$retry"
-            FailureKind.NETWORK -> humanizeError(error.message)
-            FailureKind.PARSE -> "The provider returned an unreadable response. Try again or switch models."
-            FailureKind.UNKNOWN -> humanizeError(error.message)
-        }
-    }
-
-    private fun environment(): AgentEnvironment {
-        val activeWorkspace = (turnWorkspace ?: workspace).absolutePath
-        val shell = shellBackend.status(activeWorkspace)
-        val projectFolder = _state.value.projects.firstOrNull { it.id == currentProjectId }?.folderId?.let { folderId ->
-            _state.value.sharedFolders.firstOrNull { it.id == folderId }
-        }
-        val projectDetail = projectFolder?.let {
-            " The phone folder '${it.name}' is available through the shared-file tools."
-        }.orEmpty()
-        return AgentEnvironment(
-            platform = "Android",
-            deviceModel = Build.MODEL ?: "unknown",
-            osVersion = "API ${Build.VERSION.SDK_INT}",
-            // Match toolContext's workspaceProvider: a pinned turn workspace takes precedence over the live one,
-            // so the path the prompt reports is the path tools actually write to.
-            workspacePath = activeWorkspace,
-            shellAvailable = shell.available,
-            shellDetail = "${shell.detail}$projectDetail",
-            configPath = File(getApplication<Application>().filesDir, "config").absolutePath,
-        )
     }
 
     private fun summarizeArgs(argsJson: String): String = argsJson.replace("\n", " ").take(120)
@@ -3029,7 +2694,7 @@ internal fun repairInterruptedHistory(
                 content = if (it.id in stoppedApprovalCallIds) {
                     USER_STOPPED_BEFORE_APPROVAL_RESULT
                 } else {
-                    "Interrupted before PhoneCode recorded the result. Review workspace changes before retrying."
+                    "Interrupted before Misul Agent recorded the result. Review workspace changes before retrying."
                 },
                 isError = true,
             )
@@ -3062,12 +2727,6 @@ internal fun catalogProviderId(id: String): String = when (id) {
 internal fun visibleCodexModels(models: List<CodexModelInfo>): List<CodexModelInfo> =
     models.filter { it.visibility == "list" }
 
-internal fun boundedTurnSettings(
-    model: String,
-    effort: ReasoningEffort,
-    limit: dev.phonecode.provider.catalog.Limit?,
-): TurnSettings = TurnSettings(model, effort, limit?.context, limit?.output)
-
 internal fun configuredModelForActivation(
     models: List<ModelOption>,
     current: ModelOption?,
@@ -3086,7 +2745,7 @@ internal fun configuredModelForProviderActivation(
 private fun newSessionId(): String = "session-${UUID.randomUUID()}"
 
 internal fun providerAllowed(providerId: String, codexOAuthEnabled: Boolean): Boolean =
-    providerId != "codex" || codexOAuthEnabled
+    providerId != "anthropic" && providerId != "codex"
 
 fun builtInModels(codexOAuthEnabled: Boolean = BuildConfig.CODEX_OAUTH_ENABLED): List<ModelOption> = listOf(
     ModelOption("anthropic", "claude-opus-4-8", "Claude Opus 4.8"),
@@ -3116,7 +2775,9 @@ fun builtInModels(codexOAuthEnabled: Boolean = BuildConfig.CODEX_OAUTH_ENABLED):
 
 private const val CATALOG_REFRESH_TTL_MS = 6L * 60 * 60 * 1000
 private const val CODEX_REFRESH_TTL_MS = 5L * 60 * 1000
+private val STARTUP_DEFER_MILLIS = if (Build.FINGERPRINT == "robolectric") 0L else 1_500L
 private const val MAX_TOOL_INPUT_CHARS = 64_000
+private const val LEGACY_SESSION_IMPORT_RECEIPT = "phonecode-legacy-import-v1.receipt"
 private const val STREAM_UI_INTERVAL_NANOS = 50_000_000L
 private val PROJECT_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,119}")
 private const val BUNDLED_CATALOG = """

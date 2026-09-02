@@ -12,8 +12,8 @@ class CodexReleaseGateTest {
     }
 
     @Test
-    fun debugGateKeepsCodexModels() {
-        assertTrue(builtInModels(codexOAuthEnabled = true).any { it.providerId == "codex" })
+    fun alphaGateHidesCodexModelsEvenWhenOAuthIsAvailable() {
+        assertFalse(builtInModels(codexOAuthEnabled = true).any { it.providerId == "codex" })
     }
 
     @Test

@@ -7,6 +7,7 @@ import org.gradle.api.artifacts.result.ResolvedArtifactResult
 import org.gradle.maven.MavenModule
 import org.gradle.maven.MavenPomArtifact
 import java.security.MessageDigest
+import java.util.zip.ZipFile
 
 plugins {
     alias(libs.plugins.android.application)
@@ -31,6 +32,9 @@ val githubOauthClientId = providers.gradleProperty("PHONECODE_GITHUB_OAUTH_CLIEN
     .orNull
     .orEmpty()
     .trim()
+val misulAndroidRuntimeDirectory = providers.gradleProperty("MISUL_ANDROID_RUNTIME_DIR")
+    .orElse(providers.environmentVariable("MISUL_ANDROID_RUNTIME_DIR"))
+val misulDebugStageDirectory = layout.buildDirectory.dir("generated/misulDebugRuntime")
 
 fun String.asBuildConfigString(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
 val requiredAndroidNdkVersion = "28.2.13676358"
@@ -45,8 +49,8 @@ android {
         applicationId = "dev.phonecode"
         minSdk = 26
         targetSdk = 36
-        versionCode = 51
-        versionName = "0.5.1"
+        versionCode = 53
+        versionName = "0.6.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GITHUB_OAUTH_CLIENT_ID", githubOauthClientId.asBuildConfigString())
         buildConfigField("boolean", "CODEX_OAUTH_ENABLED", "false")
@@ -130,6 +134,8 @@ android {
             // QEMU is a separate executable with sibling shared libraries, so Android must extract
             // these files to the app's native library directory before the isolated service runs it.
             useLegacyPackaging = true
+            // Misul arrives pre-stripped and audited. Re-stripping would invalidate its locked digest.
+            keepDebugSymbols += "**/libmisul.so"
         }
     }
 
@@ -141,6 +147,13 @@ android {
         jniLibs.directories.add(generatedHostRuntime.resolve("jniLibs").absolutePath)
         assets.directories.add(generatedHostRuntime.resolve("assets").absolutePath)
     }
+    if (misulAndroidRuntimeDirectory.isPresent) {
+        listOf("debug", "release", "sideload").forEach { sourceSet -> sourceSets.getByName(sourceSet) {
+            val generatedMisulRuntime = misulDebugStageDirectory.get().asFile
+            jniLibs.directories.add(generatedMisulRuntime.resolve("jniLibs").absolutePath)
+            assets.directories.add(generatedMisulRuntime.resolve("assets").absolutePath)
+        } }
+    }
     sourceSets.getByName("sideload") {
         manifest.srcFile("src/debug/AndroidManifest.xml")
         kotlin.directories.add("src/debug/kotlin")
@@ -151,7 +164,6 @@ android {
 }
 
 dependencies {
-    implementation(project(":agent"))
     implementation(project(":provider"))
     implementation(project(":tools"))
 
@@ -186,6 +198,7 @@ dependencies {
     // must merge into the app manifest for Robolectric to resolve createComposeRule's activity.
     debugImplementation(libs.androidx.ui.test.manifest)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 }
 
 dependencyLocking {
@@ -264,6 +277,108 @@ fun sha256(file: File): String {
         }
     }
     return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+val stageDebugMisulRuntime by tasks.registering(Exec::class) {
+    group = "build"
+    description = "Stages the separately built, authenticated Misul runtime for debug packaging."
+    val script = rootProject.file("native-misul/stage-android-arm64.sh")
+    val sourceLock = rootProject.file("native-misul/sources.lock")
+    inputs.files(script, sourceLock)
+    inputs.property("misulAndroidRuntimeDirectory", misulAndroidRuntimeDirectory)
+    outputs.dir(misulDebugStageDirectory)
+    doFirst {
+        val input = misulAndroidRuntimeDirectory.orNull
+            ?: error("MISUL_ANDROID_RUNTIME_DIR is required to stage the Misul runtime")
+        commandLine(
+            script.absolutePath,
+            file(input).absolutePath,
+            sourceLock.absolutePath,
+            misulDebugStageDirectory.get().asFile.absolutePath,
+        )
+    }
+}
+
+val verifyDebugMisulRuntime by tasks.registering {
+    group = "verification"
+    description = "Verifies the exact Misul runtime and provenance staged for the debug APK."
+    dependsOn(stageDebugMisulRuntime)
+    inputs.dir(misulDebugStageDirectory)
+    doLast {
+        val staged = misulDebugStageDirectory.get().asFile
+        val library = staged.resolve("jniLibs/arm64-v8a/libmisul.so")
+        val sourceLock = staged.resolve("assets/misul-runtime/SOURCES.lock")
+        check(library.isFile) { "The staged Misul library is missing" }
+        check(sourceLock.isFile) { "The staged Misul source lock is missing" }
+        val expected = sourceLock.readLines()
+            .single { it.startsWith("artifact_sha256=") }
+            .substringAfter('=')
+        check(sha256(library) == expected) { "The staged Misul library digest changed after staging" }
+    }
+}
+
+val verifyDebugMisulApk by tasks.registering {
+    group = "verification"
+    description = "Verifies the debug APK contains the exact authenticated Misul runtime once."
+    dependsOn("assembleDebug", verifyDebugMisulRuntime)
+    val apk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")
+    inputs.file(apk)
+    doLast {
+        val expected = rootProject.file("native-misul/sources.lock").readLines()
+            .single { it.startsWith("artifact_sha256=") }
+            .substringAfter('=')
+        ZipFile(apk.get().asFile).use { zip ->
+            val libraryEntries = zip.entries().asSequence()
+                .filter { it.name.endsWith("/libmisul.so") }
+                .toList()
+            check(libraryEntries.map { it.name } == listOf("lib/arm64-v8a/libmisul.so")) {
+                "The APK must contain exactly one arm64 Misul library: ${libraryEntries.map { it.name }}"
+            }
+            val digest = MessageDigest.getInstance("SHA-256")
+            zip.getInputStream(libraryEntries.single()).use { input ->
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+            check(actual == expected) {
+                "The packaged Misul library changed: expected $expected, got $actual"
+            }
+            listOf(
+                "assets/misul-runtime/MANIFEST.sha256",
+                "assets/misul-runtime/SOURCE-MANIFEST.sha256",
+                "assets/misul-runtime/SOURCES.lock",
+            ).forEach { path ->
+                check(zip.getEntry(path) != null) { "The APK is missing Misul provenance: $path" }
+            }
+        }
+    }
+}
+
+if (misulAndroidRuntimeDirectory.isPresent) {
+    tasks.matching { it.name in setOf("preDebugBuild", "preReleaseBuild", "preSideloadBuild") }.configureEach {
+        dependsOn(stageDebugMisulRuntime)
+    }
+}
+
+val verifyMisulCutover by tasks.registering {
+    group = "verification"
+    description = "Rejects a production dependency or dispatch path back to the removed Kotlin agent backend."
+    val productionSources = fileTree("src/main/kotlin") { include("**/*.kt") }
+    inputs.files(productionSources, file("build.gradle.kts"))
+    doLast {
+        val source = productionSources.files.joinToString("\n") { it.readText() }
+        val build = file("build.gradle.kts").readText()
+        check("implementation(project(\":agent\"))" !in build) { "The app still packages the Kotlin agent module" }
+        check("dev.phonecode.agent" !in source) { "Production source still imports the Kotlin agent backend" }
+        check("AgentLoop(" !in source) { "Production source still constructs the Kotlin agent loop" }
+        check("ProviderFactory.create" !in source) { "Production source still dispatches through the Kotlin provider backend" }
+        check("misulRuntime.prompt(" in source) { "No production prompt path dispatches through Misul" }
+        check("session/import" in source) { "The native legacy-session migration path is missing" }
+    }
 }
 
 val verifyLegalInventory by tasks.registering {
@@ -552,8 +667,8 @@ androidComponentsExtension.onVariants(
     androidComponentsExtension.selector().withBuildType("sideload"),
 ) { variant ->
     variant.outputs.forEach { output ->
-        output.versionCode.set(52)
-        output.versionName.set("0.5.2")
+        output.versionCode.set(53)
+        output.versionName.set("0.6.0-alpha")
     }
 }
 

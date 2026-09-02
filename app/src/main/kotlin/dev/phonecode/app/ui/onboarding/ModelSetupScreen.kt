@@ -377,7 +377,7 @@ private fun ApiKeySetup(
         if (secureStorageUnavailable) {
             Spacer(Modifier.height(Spacing.s))
             Text(
-                "Secure storage is unavailable on this device, so PhoneCode cannot save this key.",
+                "Secure storage is unavailable on this device, so Misul Agent cannot save this key.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.error,
             )
@@ -399,9 +399,9 @@ private fun ApiKeySetup(
 
 internal fun providerSetupFailureMessage(keySaved: Boolean): String =
     if (keySaved) {
-        "API key saved, but PhoneCode could not activate an available model for this provider."
+        "API key saved, but Misul Agent could not activate an available model for this provider."
     } else {
-        "PhoneCode could not save this API key in secure storage."
+        "Misul Agent could not save this API key in secure storage."
     }
 
 @Composable

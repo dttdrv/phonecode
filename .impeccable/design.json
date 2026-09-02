@@ -1,0 +1,228 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-01T23:07:24Z",
+  "title": "Design System: Misul Agent — Mobile Field Instrument",
+  "extensions": {
+    "colorMeta": {
+      "canvas-dark": {
+        "role": "neutral",
+        "displayName": "Soft Black",
+        "canonical": "#141414",
+        "tonalRamp": ["#000000", "#141414", "#1E1E1E", "#212121", "#2A2A2A", "#333333"]
+      },
+      "canvas-light": {
+        "role": "neutral",
+        "displayName": "Clean White",
+        "canonical": "#FDFDFD",
+        "tonalRamp": ["#FFFFFF", "#FDFDFD", "#F8F8F8", "#F5F5F5", "#EFEFEF", "#E9E9E9"]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Live Cobalt",
+        "canonical": "oklch(0.720 0.190 255)",
+        "tonalRamp": ["oklch(0.320 0.090 255)", "oklch(0.500 0.150 255)", "oklch(0.720 0.190 255)", "oklch(0.850 0.110 255)"]
+      },
+      "primary-light": {
+        "role": "primary",
+        "displayName": "Grounded Cobalt",
+        "canonical": "oklch(0.500 0.220 255)",
+        "tonalRamp": ["oklch(0.300 0.130 255)", "oklch(0.500 0.220 255)", "oklch(0.680 0.170 255)", "oklch(0.880 0.070 255)"]
+      },
+      "error-dark": {
+        "role": "error",
+        "displayName": "System Red",
+        "canonical": "#FF453A",
+        "tonalRamp": ["#3A0A07", "#8B211B", "#FF453A", "#FFD9D6"]
+      }
+    },
+    "typographyMeta": {
+      "brand-display": {
+        "displayName": "Misul Editorial Display",
+        "purpose": "Misul identity, onboarding thesis, and rare empty-state headings only."
+      },
+      "body-md": {
+        "displayName": "Native Working Body",
+        "purpose": "Conversation, navigation, tools, settings, and permissions."
+      },
+      "code": {
+        "displayName": "Machine Material",
+        "purpose": "Source code, commands, paths, hashes, model identifiers, arguments, logs, and counts."
+      }
+    },
+    "shadows": [
+      {
+        "name": "floating-chrome-dark",
+        "value": "0 2px 12px rgba(0, 0, 0, 0.28)",
+        "purpose": "Only when a floating control overlaps transcript content."
+      },
+      {
+        "name": "sheet-dark",
+        "value": "0 -12px 40px rgba(0, 0, 0, 0.38)",
+        "purpose": "Structural separation for a modal bottom sheet."
+      },
+      {
+        "name": "floating-chrome-light",
+        "value": "0 2px 12px rgba(0, 0, 0, 0.10)",
+        "purpose": "Light-theme overlap edge for floating controls."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.23, 1, 0.32, 1)",
+        "purpose": "Entries, exits, fades, banners, and immediate feedback."
+      },
+      {
+        "name": "ease-in-out",
+        "value": "cubic-bezier(0.77, 0, 0.175, 1)",
+        "purpose": "Elements moving or morphing while remaining on screen."
+      },
+      {
+        "name": "drawer",
+        "value": "cubic-bezier(0.32, 0.72, 0, 1)",
+        "purpose": "Drawer and sheet movement when a spring is not used."
+      },
+      {
+        "name": "press",
+        "value": "100–160ms to scale(0.97)",
+        "purpose": "Immediate tactile confirmation for direct touch controls."
+      },
+      {
+        "name": "compact-feedback",
+        "value": "120–180ms",
+        "purpose": "Small opacity or color state changes."
+      },
+      {
+        "name": "navigation",
+        "value": "170–240ms",
+        "purpose": "Hierarchical screen transitions with clear spatial direction."
+      },
+      {
+        "name": "sheet",
+        "value": "220–300ms or critically damped interruptible spring",
+        "purpose": "Occasional drawer and modal sheet movement."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "120–180ms opacity/color only",
+        "purpose": "Retain state clarity while removing translation, scale, parallax, shimmer, and shader movement."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "0–599px"
+      },
+      {
+        "name": "medium",
+        "value": "600–839px"
+      },
+      {
+        "name": "expanded",
+        "value": "840px+"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Misul Session Header",
+      "kind": "nav",
+      "refersTo": "button-quiet-dark",
+      "description": "Quiet floating session chrome with the canonical harmonic mark, session identity, and active cobalt state.",
+      "html": "<nav class=\"ds-session-header\" aria-label=\"Current session\"><button class=\"ds-mark\" aria-label=\"Open projects\"><svg viewBox=\"3 7 28 22\" aria-hidden=\"true\"><path d=\"M5 27 V15 a6 6 0 0 1 12 0 a6 6 0 0 1 12 0 V27 H22 V18 a2.5 2.5 0 0 0 -5 0 V27 H12 V15 a1 1 0 0 0 -2 0 V27 Z\"/></svg></button><div class=\"ds-session-title\"><strong>Fix local runtime</strong><span>Misul Local · high</span></div><button class=\"ds-context\" aria-label=\"Context usage 42 percent\"><span></span>42%</button></nav>",
+      "css": ".ds-session-header{width:min(390px,100%);display:grid;grid-template-columns:48px 1fr 48px;align-items:start;gap:8px;padding:8px 12px;background:#141414;color:#fff;font-family:system-ui,sans-serif}.ds-mark,.ds-context{width:48px;height:48px;border:0;border-radius:9999px;background:#2A2A2A;color:#fff;display:grid;place-items:center}.ds-mark svg{width:24px;fill:currentColor}.ds-session-title{min-width:0;text-align:center;display:flex;flex-direction:column;gap:3px;padding-top:4px}.ds-session-title strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ds-session-title span{font-size:12px;color:#C6C6CE}.ds-context{font-size:11px;gap:3px}.ds-context span{width:7px;height:7px;border-radius:50%;background:oklch(0.720 0.190 255)}.ds-mark:active,.ds-context:active{transform:scale(.97)}.ds-mark:focus-visible,.ds-context:focus-visible{outline:2px solid oklch(0.720 0.190 255);outline-offset:2px}"
+    },
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary-dark",
+      "description": "A high-contrast monochrome action; cobalt remains reserved for agency and focus.",
+      "html": "<button class=\"ds-primary\">Start building</button>",
+      "css": ".ds-primary{min-height:48px;padding:12px 20px;border:0;border-radius:20px;background:#fff;color:#141414;font:600 16px/1.25 system-ui,sans-serif}.ds-primary:active{transform:scale(.97);transition:transform 120ms cubic-bezier(.23,1,.32,1)}.ds-primary:focus-visible{outline:2px solid oklch(0.720 0.190 255);outline-offset:3px}.ds-primary:disabled{opacity:.45}"
+    },
+    {
+      "name": "Agent Composer",
+      "kind": "input",
+      "refersTo": "composer-dark",
+      "description": "The stable one-handed control for attachments, instructions, send, and stop.",
+      "html": "<form class=\"ds-composer\"><button type=\"button\" class=\"ds-composer-icon\" aria-label=\"Attach file\">＋</button><label><span class=\"ds-sr\">Ask Misul</span><textarea rows=\"1\" placeholder=\"Ask Misul\"></textarea></label><button class=\"ds-send\" aria-label=\"Send\">↑</button></form>",
+      "css": ".ds-composer{width:min(360px,100%);min-height:48px;display:grid;grid-template-columns:48px 1fr 48px;align-items:end;padding:0;border:1px solid #383838;border-radius:24px;background:rgba(33,33,33,.94);color:#fff;box-shadow:0 2px 12px rgba(0,0,0,.28);font-family:system-ui,sans-serif}.ds-composer label{padding:12px 0}.ds-composer textarea{width:100%;max-height:144px;resize:none;border:0;outline:0;background:transparent;color:#fff;font:400 16px/1.5 system-ui,sans-serif}.ds-composer textarea::placeholder{color:#9A9AA0}.ds-composer-icon,.ds-send{width:48px;height:48px;border:0;border-radius:9999px;background:transparent;color:#C6C6CE;font-size:22px}.ds-send{margin:4px;width:40px;height:40px;background:#fff;color:#141414}.ds-composer:focus-within{border-color:oklch(0.720 0.190 255)}.ds-composer-icon:active,.ds-send:active{transform:scale(.97)}.ds-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}"
+    },
+    {
+      "name": "Tool Activity Row",
+      "kind": "custom",
+      "refersTo": "tool-row-dark",
+      "description": "One compact event in the chronological, inspectable tool rail.",
+      "html": "<button class=\"ds-tool\"><span class=\"ds-tool-icon\">⌘</span><span class=\"ds-tool-copy\"><strong>Running tests</strong><small>./gradlew :app:testDebugUnitTest</small></span><span class=\"ds-tool-state\">Running</span><span class=\"ds-chevron\">›</span></button>",
+      "css": ".ds-tool{width:min(360px,100%);min-height:48px;display:grid;grid-template-columns:24px 1fr auto 16px;align-items:center;gap:8px;padding:9px 10px;border:1px solid #2A2A2A;border-radius:12px;background:#1E1E1E;color:#C6C6CE;text-align:left;font-family:system-ui,sans-serif}.ds-tool-icon{color:oklch(0.720 0.190 255);font:500 14px JetBrains Mono,monospace}.ds-tool-copy{min-width:0;display:flex;flex-direction:column;gap:2px}.ds-tool-copy strong{color:#fff;font-size:13px}.ds-tool-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9A9AA0;font:400 11px/1.3 JetBrains Mono,monospace}.ds-tool-state{font-size:11px;color:oklch(0.720 0.190 255)}.ds-chevron{font-size:20px;color:#9A9AA0}.ds-tool:active{background:#212121}.ds-tool:focus-visible{outline:2px solid oklch(0.720 0.190 255);outline-offset:2px}"
+    },
+    {
+      "name": "Permission Sheet",
+      "kind": "custom",
+      "refersTo": "button-primary-dark",
+      "description": "Action-specific approval with exact target, consequence, and narrow choices.",
+      "html": "<section class=\"ds-sheet\" role=\"dialog\" aria-labelledby=\"ds-approval-title\"><div class=\"ds-handle\"></div><p class=\"ds-eyebrow\">Approval required</p><h2 id=\"ds-approval-title\">Run a command</h2><p>Misul wants to run this inside <strong>PhoneCode</strong>.</p><pre>./gradlew :app:testDebugUnitTest</pre><p class=\"ds-consequence\">This can modify build output inside the local project. It does not publish anything.</p><div class=\"ds-sheet-actions\"><button class=\"ds-allow\">Allow once</button><button class=\"ds-deny\">Deny</button></div></section>",
+      "css": ".ds-sheet{width:min(390px,100%);padding:10px 20px 24px;border-radius:28px 28px 0 0;background:#1E1E1E;color:#fff;box-shadow:0 -12px 40px rgba(0,0,0,.38);font-family:system-ui,sans-serif}.ds-handle{width:34px;height:4px;margin:0 auto 18px;border-radius:9999px;background:#555}.ds-eyebrow{margin:0 0 6px;color:#FF9F0A;font-size:12px;font-weight:500}.ds-sheet h2{margin:0 0 8px;font-size:22px;line-height:1.27}.ds-sheet p{color:#C6C6CE;font-size:15px;line-height:1.4}.ds-sheet pre{overflow:auto;padding:12px;border-radius:8px;background:#141414;color:#fff;font:400 13px/1.5 JetBrains Mono,monospace}.ds-consequence{padding-top:8px;border-top:1px solid #2A2A2A}.ds-sheet-actions{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:20px}.ds-allow,.ds-deny{min-height:48px;border:0;border-radius:20px;padding:12px 18px;font-weight:600}.ds-allow{background:#fff;color:#141414}.ds-deny{background:#2A2A2A;color:#fff}.ds-allow:active,.ds-deny:active{transform:scale(.97)}.ds-allow:focus-visible,.ds-deny:focus-visible{outline:2px solid oklch(0.720 0.190 255);outline-offset:2px}"
+    },
+    {
+      "name": "Local Runtime Status",
+      "kind": "chip",
+      "refersTo": "status-active-dark",
+      "description": "A compact text-plus-icon state for local compute without a permanent telemetry panel.",
+      "html": "<button class=\"ds-status\"><span class=\"ds-status-dot\"></span><span><strong>Running locally</strong><small>Tests · 18s</small></span></button>",
+      "css": ".ds-status{min-height:40px;display:inline-flex;align-items:center;gap:9px;padding:6px 12px;border:0;border-radius:9999px;background:#2A2A2A;color:#fff;font-family:system-ui,sans-serif}.ds-status-dot{width:8px;height:8px;border-radius:50%;background:oklch(0.720 0.190 255)}.ds-status span:last-child{display:flex;flex-direction:column;align-items:flex-start}.ds-status strong{font-size:12px}.ds-status small{font-size:11px;color:#C6C6CE}.ds-status:active{transform:scale(.97)}.ds-status:focus-visible{outline:2px solid oklch(0.720 0.190 255);outline-offset:2px}"
+    },
+    {
+      "name": "Project Session Row",
+      "kind": "nav",
+      "refersTo": "button-quiet-dark",
+      "description": "A dense hierarchical drawer row, avoiding dashboard cards and detached selectors.",
+      "html": "<button class=\"ds-session-row\"><span class=\"ds-session-mark\"></span><span><strong>Runtime migration</strong><small>PhoneCode · 4 min ago</small></span><span class=\"ds-more\" aria-hidden=\"true\">•••</span></button>",
+      "css": ".ds-session-row{width:min(330px,100%);min-height:56px;display:grid;grid-template-columns:8px 1fr 32px;align-items:center;gap:10px;padding:8px 8px 8px 12px;border:0;border-radius:12px;background:transparent;color:#fff;text-align:left;font-family:system-ui,sans-serif}.ds-session-row:hover,.ds-session-row:focus-visible{background:#212121}.ds-session-row:focus-visible{outline:2px solid oklch(0.720 0.190 255);outline-offset:2px}.ds-session-row:active{background:#2A2A2A}.ds-session-mark{width:3px;height:22px;border-radius:9999px;background:oklch(0.720 0.190 255)}.ds-session-row span:nth-child(2){min-width:0;display:flex;flex-direction:column;gap:2px}.ds-session-row strong,.ds-session-row small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-session-row strong{font-size:14px}.ds-session-row small{font-size:12px;color:#9A9AA0}.ds-more{color:#9A9AA0;text-align:center}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Field Instrument",
+    "overview": "Misul Agent is a private engineering workspace whose computer is the phone itself. Misul supplies the harmonic-arcs identity, editorial discipline, and cobalt energy; PhoneCode supplies the native transcript, local tools, explicit approvals, and durable state. The interface is brandful at the edges and quiet at the center: conversation first, proof over theater, and speed through restraint.",
+    "keyCharacteristics": [
+      "Conversation is the primary surface, never a dashboard.",
+      "Soft-black and clean-white foundations with cobalt reserved for active agency.",
+      "System typography for daily work, Instrument Sans for rare brand moments, JetBrains Mono for machine material.",
+      "Tonal layering and fine rules instead of card grids and decorative shadows.",
+      "Fast, interruptible, frequency-aware motion with a complete reduced-motion path.",
+      "Local runtime, tools, approvals, recovery, and uncertainty remain inspectable."
+    ],
+    "rules": [
+      {
+        "name": "The Current Rule",
+        "body": "Cobalt means selected, focused, or actively working. It does not fill general navigation or permanent surfaces.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Plane Rule",
+        "body": "Use tonal contrast, a rule, blur, or shadow to establish an edge, but rarely more than two together.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Frequency Gate",
+        "body": "High-frequency work receives no animation; occasional spatial changes receive fast purposeful motion; rare identity moments may carry restrained delight.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do make the transcript the first and dominant screen after setup.",
+      "Do use the canonical harmonic-arcs mark and reserve the luminous field for rare identity moments.",
+      "Do preserve exact tool provenance, consequences, failure states, and recovery choices.",
+      "Do keep every interactive target at least 48px and every gesture paired with a visible action.",
+      "Do validate the running app across themes, window sizes, accessibility settings, keyboard states, and local-runtime failures."
+    ],
+    "donts": [
+      "Don't build a dashboard, control-center home, or grid of agent-status cards.",
+      "Don't turn the neutral canvas blue-black or spread cobalt across general chrome.",
+      "Don't keep a live shader behind the working transcript.",
+      "Don't wrap every response or tool event in decorative cards.",
+      "Don't animate typing, sending, streaming tokens, keyboard actions, or other high-frequency work.",
+      "Don't use vague destructive labels, fake progress, or completion claims without actual evidence."
+    ]
+  }
+}

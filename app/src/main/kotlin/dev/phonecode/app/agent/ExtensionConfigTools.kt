@@ -24,7 +24,7 @@ internal class ExtensionConfigReadTool(
     private val projectDirectory: () -> File,
 ) : Tool {
     override val name = "extension_read"
-    override val description = "Inspect PhoneCode MCP servers and global or project skills without exposing saved header values."
+    override val description = "Inspect Misul Agent MCP servers and global or project skills without exposing saved header values."
     override val promptSnippet = "inspect configured MCP servers and skill files"
     override val parameters = buildJsonObject {
         put("type", "object")

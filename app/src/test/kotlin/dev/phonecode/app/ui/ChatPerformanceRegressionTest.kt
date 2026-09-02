@@ -31,10 +31,10 @@ class ChatPerformanceRegressionTest {
     }
 
     @Test
-    fun opaqueChatChromeDoesNotPayForAHiddenHazeEffect() {
+    fun chatUsesOneHazeSourceOnlyWhenAnEdgeNeedsIt() {
         assertFalse(chat.contains("phoneHazeEffect"))
         assertFalse(chat.contains("val hazeStyle = phoneHaze()"))
-        assertTrue(chat.contains("if (blurBottomBand) Modifier.hazeSource(hazeState)"))
+        assertTrue(chat.contains("if (blurTopBand || blurBottomBand) Modifier.hazeSource(hazeState)"))
         assertFalse(chat.contains("if (blurChrome) Modifier.hazeSource(hazeState)"))
     }
 

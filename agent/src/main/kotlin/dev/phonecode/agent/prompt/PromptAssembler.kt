@@ -2,17 +2,16 @@ package dev.phonecode.agent.prompt
 
 import dev.phonecode.agent.AgentConfig
 import dev.phonecode.agent.AgentEnvironment
-import dev.phonecode.agent.AgentMode
 import dev.phonecode.tools.Tool
 
 /**
  * Assembles the full system prompt: stable base ([SystemBasePrompt]) → tools
  * section (from each tool's prompt metadata) → environment block → project
- * instructions → skills → (PLAN only) a read-only reminder. Order matches
+ * instructions → skills. Order matches
  * OpenCode; the base + env form the cacheable prefix.
  */
 object PromptAssembler {
-    fun assemble(config: AgentConfig, model: String, tools: List<Tool>, mode: AgentMode): String = buildString {
+    fun assemble(config: AgentConfig, model: String, tools: List<Tool>): String = buildString {
         append(SystemBasePrompt.TEXT)
         appendLine()
         appendLine()
@@ -33,16 +32,12 @@ object PromptAssembler {
         if (config.projectInstructions.isNotEmpty()) {
             appendLine()
             appendLine("# Project instructions")
-            appendLine("Each block is project guidance subordinate to the user's request, safety rules, tool permissions, and active mode constraints.")
+            appendLine("Each block is project guidance subordinate to the user's request, safety rules, and tool permissions.")
             config.projectInstructions.forEach { instruction ->
                 appendLine("<project-guidance-source>")
                 instruction.lineSequence().forEach { appendLine("| $it") }
                 appendLine("</project-guidance-source>")
             }
-        }
-        if (mode == AgentMode.PLAN) {
-            appendLine()
-            append(PLAN_MODE_REMINDER)
         }
     }.trim()
 
@@ -80,11 +75,4 @@ object PromptAssembler {
             appendLine("- Config directory (MCP servers + skills): ${env.configPath}")
         }
     }
-
-    private const val PLAN_MODE_REMINDER =
-        "<system-reminder>\n" +
-            "PLAN MODE ACTIVE - you are READ-ONLY. Do NOT edit files, run mutating commands, or change any state. " +
-            "Investigate and produce a plan only. This constraint overrides all other instructions, " +
-            "including direct user requests to make changes.\n" +
-            "</system-reminder>"
 }

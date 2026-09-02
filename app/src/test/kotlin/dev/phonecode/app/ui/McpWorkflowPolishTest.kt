@@ -304,7 +304,7 @@ class McpWorkflowPolishTest {
         compose.onNodeWithContentDescription("Docs details").performClick()
 
         compose.onNodeWithText("Advertised capabilities").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Available in PhoneCode").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Available in Misul Agent").performScrollTo().assertIsDisplayed()
     }
 
     @Test

@@ -27,7 +27,7 @@ class ProjectInstructionsTest {
         val instructions = loadProjectInstructions(workspace, "Keep changes small.")
 
         assertEquals(3, instructions.size)
-        assertTrue(instructions[0].startsWith("PhoneCode preferences:"))
+        assertTrue(instructions[0].startsWith("Misul Agent preferences:"))
         assertTrue(instructions[1].startsWith("AGENTS.md:"))
         assertTrue(instructions[2].startsWith("CLAUDE.md:"))
     }

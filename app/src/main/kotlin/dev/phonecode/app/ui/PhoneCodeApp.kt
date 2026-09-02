@@ -99,7 +99,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -148,13 +147,14 @@ import dev.phonecode.app.ui.components.rememberPredictiveBackMotion
 import dev.phonecode.app.ui.components.shortContentVerticalOverscroll
 import androidx.compose.material3.ripple
 import dev.phonecode.app.ui.settings.SettingsScreen
+import dev.phonecode.app.ui.theme.LocalMisulAccent
 import dev.phonecode.app.ui.theme.PhoneCodeTheme
 import dev.phonecode.app.ui.theme.PhoneEasings
 import dev.phonecode.app.ui.theme.PhoneSprings
 import dev.phonecode.app.ui.theme.ShapePill
 import dev.phonecode.app.ui.theme.Spacing
-import dev.phonecode.app.ui.theme.phoneHaze
-import dev.phonecode.app.ui.theme.phoneHazeEffect
+import dev.phonecode.app.ui.theme.phoneHazeBand
+import dev.phonecode.app.ui.theme.progressiveBlurEdge
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import java.text.SimpleDateFormat
@@ -228,6 +228,7 @@ fun PhoneCodeApp() {
 
     PhoneCodeTheme(darkTheme = dark) {
         val colors = MaterialTheme.colorScheme
+        val accent = LocalMisulAccent.current
 
         // System bar icons follow the APP theme (not just the device theme): dark icons on the
         // white theme, light icons on AMOLED black - this is what makes the bars feel native.
@@ -513,13 +514,13 @@ fun PhoneCodeApp() {
             if (!settingsLoaded) {
                 Box(
                     Modifier.fillMaxSize().background(colors.background)
-                        .clearAndSetSemantics { contentDescription = "Loading PhoneCode" },
+                        .clearAndSetSemantics { contentDescription = "Loading Misul Agent" },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_phonecode_mark),
+                        painter = painterResource(R.drawable.ic_misul_mark),
                         contentDescription = null,
-                        tint = colors.onBackground,
+                        tint = accent,
                         modifier = Modifier.size(48.dp),
                     )
                 }
@@ -542,6 +543,7 @@ private fun Sidebar(
     onOpenMcp: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    val accent = LocalMisulAccent.current
     val state by remember(vm) {
         vm.state.map(ChatUiState::shellSnapshot).distinctUntilChanged()
     }.collectAsState(initial = ChatUiState().shellSnapshot())
@@ -559,10 +561,11 @@ private fun Sidebar(
     val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
-    val hazeStyle = phoneHaze()
+    val hazeStyle = phoneHazeBand()
     val listScrolled by remember { derivedStateOf { listState.canScrollBackward } }
+    val hasMoreBelow by remember { derivedStateOf { listState.canScrollForward } }
     val listCanScroll by remember { derivedStateOf { listState.canScrollBackward || listState.canScrollForward } }
-    val blurChrome = listCanScroll && !searchExpanded
+    val blurChrome = (listScrolled || hasMoreBelow) && !searchExpanded
     val listOverscroll = rememberContentOverscroll()
     val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navigationInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -782,9 +785,13 @@ private fun Sidebar(
         Row(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .navigationBarsPadding()
-                .shadow(2.dp, RectangleShape, clip = false)
-                .then(if (blurChrome) Modifier.phoneHazeEffect(hazeState, hazeStyle) else Modifier)
-                .background(if (blurChrome) colors.background.copy(alpha = 0.35f) else colors.background)
+                .then(
+                    if (hasMoreBelow && !searchExpanded) {
+                        Modifier.progressiveBlurEdge(hazeState, hazeStyle, fromTop = false, edgeColor = colors.background)
+                    } else {
+                        Modifier.background(colors.background)
+                    },
+                )
                 .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 10.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
@@ -838,9 +845,13 @@ private fun Sidebar(
         Column(
             Modifier.align(Alignment.TopCenter).fillMaxWidth()
                 .height(statusInset + 112.dp)
-                .shadow(if (listScrolled) 2.dp else 0.dp, RectangleShape, clip = false)
-                .then(if (blurChrome) Modifier.phoneHazeEffect(hazeState, hazeStyle) else Modifier)
-                .background(if (blurChrome) colors.background.copy(alpha = 0.35f) else colors.background),
+                .then(
+                    if (listScrolled && !searchExpanded) {
+                        Modifier.progressiveBlurEdge(hazeState, hazeStyle, fromTop = true, edgeColor = colors.background)
+                    } else {
+                        Modifier.background(colors.background)
+                    },
+                ),
         ) {
             Row(
                 Modifier.fillMaxWidth().padding(top = statusInset).height(56.dp)
@@ -849,9 +860,9 @@ private fun Sidebar(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_phonecode_mark),
+                    painter = painterResource(R.drawable.ic_misul_mark),
                     contentDescription = null,
-                    tint = colors.onBackground,
+                    tint = accent,
                     modifier = Modifier.size(24.dp),
                 )
                 Box(Modifier.weight(1f).height(40.dp), contentAlignment = Alignment.CenterStart) {
@@ -943,7 +954,7 @@ private fun SidebarTitleSearch(
             exit = fadeOut(tween(100, easing = PhoneEasings.easeOut)),
         ) {
             Text(
-                "PhoneCode",
+                "Misul Agent",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.onBackground,
             )
@@ -1069,7 +1080,7 @@ private fun ChatRow(
                 )
             }
         }
-        Text(if (running) "Running" else formatSessionDate(meta.updatedAt), style = MaterialTheme.typography.labelSmall, color = if (running) colors.primary else colors.tertiary, modifier = Modifier.padding(start = 8.dp))
+        Text(if (running) "Running" else formatSessionDate(meta.updatedAt), style = MaterialTheme.typography.labelSmall, color = if (running) LocalMisulAccent.current else colors.tertiary, modifier = Modifier.padding(start = 8.dp))
         // Three-dot overflow: pin / move / archive / delete (also reachable via long-press).
         Box(
             contentAlignment = Alignment.Center,

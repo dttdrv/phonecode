@@ -6,9 +6,9 @@ import org.junit.Test
 
 class AgentToolsUiModelTest {
     private val tools = listOf(
-        AgentToolInfo("read_file", "Read a workspace file", "PhoneCode", "Read only"),
-        AgentToolInfo("write_file", "Change a workspace file", "PhoneCode", "Approval required"),
-        AgentToolInfo("process", "Run a command", "PhoneCode", "Depends on action"),
+        AgentToolInfo("read_file", "Read a workspace file", "Misul Agent", "Read only"),
+        AgentToolInfo("write_file", "Change a workspace file", "Misul Agent", "Approval required"),
+        AgentToolInfo("process", "Run a command", "Misul Agent", "Depends on action"),
         AgentToolInfo("remote_search", "Search a connected service", "MCP", "Approval required"),
     )
 

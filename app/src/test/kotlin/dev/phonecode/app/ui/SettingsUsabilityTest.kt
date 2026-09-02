@@ -137,9 +137,9 @@ class SettingsUsabilityTest {
 
     @Test
     fun radioChoicesExposeTheirSelectableGroup() {
-        showSettings("general")
+        showSettings("appearance")
 
-        val build = compose.onNodeWithText("Build", useUnmergedTree = true)
+        val build = compose.onNodeWithText("Light", useUnmergedTree = true)
             .fetchSemanticsNode()
         assertTrue(
             generateSequence(build.parent) { it.parent }

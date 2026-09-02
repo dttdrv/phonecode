@@ -21,6 +21,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.takahirom.roborazzi.captureRoboImage
+import dev.phonecode.app.R
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.agent.ChatViewModel
 import dev.phonecode.app.ui.chat.ChatScreen
@@ -54,6 +55,7 @@ class OnboardingFlowTest {
     fun onboardingUsesFocusedModelSetupAndSkipLeadsToHonestChat() {
         UiTestSecureKeyStore.clear()
         val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
+        assertEquals("Misul Agent", app.getString(R.string.app_name))
         compose.setContent {
             PhoneCodeTheme(darkTheme = false) {
                 OnboardingFlowHost(app.chatViewModel)
@@ -103,6 +105,10 @@ class OnboardingFlowTest {
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText("What should we build?").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithText("Inspect this project").assertIsDisplayed()
+        compose.onNodeWithText("Explain a build failure").assertIsDisplayed()
+        compose.onNodeWithText("Plan a safe code change").assertIsDisplayed()
+        compose.onAllNodesWithText("Build a small web app").assertCountEquals(0)
         compose.onNodeWithContentDescription("Message").assertIsEnabled()
     }
 
@@ -173,11 +179,11 @@ class OnboardingFlowTest {
     @Test
     fun providerSetupFailureCopyDistinguishesStorageFromActivation() {
         assertEquals(
-            "PhoneCode could not save this API key in secure storage.",
+            "Misul Agent could not save this API key in secure storage.",
             providerSetupFailureMessage(keySaved = false),
         )
         assertEquals(
-            "API key saved, but PhoneCode could not activate an available model for this provider.",
+            "API key saved, but Misul Agent could not activate an available model for this provider.",
             providerSetupFailureMessage(keySaved = true),
         )
     }

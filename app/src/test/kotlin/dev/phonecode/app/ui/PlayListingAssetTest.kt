@@ -103,7 +103,7 @@ class PlayListingAssetTest {
         }
 
         compose.waitForIdle()
-        compose.onNodeWithText("PhoneCode").assertIsDisplayed()
+        compose.onNodeWithText("Misul Agent").assertIsDisplayed()
         compose.onNodeWithText("Get started").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
             "../play/0.5.1/graphics/phone/05-welcome.png",

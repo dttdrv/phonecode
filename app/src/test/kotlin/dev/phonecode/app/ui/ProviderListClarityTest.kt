@@ -35,6 +35,7 @@ class ProviderListClarityTest {
             UiTestSecureKeyStore.replaceWith(
                 mapOf(
                     "anthropic" to "provider-list-test-key",
+                    "openai" to "provider-list-openai-key",
                     "codex.access" to "provider-list-test-token",
                 ),
             )
@@ -59,7 +60,7 @@ class ProviderListClarityTest {
                 "Provider setup and sign-in are managed inside each provider.",
         ).assertIsDisplayed()
         compose.onNodeWithText("API key saved · Shown in model picker").assertIsDisplayed()
-        compose.onNodeWithText("Signed in with ChatGPT · Shown in model picker")
+        compose.onNodeWithText("Signed in with ChatGPT · Unavailable in 0.6 alpha")
             .performScrollTo()
             .assertIsDisplayed()
         assertTrue(
@@ -67,13 +68,9 @@ class ProviderListClarityTest {
                 .fetchSemanticsNodes().isNotEmpty(),
         )
 
-        compose.onNodeWithContentDescription("Show Anthropic in model picker")
+        compose.onNodeWithText("API key saved · Unavailable in 0.6 alpha")
             .performScrollTo()
-            .performClick()
-        compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("API key saved · Hidden from model picker")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
+            .assertIsDisplayed()
     }
 
     private fun dismissOnboardingIfPresent() {

@@ -37,6 +37,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -52,6 +54,7 @@ import dev.phonecode.app.ui.components.PcButton
 import dev.phonecode.app.ui.components.PcGroup
 import dev.phonecode.app.ui.components.PcIconButton
 import dev.phonecode.app.ui.components.PcRow
+import dev.phonecode.app.ui.theme.LocalMisulAccent
 import dev.phonecode.app.ui.theme.PhoneEasings
 
 @Composable
@@ -69,9 +72,18 @@ fun OnboardingScreen(
     onSkip: () -> Unit = onDone,
 ) {
     val colors = MaterialTheme.colorScheme
+    val accent = LocalMisulAccent.current
     androidx.activity.compose.BackHandler(enabled = step > 0) { onStepChange(0) }
 
-    Box(Modifier.fillMaxSize().background(colors.background)) {
+    Box(
+        Modifier.fillMaxSize()
+            .background(colors.background)
+            .background(
+                Brush.linearGradient(
+                    listOf(accent.copy(alpha = 0.12f), Color.Transparent, Color.Transparent),
+                ),
+            ),
+    ) {
         AnimatedContent(
             targetState = step,
             transitionSpec = {
@@ -108,6 +120,7 @@ fun OnboardingScreen(
 @Composable
 private fun Welcome(onNext: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val accent = LocalMisulAccent.current
     Column(
         Modifier.fillMaxSize()
             .statusBarsPadding()
@@ -126,14 +139,14 @@ private fun Welcome(onNext: () -> Unit) {
             ) {
                 Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_phonecode_mark),
+                        painter = painterResource(R.drawable.ic_misul_mark),
                         contentDescription = null,
-                        tint = colors.onBackground,
+                        tint = accent,
                         modifier = Modifier.size(36.dp),
                     )
                 }
                 Text(
-                    "PhoneCode",
+                    "Misul Agent",
                     style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.onBackground,
                 )
@@ -148,7 +161,7 @@ private fun Welcome(onNext: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                "Run an AI coding agent in a private local workspace, with the models and tools you trust and access to phone folders you choose.",
+                "Run Misul Agent in a private local workspace, with the models and tools you trust and access to phone folders you choose.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -301,6 +314,7 @@ private fun FeatureRow(icon: ImageVector, title: String, sub: String) {
 @Composable
 private fun OptionRow(icon: ImageVector, title: String, sub: String, complete: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val accent = LocalMisulAccent.current
     PcRow(onClick = onClick) {
         Icon(icon, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(24.dp))
         Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
@@ -310,7 +324,7 @@ private fun OptionRow(icon: ImageVector, title: String, sub: String, complete: B
         Icon(
             if (complete) Icons.Filled.Check else Icons.AutoMirrored.Filled.KeyboardArrowRight,
             null,
-            tint = if (complete) colors.primary else colors.tertiary,
+            tint = if (complete) accent else colors.tertiary,
             modifier = Modifier.size(20.dp),
         )
     }

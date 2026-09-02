@@ -93,7 +93,7 @@ class CodexAuth(
 
     /**
      * Starts a one-shot loopback listener on 127.0.0.1:1455 for the OAuth redirect. Serves a tiny
-     * "return to PhoneCode" page; only a callback whose `state` matches [expectedState] completes
+     * "return to Misul Agent" page; only a callback whose `state` matches [expectedState] completes
      * the flow (mismatches are answered and ignored, so a stray request can't kill the listener).
      * Call [stopLoopback] to cancel (e.g. if the user abandons the browser flow).
      */
@@ -259,7 +259,7 @@ class CodexAuth(
     }
 
     private fun respondHtml(socket: Socket) {
-        val html = "<html><body><p>You can return to PhoneCode.</p></body></html>"
+        val html = "<html><body><p>You can return to Misul Agent.</p></body></html>"
         val bytes = html.toByteArray(Charsets.UTF_8)
         socket.getOutputStream().apply {
             write(

@@ -3,7 +3,7 @@ package dev.phonecode.app.agent
 import java.io.File
 
 internal fun loadProjectInstructions(workspace: File, custom: String = ""): List<String> = buildList {
-    custom.trim().takeIf { it.isNotEmpty() }?.let { add("PhoneCode preferences:\n${it.take(MAX_INSTRUCTION_CHARS)}") }
+    custom.trim().takeIf { it.isNotEmpty() }?.let { add("Misul Agent preferences:\n${it.take(MAX_INSTRUCTION_CHARS)}") }
     val root = runCatching { workspace.canonicalFile }.getOrNull() ?: return@buildList
     INSTRUCTION_FILES.forEach { name ->
         val file = runCatching { File(root, name).canonicalFile }.getOrNull() ?: return@forEach

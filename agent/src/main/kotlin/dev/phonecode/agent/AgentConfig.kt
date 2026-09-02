@@ -4,7 +4,6 @@ import dev.phonecode.provider.domain.ReasoningEffort
 
 data class AgentConfig(
     val model: String,
-    val mode: AgentMode,
     val environment: AgentEnvironment,
     val reasoningEffort: ReasoningEffort = ReasoningEffort.DEFAULT,
     /** Safety cap on agentic turns; on the last one tools are disabled and the model is asked to wrap up. */

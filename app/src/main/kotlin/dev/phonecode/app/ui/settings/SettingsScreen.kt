@@ -62,7 +62,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.SwapVert
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.MaterialTheme
@@ -102,7 +101,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -147,11 +145,15 @@ import dev.phonecode.app.ui.components.contentVerticalScroll
 import dev.phonecode.app.ui.components.predictiveBackTransform
 import dev.phonecode.app.ui.components.pressFeedback
 import dev.phonecode.app.ui.components.rememberPredictiveBackMotion
+import dev.phonecode.app.ui.theme.LocalMisulAccent
+import dev.phonecode.app.ui.theme.progressiveBlurEdge
+import dev.phonecode.app.ui.theme.phoneHazeBand
 import dev.phonecode.app.ui.theme.PcMono
 import dev.phonecode.app.ui.theme.PhoneEasings
 import dev.phonecode.app.ui.theme.PhoneSprings
 import dev.phonecode.app.ui.theme.Spacing
-import dev.phonecode.agent.AgentMode
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import dev.phonecode.tools.mcp.McpServerConfig
 import dev.phonecode.tools.mcp.McpServerSnapshot
 import dev.phonecode.tools.skills.parseSkillMarkdown
@@ -382,7 +384,6 @@ private fun SettingsPageContent(
     onNestedBackActive: (Boolean) -> Unit,
 ) {
     when (page) {
-        "general" -> GeneralPage(settingsVm, onBack)
         "appearance" -> AppearancePage(settingsVm, onBack)
         "personal" -> PersonalPage(settingsVm, onBack)
         "providers" -> ProvidersPage(vm, onOpenProvider = { navigate("provider:$it") }, onBack = onBack)
@@ -420,13 +421,17 @@ private fun Page(
 ) {
     val colors = MaterialTheme.colorScheme
     val scrollState = rememberScrollState()
-    val scrolled by remember { derivedStateOf { scrollState.value > 0 } }
+    val scrolled by remember { derivedStateOf { scrollState.canScrollBackward } }
+    val hasMoreBelow by remember { derivedStateOf { scrollState.canScrollForward } }
+    val hazeState = remember { HazeState() }
+    val hazeStyle = phoneHazeBand()
     val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottomInset = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
     Box(Modifier.fillMaxSize().background(colors.background)) {
         Column(
             Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight()
                 .contentVerticalScroll(scrollState)
+                .hazeSource(hazeState)
                 .background(colors.background)
                 .padding(
                     start = Spacing.m,
@@ -437,12 +442,26 @@ private fun Page(
             content()
             Spacer(Modifier.height(Spacing.xxl + bottomInset))
         }
+        if (scrolled) {
+            Box(
+                Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth()
+                    .height(statusInset + Spacing.navBarHeight + 24.dp)
+                    .progressiveBlurEdge(hazeState, hazeStyle, fromTop = true, edgeColor = colors.background)
+                    .zIndex(1f),
+            )
+        }
+        if (hasMoreBelow) {
+            Box(
+                Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp).fillMaxWidth()
+                    .height(bottomInset + 28.dp)
+                    .progressiveBlurEdge(hazeState, hazeStyle, fromTop = false, edgeColor = colors.background)
+                    .zIndex(1f),
+            )
+        }
         Row(
             Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth()
                 .height(statusInset + Spacing.navBarHeight)
                 .zIndex(1f)
-                .shadow(if (scrolled) 2.dp else 0.dp, RectangleShape, clip = false)
-                .background(colors.background)
                 .padding(start = 8.dp, top = statusInset, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -465,9 +484,7 @@ private fun Page(
     }
 }
 
-// M3 Expressive list metrics (round-3 settings redesign): bodyLarge headline + bodyMedium
-// supporting text, 24dp leading icon in onSurfaceVariant, trailing chevron - no hairlines,
-// the connected-card gaps do the separating.
+// Open navigation rows use hierarchy and inset dividers instead of repeated cards.
 
 @Composable
 private fun NavRow(label: String, value: String? = null, icon: ImageVector? = null, onClick: () -> Unit) {
@@ -572,18 +589,11 @@ private fun HomePage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: (
     val state by collectSettingsState(vm)
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
     Page("Settings", onBack) {
-        // The first group carries no label - an unlabeled lead group is the platform convention
-        // (Grok's settings open straight into the Customize cards).
-        PcGroup {
-            NavRow("General", icon = Icons.Outlined.Tune) { onOpen("general") }
-            NavRow("Appearance", value = settings.mode.name.lowercase().replaceFirstChar { it.uppercase() }, icon = Icons.Outlined.Palette) { onOpen("appearance") }
-            NavRow("Personalization", icon = Icons.Outlined.Person) { onOpen("personal") }
-        }
-        PcSectionLabel("Models")
+        PcSectionLabel("Agent")
         PcGroup {
             NavRow("Providers", icon = Icons.Outlined.Cloud) { onOpen("providers") }
         }
-        PcSectionLabel("Tools")
+        PcSectionLabel("Capabilities")
         PcGroup {
             NavRow("Agent tools", value = vm.availableTools().size.toString(), icon = Icons.Outlined.Build) { onOpen("tools") }
             NavRow("MCP servers", value = "${state.mcpServers.size}", icon = Icons.Outlined.Extension) { onOpen("mcp") }
@@ -593,8 +603,6 @@ private fun HomePage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: (
                 icon = Icons.Outlined.AutoAwesome,
             ) { onOpen("skills") }
         }
-        // "GIT > Git" was the same duplication as the old GENERAL group - the workspace label
-        // says what the section governs (per-project repos), the row keeps the familiar name.
         PcSectionLabel("Workspace")
         PcGroup {
             NavRow(
@@ -604,12 +612,11 @@ private fun HomePage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: (
             ) { onOpen("files") }
             NavRow("Git", icon = Icons.Outlined.AccountTree) { onOpen("git") }
         }
-        PcSectionLabel("Data")
+        PcSectionLabel("App")
         PcGroup {
+            NavRow("Appearance", value = settings.mode.name.lowercase().replaceFirstChar { it.uppercase() }, icon = Icons.Outlined.Palette) { onOpen("appearance") }
+            NavRow("Personalization", icon = Icons.Outlined.Person) { onOpen("personal") }
             NavRow("Export & import", icon = Icons.Outlined.SwapVert) { onOpen("export") }
-        }
-        Spacer(Modifier.height(8.dp))
-        PcGroup {
             NavRow("About", icon = Icons.Outlined.Info) { onOpen("about") }
         }
     }
@@ -655,11 +662,11 @@ private fun AgentToolsPage(vm: ChatViewModel, onBack: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
             color = colors.onSurfaceVariant,
         )
-        Note("Read-only tools work in Plan mode. Changes follow your approval setting in Files & permissions.")
+        Note("Changes follow your approval setting in Files & permissions.")
         PcField(query, { query = it }, "Search tools", contentDescription = "Search tools")
         AgentToolFilters(accessFilter) { accessFilter = it }
         if (inventory.isEmpty()) {
-            Note("No tools are available yet. Connect an MCP server or add a skill to extend PhoneCode.")
+            Note("No tools are available yet. Connect an MCP server or add a skill to extend Misul Agent.")
         } else if (tools.isEmpty()) {
             val message = if (query.isNotBlank()) {
                 "No tools match “${query.trim()}”. Clear the search or choose another access filter."
@@ -669,7 +676,7 @@ private fun AgentToolsPage(vm: ChatViewModel, onBack: () -> Unit) {
             Note(message)
         } else {
             tools.groupBy { it.source }.toList()
-                .sortedBy { (source, _) -> listOf("PhoneCode", "Skills", "MCP").indexOf(source).let { if (it < 0) Int.MAX_VALUE else it } }
+                .sortedBy { (source, _) -> listOf("Misul Agent", "Skills", "MCP").indexOf(source).let { if (it < 0) Int.MAX_VALUE else it } }
                 .forEach { (source, entries) ->
                 PcSectionLabel("$source · ${entries.size}")
                 PcGroup {
@@ -772,40 +779,6 @@ private fun AgentToolAccessFilter.emptyLabel() = when (this) {
 }
 
 @Composable
-private fun GeneralPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
-    val settings by settingsVm.settings.collectAsStateWithLifecycle()
-    Page("General", onBack) {
-        PcSectionLabel("Default agent mode")
-        PcGroup(Modifier.selectableGroup()) {
-            AgentMode.entries.forEach { mode ->
-                CheckRow(
-                    mode.name.lowercase().replaceFirstChar { it.uppercase() },
-                    selected = settings.defaultMode == mode.name,
-                    sub = if (mode == AgentMode.BUILD) {
-                        "Can use tools and make approved changes"
-                    } else {
-                        "Explores and proposes a plan without changing files"
-                    },
-                ) {
-                    // Default governs NEW conversations (applied in ChatViewModel.newChat / init); changing
-                    // it must not retroactively flip the active chat's mode - that's the per-chat Plan toggle.
-                    settingsVm.update { it.copy(defaultMode = mode.name) }
-                }
-            }
-        }
-        Note("This applies to new chats. You can switch the active chat from the model menu.")
-        PcSectionLabel("Message input")
-        PcGroup {
-            ToggleRow(
-                "Send on Enter",
-                "When off, Enter adds a new line",
-                checked = settings.sendOnEnter,
-            ) { v -> settingsVm.update { it.copy(sendOnEnter = v) } }
-        }
-    }
-}
-
-@Composable
 private fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
     val state by collectSettingsState(vm)
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -889,9 +862,9 @@ private fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
         ConfirmActionDialog(
             title = "Remove folder access?",
             message = if (projects == 0) {
-                "PhoneCode will lose access to ${folder?.name ?: "this folder"}. The phone folder itself is not deleted."
+                "Misul Agent will lose access to ${folder?.name ?: "this folder"}. The phone folder itself is not deleted."
             } else {
-                "PhoneCode will unlink ${folder?.name ?: "this folder"}, move $projects project${if (projects == 1) "" else "s"} and their chats to Unsorted, and keep private workspace files under Recovered projects. The phone folder itself is not deleted."
+                "Misul Agent will unlink ${folder?.name ?: "this folder"}, move $projects project${if (projects == 1) "" else "s"} and their chats to Unsorted, and keep private workspace files under Recovered projects. The phone folder itself is not deleted."
             },
             action = "Remove access",
             onDismiss = { pendingUnlinkId = null },
@@ -903,7 +876,7 @@ private fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
     if (confirmAutomaticApproval) {
         ConfirmActionDialog(
             title = "Enable automatic approval?",
-            message = "PhoneCode will run writes in the private workspace and linked phone folders, commands, Git operations, and mutating MCP actions without asking each time. Reads outside linked locations will still ask.",
+            message = "Misul Agent will run writes in the private workspace and linked phone folders, commands, Git operations, and mutating MCP actions without asking each time. Reads outside linked locations will still ask.",
             action = "Enable automatic approval",
             progressAction = "Enabling…",
             inProgress = enablingAutomaticApproval,
@@ -961,6 +934,14 @@ private fun PersonalPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
         onDispose { settingsVm.update { if (latest != it.customInstructions) it.copy(customInstructions = latest) else it } }
     }
     Page("Personalization", onBack) {
+        PcSectionLabel("Message input")
+        PcGroup {
+            ToggleRow(
+                "Send on Enter",
+                "When off, Enter adds a new line",
+                checked = settings.sendOnEnter,
+            ) { value -> settingsVm.update { it.copy(sendOnEnter = value) } }
+        }
         PcSectionLabel("Custom instructions")
         PcField(
             text,
@@ -1015,7 +996,7 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
         )
         if (vm.secureStorageUnavailable()) {
             ErrorText(
-                "Secure storage is unavailable on this device. PhoneCode will not save API keys or sign-in credentials.",
+                "Secure storage is unavailable on this device. Misul Agent will not save API keys or sign-in credentials.",
                 modifier = Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
             )
         }
@@ -1027,12 +1008,11 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
         // EncryptedSharedPreferences, so doing it per row per frame ran crypto on every toggle/recompose.
         // Keyed on state.models (changes when custom providers reload); a fresh entry after editing a key
         // on the detail page resets this remember because the page leaves the AnimatedContent composition.
-        val providers = remember(state.models, state.codexConnected) {
-            vm.allProviders().filter { it.id != "codex" || state.codexConnected }
-        }
+        val providers = remember(state.models, state.codexConnected) { vm.allProviders() }
         val keyedIds = remember(state.models) { providers.filter { vm.keyFor(it.id).isNotBlank() }.map { it.id }.toSet() }
         PcGroup {
             providers.forEach { preset ->
+                val runtimeAvailable = vm.providerAvailableInMisul(preset.id)
                 val enabled = preset.id !in state.disabledProviders
                 val connected = preset.id == "codex" && state.codexConnected
                 val hasKey = connected || preset.id in keyedIds
@@ -1041,7 +1021,11 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
                     hasKey -> "API key saved"
                     else -> "Setup required"
                 }
-                val visibilityStatus = if (enabled) "Shown in model picker" else "Hidden from model picker"
+                val visibilityStatus = when {
+                    !runtimeAvailable -> "Unavailable in 0.6 alpha"
+                    enabled -> "Shown in model picker"
+                    else -> "Hidden from model picker"
+                }
                 PcRow(onClick = { onOpenProvider(preset.id) }) {
                     Column(Modifier.weight(1f)) {
                         Text(preset.displayName, style = MaterialTheme.typography.bodyLarge, color = if (enabled) colors.onBackground else colors.tertiary)
@@ -1053,7 +1037,7 @@ private fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, o
                     }
                     PcToggle(
                         enabled,
-                        { vm.toggleProviderDisabled(preset.id) },
+                        if (runtimeAvailable) ({ vm.toggleProviderDisabled(preset.id) }) else null,
                         "Show ${preset.displayName} in model picker",
                     )
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(20.dp))
@@ -1139,7 +1123,7 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
                 },
             )
             if (!secureStorageAvailable) {
-                ErrorText("Secure storage is unavailable on this device, so PhoneCode cannot change this key.")
+                ErrorText("Secure storage is unavailable on this device, so Misul Agent cannot change this key.")
             }
             keyError?.let { ErrorText(it, modifier = Modifier.padding(top = Spacing.xs)) }
             Spacer(Modifier.height(Spacing.xs))
@@ -1162,7 +1146,7 @@ private fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: ()
         val models = state.models.filter { it.providerId == providerId }
         PcSectionLabel("Models · ${models.size}")
         if (models.isEmpty()) {
-            Note("No models loaded for this provider yet. Models refresh automatically when PhoneCode opens.")
+            Note("No models loaded for this provider yet. Models refresh automatically when Misul Agent opens.")
         } else {
             // Search + bulk visibility (device feedback): long provider lists need both.
             var modelQuery by remember(providerId) { mutableStateOf("") }
@@ -1820,7 +1804,7 @@ private fun McpServerPage(
                     connectedSnapshot.capabilities.sorted().joinToString().ifBlank { "None" },
                 )
                 McpValueRow(
-                    "Available in PhoneCode",
+                    "Available in Misul Agent",
                     if (connectedSnapshot.tools.isEmpty()) "No tool calls" else "Tool calls",
                 )
             }
@@ -3042,17 +3026,17 @@ private fun AboutPage(vm: ChatViewModel, onOpenDoc: (String) -> Unit, onBack: ()
     }
     Page("About", onBack) {
         Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(painterResource(R.drawable.ic_phonecode_mark), null, tint = colors.onBackground, modifier = Modifier.size(64.dp))
+            Icon(painterResource(R.drawable.ic_misul_mark), null, tint = LocalMisulAccent.current, modifier = Modifier.size(64.dp))
             Spacer(Modifier.height(14.dp))
-            Text("PhoneCode", style = MaterialTheme.typography.headlineMedium, color = colors.onBackground)
+            Text("Misul Agent", style = MaterialTheme.typography.headlineMedium, color = colors.onBackground)
             Text("version $version", style = MaterialTheme.typography.labelMedium, color = colors.tertiary, modifier = Modifier.padding(top = 4.dp))
         }
         PcGroup {
             PcRow(onClick = {
-                browserError = openExternalUrl(context, "https://dttdrv.xyz/phonecode")
+                browserError = openExternalUrl(context, "https://misul.org")
             }) {
                 Text("Website", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, modifier = Modifier.weight(1f))
-                Text("dttdrv.xyz/phonecode", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
+                Text("misul.org", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(20.dp))
             }
             PcRow {

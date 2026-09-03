@@ -126,6 +126,7 @@ import dev.phonecode.app.ui.SettingsViewModel
 import dev.phonecode.app.ui.chat.MarkdownBlocks
 import dev.phonecode.app.ui.components.ActionRole
 import dev.phonecode.app.ui.components.MisulActionButton
+import dev.phonecode.app.ui.components.MisulActionRow
 import dev.phonecode.app.ui.components.MisulField
 import dev.phonecode.app.ui.components.MisulGroup
 import dev.phonecode.app.ui.components.MisulIconButton
@@ -159,29 +160,31 @@ internal fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, 
     var addingCustom by remember { mutableStateOf(false) }
     var browserError by remember { mutableStateOf<String?>(null) }
     SettingsPageShell("Providers", onBack) {
-        if (state.codexOAuthAvailable && !state.codexConnected) {
-            MisulSectionLabel("ChatGPT")
-            MisulActionButton("Sign in with ChatGPT (Codex)", role = ActionRole.PRIMARY) {
-                vm.startCodexSignIn()?.let { url ->
-                    browserError = openExternalUrl(context, url)
+        MisulSectionLabel("Connections")
+        MisulGroup {
+            if (state.codexOAuthAvailable && !state.codexConnected) {
+                MisulActionRow(
+                    label = "Sign in with ChatGPT",
+                    supportingText = "Use models included with your ChatGPT plan",
+                    icon = Icons.Outlined.Cloud,
+                ) {
+                    vm.startCodexSignIn()?.let { url ->
+                        browserError = openExternalUrl(context, url)
+                    }
                 }
             }
-            browserError?.let {
-                SettingsErrorText(it, modifier = Modifier.padding(top = Spacing.xs))
+            MisulActionRow(
+                label = "Add custom provider",
+                supportingText = "Connect an OpenAI-compatible endpoint",
+                icon = Icons.Filled.Add,
+                enabled = state.providerConfigError == null,
+                showDivider = false,
+            ) {
+                addingCustom = true
             }
-            Spacer(Modifier.height(6.dp))
         }
-        MisulActionButton(
-            "Add custom provider",
-            role = ActionRole.SECONDARY,
-            icon = Icons.Filled.Add,
-            enabled = state.providerConfigError == null,
-        ) { addingCustom = true }
+        browserError?.let { SettingsErrorText(it, modifier = Modifier.padding(top = Spacing.xs)) }
         MisulSectionLabel("Providers")
-        SettingsNote(
-            "Switches control which providers appear in the model picker. " +
-                "Provider setup and sign-in are managed inside each provider.",
-        )
         if (vm.secureStorageUnavailable()) {
             SettingsErrorText(
                 "Secure storage is unavailable on this device. Misul Agent will not save API keys or sign-in credentials.",
@@ -209,14 +212,14 @@ internal fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, 
                     hasKey -> "API key saved"
                     else -> "Setup required"
                 }
-                val visibilityStatus = when {
-                    !runtimeAvailable -> "Unavailable in 0.6 alpha"
-                    enabled -> "Shown in model picker"
-                    else -> "Hidden from model picker"
+                val status = when {
+                    !runtimeAvailable -> "$setupStatus · Not yet available"
+                    !enabled -> "$setupStatus · Hidden"
+                    else -> setupStatus
                 }
                 MisulNavigationRow(
                     label = preset.displayName,
-                    supportingText = "$setupStatus · $visibilityStatus",
+                    supportingText = status,
                     onClick = { onOpenProvider(preset.id) },
                     showDivider = index != providers.lastIndex,
                 )
@@ -269,7 +272,7 @@ internal fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: (
                 checked = providerEnabled,
                 onCheckedChange = { vm.toggleProviderDisabled(providerId) },
                 enabled = providerAvailable,
-                supportingText = if (providerAvailable) null else "Unavailable in 0.6 alpha",
+                supportingText = if (providerAvailable) null else "Not yet available",
                 showDivider = false,
             )
         }

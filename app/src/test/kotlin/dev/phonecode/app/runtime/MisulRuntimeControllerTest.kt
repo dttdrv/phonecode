@@ -47,6 +47,29 @@ class MisulRuntimeControllerTest {
     }
 
     @Test
+    fun parserKeepsRedactedProviderFailureDetails() {
+        val terminal = parseMisulRecord(
+            """{"jsonrpc":"2.0","id":7,"result":{"status":"failed","content":"","failure":"provider","provider_failure":{"category":"authentication","http_status":401,"request_id":"req-safe","provider_code":"invalid_api_key","redacted_message":"Incorrect API key"}}}""",
+            expectedId = 7,
+        )
+
+        assertEquals(
+            MisulProviderFailure(
+                category = "authentication",
+                httpStatus = 401,
+                requestId = "req-safe",
+                providerCode = "invalid_api_key",
+                message = "Incorrect API key",
+            ),
+            terminal.settlement?.providerFailure,
+        )
+        assertEquals(
+            "The provider rejected this API key. Check it in Settings > Providers. (401, invalid_api_key, request req-safe)",
+            requireNotNull(terminal.settlement).userFacingFailure(),
+        )
+    }
+
+    @Test
     fun parserRejectsMalformedAndMismatchedTerminalRecords() {
         assertTrue(parseMisulRecord("not-json", 9).events.single() is MisulRuntimeEvent.ProtocolError)
         assertFalse(parseMisulRecord("""{"jsonrpc":"2.0","id":8,"result":{}}""", 9).terminal)

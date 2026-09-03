@@ -117,12 +117,14 @@ internal fun SettingsNavigationRow(
     label: String,
     value: String? = null,
     icon: ImageVector? = null,
+    supportingText: String? = null,
     showDivider: Boolean = true,
     onClick: () -> Unit,
 ) = MisulNavigationRow(
     label = label,
     value = value,
     icon = icon,
+    supportingText = supportingText,
     showDivider = showDivider,
     onClick = onClick,
 )

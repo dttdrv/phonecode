@@ -131,7 +131,7 @@ class InteractionSystemContractTest {
         val text = actions.substringAfter("fun MisulTextAction(").substringBefore("fun Modifier.misulPressMotion(")
 
         assertTrue(action.contains(".clip(shape)\n            .background(visual.container)\n            .misulTonalFeedback"))
-        assertTrue(icon.contains("Modifier.size(IconSurface)\n                .clip(CircleShape)\n                .background(visual.container)\n                .misulTonalFeedback"))
+        assertTrue(icon.contains("Modifier.size(IconSurface)\n                .offset(y = visualOffsetY)\n                .clip(CircleShape)\n                .background(visual.container)\n                .misulTonalFeedback"))
         assertTrue(icon.contains("this.selected = selected"))
         assertTrue(action.contains(".height(ActionHeight)"))
         assertTrue(action.contains("actionVisuals(role, enabled || loading"))
@@ -226,6 +226,7 @@ class InteractionSystemContractTest {
         val toggle = rowSource.substringAfter("fun MisulToggleRow(").substringBefore("fun MisulSelectionRow(")
         val selection = rowSource.substringAfter("fun MisulSelectionRow(").substringBefore("fun MisulFilter(")
         assertTrue(navigation.contains("misulRowPressTreatment(interaction)"))
+        assertTrue(navigation.contains("tint = MaterialTheme.colorScheme.onSurfaceVariant"))
         assertTrue(disclosure.contains("role = Role.Button"))
         assertTrue(disclosure.contains("stateDescription = if (expanded) \"Expanded\" else \"Collapsed\""))
         assertFalse(disclosure.contains("Role.Switch"))
@@ -250,6 +251,24 @@ class InteractionSystemContractTest {
     }
 
     @Test
+    fun drawerAnchorsComeFromTheMeasuredLayoutAndNeverCollapseAtLaunch() {
+        val app = File(root, "app/src/main/kotlin/dev/phonecode/app/ui/PhoneCodeApp.kt").readText()
+
+        assertTrue(app.contains(".onSizeChanged { size -> drawerContainerWidthPx = size.width }"))
+        assertTrue(resolvedDrawerWidthPx(0, 0, 3f) > 0f)
+        assertTrue(resolvedDrawerWidthPx(900, 0, 3f) == 738f)
+        assertTrue(resolvedDrawerWidthPx(900, 1200, 3f) == 738f)
+    }
+
+    @Test
+    fun firstPromptDoesNotOpenACompetingNotificationPermissionDialog() {
+        val chat = File(root, "app/src/main/kotlin/dev/phonecode/app/ui/chat/ChatScreen.kt").readText()
+
+        assertFalse(chat.contains("POST_NOTIFICATIONS"))
+        assertFalse(chat.contains("notificationPermission.launch"))
+    }
+
+    @Test
     fun task10UsesSharedSearchFiltersStableLoadingAndDirtyGitExit() {
         val settingsDir = File(root, "app/src/main/kotlin/dev/phonecode/app/ui/settings")
         val tools = File(settingsDir, "AgentToolsSettings.kt").readText()
@@ -261,9 +280,11 @@ class InteractionSystemContractTest {
         listOf(tools, providers, mcp, skills).forEach { source ->
             assertTrue(source.contains("MisulSearchField("))
         }
-        assertTrue(tools.contains("MisulFilter("))
-        assertTrue(skills.contains("MisulFilter("))
-        assertTrue(tools.contains("Clear search"))
+        assertTrue(tools.contains("AgentToolsCategoryPage("))
+        assertTrue(tools.contains("inventory.size >= 12"))
+        assertTrue(skills.contains("state.skills.size >= 12"))
+        assertFalse(tools.contains("MisulFilter("))
+        assertFalse(skills.contains("MisulFilter("))
         assertTrue(git.contains("animateContentSize("))
         assertTrue(git.contains("manualDraftIsDirty"))
         assertTrue(git.contains("DiscardChangesBackHandler("))

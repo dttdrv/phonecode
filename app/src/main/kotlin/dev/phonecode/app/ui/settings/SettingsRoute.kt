@@ -8,9 +8,11 @@ sealed interface SettingsRoute {
 
     @Serializable data object Home : SettingsRoute
     @Serializable data object AgentTools : SettingsRoute
+    @Serializable data class AgentToolsCategory(val access: String) : SettingsRoute
     @Serializable data object Files : SettingsRoute
     @Serializable data object Appearance : SettingsRoute
     @Serializable data object Personalization : SettingsRoute
+    @Serializable data object CustomInstructions : SettingsRoute
     @Serializable data object Providers : SettingsRoute
     @Serializable data object Mcp : SettingsRoute
     @Serializable data object Skills : SettingsRoute
@@ -39,6 +41,8 @@ internal fun SettingsRoute.parent(): SettingsRoute? = when (this) {
     SettingsRoute.Git,
     SettingsRoute.Data,
     SettingsRoute.About -> SettingsRoute.Home
+    is SettingsRoute.AgentToolsCategory -> SettingsRoute.AgentTools
+    SettingsRoute.CustomInstructions -> SettingsRoute.Personalization
     is SettingsRoute.Provider -> SettingsRoute.Providers
     is SettingsRoute.McpServer -> SettingsRoute.Mcp
     is SettingsRoute.Skill -> SettingsRoute.Skills

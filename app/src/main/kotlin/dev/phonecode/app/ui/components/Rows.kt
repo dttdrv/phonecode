@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -182,7 +183,14 @@ fun MisulNavigationRow(
         supportingText = supportingText,
         showDivider = showDivider,
     ) {
-        icon?.let { Icon(it, contentDescription = null, modifier = Modifier.size(RowIconSize)) }
+        icon?.let {
+            Icon(
+                it,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(RowIconSize),
+            )
+        }
         RowText(label = label, supportingText = supportingText, modifier = Modifier.weight(1f))
         value?.let {
             Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -193,6 +201,47 @@ fun MisulNavigationRow(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(16.dp),
         )
+    }
+}
+
+/** A direct settings action with row geometry and no misleading disclosure chevron. */
+@Composable
+fun MisulActionRow(
+    label: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    supportingText: String? = null,
+    enabled: Boolean = true,
+    showDivider: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    RowShell(
+        modifier = modifier
+            .graphicsLayer { alpha = if (enabled) 1f else 0.46f }
+            .misulRowPressTreatment(interaction)
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(),
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .semantics { if (!enabled) disabled() },
+        icon = icon,
+        dividerTag = label,
+        supportingText = supportingText,
+        showDivider = showDivider,
+    ) {
+        icon?.let {
+            Icon(
+                it,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(RowIconSize),
+            )
+        }
+        RowText(label = label, supportingText = supportingText, modifier = Modifier.weight(1f))
     }
 }
 

@@ -88,20 +88,16 @@ class ProviderListClarityTest {
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithText("Models & providers").performClick()
 
-        compose.onNodeWithText(
-            "Switches control which providers appear in the model picker. " +
-                "Provider setup and sign-in are managed inside each provider.",
-        ).assertIsDisplayed()
-        compose.onNodeWithText("API key saved · Shown in model picker").assertIsDisplayed()
-        compose.onNodeWithText("Signed in with ChatGPT · Unavailable in 0.6 alpha")
+        compose.onNodeWithText("API key saved").assertIsDisplayed()
+        compose.onNodeWithText("Signed in with ChatGPT · Not yet available")
             .performScrollTo()
             .assertIsDisplayed()
         assertTrue(
-            compose.onAllNodesWithText("Setup required · Shown in model picker")
+            compose.onAllNodesWithText("Setup required")
                 .fetchSemanticsNodes().isNotEmpty(),
         )
 
-        compose.onNodeWithText("API key saved · Unavailable in 0.6 alpha")
+        compose.onNodeWithText("API key saved · Not yet available")
             .performScrollTo()
             .assertIsDisplayed()
     }

@@ -10,7 +10,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
@@ -26,6 +28,7 @@ class TurnService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        register(this)
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Agent activity",
@@ -38,10 +41,27 @@ class TurnService : Service() {
 
     @SuppressLint("WakelockTimeout")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopWork(startId)
-            return START_NOT_STICKY
+        register(this)
+        promoteToForeground()
+        if (shouldStopAfterStart(intent?.action == ACTION_STOP)) {
+            if (intent?.action == ACTION_STOP) {
+                stopWork(startId)
+                return START_NOT_STICKY
+            }
+            if (stopForNoOwners(startId)) return START_NOT_STICKY
         }
+        if (wakeLock == null) {
+            wakeLock = getSystemService(PowerManager::class.java)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PhoneCode:turn")
+                .apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+        }
+        return START_NOT_STICKY
+    }
+
+    private fun promoteToForeground() {
         val open = PendingIntent.getActivity(
             this,
             0,
@@ -68,20 +88,12 @@ class TurnService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        if (wakeLock == null) {
-            wakeLock = getSystemService(PowerManager::class.java)
-                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PhoneCode:turn")
-                .apply {
-                    setReferenceCounted(false)
-                    acquire()
-                }
-        }
-        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
+        unregister(this)
         super.onDestroy()
     }
 
@@ -90,6 +102,10 @@ class TurnService : Service() {
     }
 
     private fun stopWork(startId: Int) {
+        synchronized(lifecycleLock) {
+            desiredRunning = false
+            if (activeService === this) activeService = null
+        }
         val app = application as PhoneCodeApplication
         if (stopping.compareAndSet(false, true)) {
             app.turnScope.launch {
@@ -104,17 +120,75 @@ class TurnService : Service() {
         stopSelfResult(startId)
     }
 
+    private fun stopForNoOwners(startId: Int? = null): Boolean {
+        val shouldStop = synchronized(lifecycleLock) {
+            if (desiredRunning) {
+                false
+            } else {
+                if (activeService === this) activeService = null
+                true
+            }
+        }
+        if (!shouldStop) return false
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (startId == null) stopSelf() else stopSelfResult(startId)
+        return true
+    }
+
     companion object {
         private const val ACTION_STOP = "dev.phonecode.app.action.STOP_WORK"
         private const val CHANNEL_ID = "turn"
         private const val NOTIFICATION_ID = 1
+        private val lifecycleLock = Any()
+        private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
+        private var desiredRunning = false
+        private var startPending = false
+        private var activeService: TurnService? = null
 
         fun start(context: Context) {
-            context.startForegroundService(Intent(context, TurnService::class.java))
+            val shouldStart = synchronized(lifecycleLock) {
+                desiredRunning = true
+                if (activeService != null || startPending) {
+                    false
+                } else {
+                    startPending = true
+                    true
+                }
+            }
+            if (!shouldStart) return
+            try {
+                context.startForegroundService(Intent(context, TurnService::class.java))
+            } catch (error: Throwable) {
+                synchronized(lifecycleLock) { startPending = false }
+                throw error
+            }
         }
 
         fun stop(context: Context) {
-            runCatching { context.stopService(Intent(context, TurnService::class.java)) }
+            val service = synchronized(lifecycleLock) {
+                desiredRunning = false
+                activeService
+            }
+            if (service != null) mainHandler.post { service.stopForNoOwners() }
+        }
+
+        private fun register(service: TurnService) {
+            synchronized(lifecycleLock) { activeService = service }
+        }
+
+        private fun shouldStopAfterStart(explicitStop: Boolean): Boolean = synchronized(lifecycleLock) {
+            startPending = false
+            if (explicitStop) desiredRunning = false
+            !desiredRunning
+        }
+
+        private fun unregister(service: TurnService) {
+            synchronized(lifecycleLock) {
+                if (activeService === service) {
+                    activeService = null
+                    startPending = false
+                }
+            }
         }
     }
 }

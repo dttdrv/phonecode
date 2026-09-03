@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -137,7 +138,7 @@ class McpWorkflowPolishTest {
     }
 
     @Test
-    fun serverDetailsAndEnabledSwitchAreSeparateAccessibilityActions() {
+    fun serverNameOpensDetailControlsInsteadOfExposingALandingToggle() {
         stateFlow().value = stateFlow().value.copy(
             mcpServers = linkedMapOf(
                 "Docs" to McpServerConfig(url = "https://example.com/mcp", enabled = false),
@@ -145,8 +146,9 @@ class McpWorkflowPolishTest {
         )
         showMcp()
 
-        compose.onNodeWithContentDescription("Docs details").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Docs enabled").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Docs enabled").assertCountEquals(0)
+        compose.onNodeWithText("Docs").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Enabled").assertIsOff().assertIsNotEnabled()
     }
 
     @Test
@@ -160,7 +162,7 @@ class McpWorkflowPolishTest {
         )
         showMcp()
 
-        compose.onNodeWithContentDescription("Docs details").performClick()
+        compose.onNodeWithText("Docs").performClick()
         compose.onNodeWithContentDescription("Remote URL")
             .assertTextEquals("https://example.com/mcp")
         compose.onNodeWithText("Save").assertIsNotEnabled()
@@ -177,7 +179,7 @@ class McpWorkflowPolishTest {
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Discard").performClick()
         compose.onNodeWithText("MCP servers").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Docs details").assertIsDisplayed()
+        compose.onNodeWithText("Docs").assertIsDisplayed()
     }
 
     @Test
@@ -231,7 +233,7 @@ class McpWorkflowPolishTest {
             ),
         )
         showMcp()
-        compose.onNodeWithContentDescription("Docs details").performClick()
+        compose.onNodeWithText("Docs").performClick()
 
         compose.onNodeWithText("Enabled").assertIsOff().assertIsNotEnabled()
         compose.onNodeWithText("Test successfully before enabling").assertIsDisplayed()
@@ -246,8 +248,9 @@ class McpWorkflowPolishTest {
         )
         showMcp()
 
-        compose.onNodeWithContentDescription("Docs enabled").assertIsOff().assertIsNotEnabled()
-        compose.onNodeWithContentDescription("Docs details").assertIsEnabled()
+        compose.onAllNodesWithContentDescription("Docs enabled").assertCountEquals(0)
+        compose.onNodeWithText("Docs").assertIsEnabled().performClick()
+        compose.onNodeWithText("Enabled").assertIsOff().assertIsNotEnabled()
     }
 
     @Test
@@ -258,7 +261,7 @@ class McpWorkflowPolishTest {
             ),
         )
         showMcp()
-        compose.onNodeWithContentDescription("Docs details").performClick()
+        compose.onNodeWithText("Docs").performClick()
 
         compose.onNodeWithContentDescription("Remote URL")
             .performTextReplacement("https://new.example/mcp")
@@ -289,7 +292,7 @@ class McpWorkflowPolishTest {
                 ),
             )
             showMcp()
-            compose.onNodeWithContentDescription("Docs details").performClick()
+            compose.onNodeWithText("Docs").performClick()
 
             compose.onNodeWithText("Test").performClick()
             val loading = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Loading")
@@ -336,7 +339,7 @@ class McpWorkflowPolishTest {
                 ),
             )
             showMcp()
-            compose.onNodeWithContentDescription("Docs details").performClick()
+            compose.onNodeWithText("Docs").performClick()
 
             compose.onNodeWithText("Test").performClick()
             val loading = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Loading")
@@ -386,7 +389,7 @@ class McpWorkflowPolishTest {
             mcpToolCount = tools.size,
         )
         showMcp()
-        compose.onNodeWithContentDescription("Docs details").performClick()
+        compose.onNodeWithText("Docs").performClick()
 
         compose.onNodeWithText("Show all 35 tools").performScrollTo().performClick()
         compose.onNodeWithText("Tool 35").performScrollTo().assertIsDisplayed()
@@ -412,7 +415,7 @@ class McpWorkflowPolishTest {
             mcpToolCount = 1,
         )
         showMcp()
-        compose.onNodeWithContentDescription("Docs details").performClick()
+        compose.onNodeWithText("Docs").performClick()
 
         compose.onNodeWithText("Advertised capabilities").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Available in Misul Agent").performScrollTo().assertIsDisplayed()

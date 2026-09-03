@@ -158,11 +158,8 @@ internal fun McpPage(
     val state by collectSettingsState(vm)
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
-    var pendingToggles by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
-    var toggleErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var reconnecting by remember { mutableStateOf(false) }
     var reconnectError by remember { mutableStateOf<String?>(null) }
-    val colors = MaterialTheme.colorScheme
     val visible = remember(state.mcpServers, query) {
         state.mcpServers.filter { (name, server) ->
             query.isBlank() || name.contains(query, true) || server.url.contains(query, true)
@@ -171,10 +168,16 @@ internal fun McpPage(
 
     SettingsPageShell("MCP servers", onBack) {
         val connected = state.mcpSnapshots.count { it.value.connected }
-        SettingsNote(
-            "$connected connected · ${state.mcpServers.count { it.value.enabled }} enabled · " +
-                "${state.mcpToolCount} available tools",
-        )
+        MisulGroup {
+            SettingsNavigationRow(
+                label = "Add server",
+                supportingText = "Connect an HTTPS or on-device MCP server",
+                icon = Icons.Filled.Add,
+                showDivider = false,
+                onClick = { onOpenServer("") },
+            )
+        }
+        SettingsNote("$connected connected · ${state.mcpToolCount} tools available")
         state.mcpConfigError?.let {
             SettingsErrorText(it)
             SettingsNote("The existing opencode.json has been preserved. Fix it before changing MCP servers here.")
@@ -183,131 +186,42 @@ internal fun McpPage(
             SettingsErrorText(it)
             SettingsNote("Your saved server list is still available. Review the affected server and try again.")
         }
-        if (state.mcpServers.isNotEmpty()) MisulSearchField(query, { query = it }, "Search servers")
+        if (state.mcpServers.size >= 12 || query.isNotBlank()) {
+            MisulSearchField(query, { query = it }, "Search servers")
+        }
         MisulSectionLabel("Servers")
         if (state.mcpServers.isEmpty()) {
-            SettingsNote("No MCP servers configured. Add one over HTTPS, or use local HTTP for a server on this device.")
+            SettingsNote("No servers configured.")
         } else if (visible.isEmpty()) {
             SettingsNote("No servers match “${query.trim()}”.")
         } else {
             MisulGroup {
                 visible.entries.toList().forEachIndexed { index, (name, server) ->
                     val snapshot = state.mcpSnapshots[name]
-                    val pendingTarget = pendingToggles[name]
                     val status = when {
-                        pendingTarget != null -> "Updating…"
                         !server.enabled -> "Off · Test to enable"
                         name in state.mcpConnecting -> "Connecting"
                         snapshot?.connected == true -> "Connected · ${snapshot.tools.size} reported tools"
                         snapshot?.error?.isNotBlank() == true -> "Needs attention · ${snapshot.error}"
                         else -> "Not tested"
                     }
-                    MisulContentRow(showDivider = index != visible.size - 1) {
-                        val detailsEnabled =
-                            state.mcpConfigError == null && pendingTarget == null && !reconnecting
-                        Row(
-                            Modifier.weight(1f)
-                                .clip(MaterialTheme.shapes.small)
-                                .clickable(
-                                    enabled = detailsEnabled,
-                                    role = Role.Button,
-                                ) {
-                                    onOpenServer(name)
-                                }
-                                .semantics {
-                                    contentDescription = "$name details"
-                                    if (!detailsEnabled) disabled()
-                                }
-                                .padding(vertical = Spacing.xs),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(name, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                                Text(
-                                    status,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = when {
-                                        snapshot?.error?.isNotBlank() == true -> colors.error
-                                        snapshot?.connected == true -> colors.primary
-                                        else -> colors.onSurfaceVariant
-                                    },
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                toggleErrors[name]?.let { message ->
-                                    SettingsErrorText(
-                                        message,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.padding(top = 2.dp),
-                                    )
-                                }
-                            }
-                            Icon(
-                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                null,
-                                tint = colors.tertiary,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                        if (state.mcpConfigError == null) {
-                            val toggleEnabled =
-                                pendingTarget == null && !reconnecting && server.enabled
-                            MisulInlineToggle(
-                                pendingTarget ?: server.enabled,
-                                if (toggleEnabled) {
-                                    { target ->
-                                        vm.clearError()
-                                        toggleErrors = toggleErrors - name
-                                        pendingToggles = pendingToggles + (name to target)
-                                        scope.launch {
-                                            vm.setMcpEnabledAndWait(name, target).fold(
-                                                onSuccess = {
-                                                    toggleErrors = toggleErrors - name
-                                                },
-                                                onFailure = { failure ->
-                                                    toggleErrors = toggleErrors + (
-                                                        name to "Could not update $name: ${
-                                                            failure.message ?: "storage update failed"
-                                                        }"
-                                                    )
-                                                },
-                                            )
-                                            pendingToggles = pendingToggles - name
-                                        }
-                                    }
-                                } else {
-                                    null
-                                },
-                                "$name enabled",
-                                modifier = if (!toggleEnabled) {
-                                    Modifier.semantics { disabled() }
-                                } else {
-                                    Modifier
-                                },
-                            )
-                        }
-                    }
+                    SettingsNavigationRow(
+                        label = name,
+                        supportingText = status,
+                        showDivider = index != visible.size - 1,
+                        onClick = { onOpenServer(name) },
+                    )
                 }
             }
         }
-        if (state.mcpConfigError == null) {
-            Spacer(Modifier.height(Spacing.s))
-            MisulActionButton(
-                "Add server",
-                role = ActionRole.PRIMARY,
-                icon = Icons.Filled.Add,
-                enabled = !reconnecting,
-            ) {
-                onOpenServer("")
-            }
-            if (state.mcpServers.isNotEmpty()) {
-                Spacer(Modifier.height(Spacing.xs))
-                MisulActionButton(
-                    "Reconnect enabled servers",
-                    role = ActionRole.SECONDARY,
-                    loading = reconnecting,
-                    enabled = !reconnecting && pendingToggles.isEmpty(),
+        if (state.mcpConfigError == null && state.mcpServers.isNotEmpty()) {
+            MisulSectionLabel("Connection")
+            MisulGroup {
+                dev.phonecode.app.ui.components.MisulActionRow(
+                    label = "Reconnect enabled servers",
+                    supportingText = if (reconnecting) "Reconnecting" else "Refresh tools from every enabled server",
+                    enabled = !reconnecting,
+                    showDivider = false,
                 ) {
                     vm.clearError()
                     reconnectError = null
@@ -319,10 +233,8 @@ internal fun McpPage(
                         reconnecting = false
                     }
                 }
-                reconnectError?.let {
-                    SettingsErrorText(it, modifier = Modifier.padding(top = Spacing.xs))
-                }
             }
+            reconnectError?.let { SettingsErrorText(it, modifier = Modifier.padding(top = Spacing.xs)) }
         }
     }
 }

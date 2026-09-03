@@ -106,7 +106,44 @@ internal data class MisulPromptResult(
     val status: String,
     val content: String,
     val failure: String,
+    val providerFailure: MisulProviderFailure? = null,
 )
+
+internal data class MisulProviderFailure(
+    val category: String,
+    val httpStatus: Int? = null,
+    val requestId: String? = null,
+    val providerCode: String? = null,
+    val providerType: String? = null,
+    val providerParam: String? = null,
+    val message: String,
+    val retryAfterMillis: Long? = null,
+)
+
+internal fun MisulPromptResult.userFacingFailure(): String {
+    val detail = providerFailure ?: return when (failure) {
+        "provider" -> "The provider request failed. Check your connection and provider settings, then try again."
+        "canceled" -> "The message was stopped."
+        "max_steps" -> "Misul reached the step limit for this message."
+        else -> "Misul stopped this message: $failure."
+    }
+    val summary = when (detail.category) {
+        "authentication" -> "The provider rejected this API key. Check it in Settings > Providers."
+        "rate_limited" -> "The provider rate limited this request. Wait a moment, then try again."
+        "timeout" -> "The provider request timed out. Check your connection and try again."
+        "connection" -> "Misul could not connect to the provider. Check your connection and try again."
+        "invalid_request" -> "The provider rejected this request."
+        "malformed_response" -> "The provider returned a response Misul could not read."
+        "unsupported" -> "This provider or model does not support the requested operation."
+        else -> detail.message.ifBlank { "The provider request failed." }
+    }
+    val references = buildList {
+        detail.httpStatus?.let { add(it.toString()) }
+        detail.providerCode?.takeIf(String::isNotBlank)?.let(::add)
+        detail.requestId?.takeIf(String::isNotBlank)?.let { add("request $it") }
+    }
+    return if (references.isEmpty()) summary else "$summary (${references.joinToString()})"
+}
 
 internal data class ParsedMisulRecord(
     val events: List<MisulRuntimeEvent> = emptyList(),
@@ -154,10 +191,23 @@ internal fun parseMisulRecord(record: String, expectedId: Long): ParsedMisulReco
         return ParsedMisulRecord(failure = error.optString("message", "Misul runtime request failed"))
     }
     val result = json.optJSONObject("result") ?: return ParsedMisulRecord(failure = "Misul returned an invalid terminal record")
+    val providerFailure = result.optJSONObject("provider_failure")?.let { failure ->
+        MisulProviderFailure(
+            category = failure.optString("category", "provider"),
+            httpStatus = failure.optInt("http_status").takeIf { failure.has("http_status") && !failure.isNull("http_status") },
+            requestId = failure.optString("request_id").takeIf(String::isNotBlank),
+            providerCode = failure.optString("provider_code").takeIf(String::isNotBlank),
+            providerType = failure.optString("provider_type").takeIf(String::isNotBlank),
+            providerParam = failure.optString("provider_param").takeIf(String::isNotBlank),
+            message = failure.optString("redacted_message"),
+            retryAfterMillis = failure.optLong("retry_after_ms").takeIf { failure.has("retry_after_ms") && !failure.isNull("retry_after_ms") },
+        )
+    }
     return ParsedMisulRecord(settlement = MisulPromptResult(
         status = result.optString("status", "failed"),
         content = result.optString("content"),
         failure = result.optString("failure", "internal"),
+        providerFailure = providerFailure,
     ))
 }
 

@@ -156,7 +156,7 @@ class SettingsReliabilityTest {
             compose.onNodeWithContentDescription("Menu").performClick()
             compose.onNodeWithContentDescription("Settings").performClick()
             compose.onNodeWithText("MCP servers").performClick()
-            compose.onNodeWithContentDescription("fragile-server details").performClick()
+            compose.onNodeWithText("fragile-server").performClick()
             compose.onNodeWithText("Delete server").performClick()
             compose.onAllNodesWithText("Delete server").onLast().performClick()
 
@@ -187,7 +187,7 @@ class SettingsReliabilityTest {
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithText("MCP servers").performClick()
-        compose.onNodeWithContentDescription("temporary-server details").performClick()
+        compose.onNodeWithText("temporary-server").performClick()
         compose.onNodeWithText("Delete server").performClick()
 
         compose.onNodeWithText("cannot be undone", substring = true, ignoreCase = true)
@@ -223,20 +223,22 @@ class SettingsReliabilityTest {
 
         try {
             openSettingsPage("MCP servers")
-            compose.onNodeWithContentDescription("pending-server enabled").assertIsOn().performClick()
+            compose.onNodeWithText("pending-server").performClick()
+            compose.onNodeWithText("Enabled").assertIsOn().performClick()
+            compose.onNodeWithText("Save").performClick()
             assertTrue(started.await(5, TimeUnit.SECONDS))
 
-            compose.onNodeWithText("Updating…").assertIsDisplayed()
-            compose.onNodeWithContentDescription("pending-server enabled").assertIsNotEnabled()
+            compose.onNodeWithText("Save").assertIsNotEnabled()
         } finally {
             release.countDown()
             repoField.set(vm, originalRepo)
         }
 
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("Updating…").fetchSemanticsNodes().isEmpty()
+            compose.onAllNodesWithText("Off · Test to enable").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithContentDescription("pending-server enabled").assertIsOff()
+        compose.onNodeWithText("pending-server").performClick()
+        compose.onNodeWithText("Enabled").assertIsOff()
     }
 
     @Test
@@ -264,13 +266,16 @@ class SettingsReliabilityTest {
 
         try {
             openSettingsPage("MCP servers")
-            compose.onNodeWithContentDescription("fragile-toggle enabled").performClick()
+            compose.onNodeWithText("fragile-toggle").performClick()
+            compose.onNodeWithText("Enabled").assertIsOn().performClick()
+            compose.onNodeWithText("Save").performClick()
             compose.waitUntil(5_000) {
-                compose.onAllNodesWithText("Could not update fragile-toggle", substring = true)
+                compose.onAllNodesWithText("Storage is read only", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
             }
-            compose.onNodeWithText("Could not update fragile-toggle", substring = true).assertIsDisplayed()
-            compose.onNodeWithContentDescription("fragile-toggle enabled").assertIsOn()
+            compose.onNodeWithText("Storage is read only", substring = true).assertIsDisplayed()
+            compose.onNodeWithText("Enabled").assertIsOff()
+            compose.onNodeWithText("Save").assertIsEnabled()
         } finally {
             repoField.set(vm, originalRepo)
         }
@@ -295,7 +300,12 @@ class SettingsReliabilityTest {
         try {
             openSettingsPage("MCP servers")
             compose.onNodeWithText("Reconnect enabled servers").performClick()
-
+            compose.waitUntil(5_000) {
+                runCatching {
+                    compose.onNodeWithText("Reconnect enabled servers").assertIsNotEnabled()
+                    true
+                }.getOrDefault(false)
+            }
             compose.onNodeWithText("Reconnect enabled servers").assertIsDisplayed().assertIsNotEnabled()
         } finally {
             mutex.unlock()
@@ -548,7 +558,7 @@ class SettingsReliabilityTest {
         val repo = repoField.get(vm) as McpSkillRepository
 
         openSettingsPage("MCP servers")
-        compose.onNodeWithContentDescription("secret-server details").performClick()
+        compose.onNodeWithText("secret-server").performClick()
         val exposedHeaders = compose.onNodeWithContentDescription("Header value 1")
             .fetchSemanticsNode().config.toString()
         assertFalse(exposedHeaders.contains("top-secret"))
@@ -560,7 +570,7 @@ class SettingsReliabilityTest {
         }
         assertTrue(repo.loadMcpConfig().mcp.getValue("secret-server").headers["Authorization"] == "Bearer top-secret")
 
-        compose.onNodeWithContentDescription("secret-server details").performClick()
+        compose.onNodeWithText("secret-server").performClick()
         compose.onNodeWithContentDescription("Header value 1")
             .performTextReplacement("Bearer replacement")
         compose.onNodeWithText("Save").performClick()

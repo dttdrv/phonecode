@@ -1,0 +1,162 @@
+--- a/src/android_signals.c
++++ b/src/android_signals.c
+@@ -1,0 +1,2 @@
++#include <arpa/inet.h>
++#include <netdb.h>
+@@ -2,0 +5,2 @@
++#include <stddef.h>
++#include <string.h>
+@@ -8,0 +13,35 @@
++__attribute__((visibility("hidden"))) int misul_android_resolve_addresses(
++    const char *host,
++    char *output,
++    size_t output_size
++) {
++    if (host == NULL || output == NULL || output_size == 0) return 0;
++    struct addrinfo hints = {0};
++    hints.ai_family = AF_UNSPEC;
++    hints.ai_socktype = SOCK_STREAM;
++    struct addrinfo *results = NULL;
++    if (getaddrinfo(host, NULL, &hints, &results) != 0) return 0;
++    size_t written = 0;
++    int resolved = 0;
++    for (struct addrinfo *entry = results; entry != NULL; entry = entry->ai_next) {
++        if (entry->ai_addr == NULL) continue;
++        const void *source = NULL;
++        if (entry->ai_family == AF_INET) {
++            source = &((const struct sockaddr_in *)entry->ai_addr)->sin_addr;
++        } else if (entry->ai_family == AF_INET6) {
++            source = &((const struct sockaddr_in6 *)entry->ai_addr)->sin6_addr;
++        } else continue;
++        char address[INET6_ADDRSTRLEN];
++        if (inet_ntop(entry->ai_family, source, address, sizeof(address)) == NULL) continue;
++        const size_t length = strlen(address);
++        if (written + length + 2 > output_size) break;
++        memcpy(output + written, address, length);
++        written += length;
++        output[written++] = '\n';
++        output[written] = '\0';
++        resolved += 1;
++    }
++    freeaddrinfo(results);
++    return resolved;
++}
++
+--- a/src/openai_compatible.zig
++++ b/src/openai_compatible.zig
+@@ -1,0 +2 @@
++const builtin = @import("builtin");
+@@ -662 +663,25 @@
+-    var request = client.request(.POST, uri, .{ .redirect_behavior = .unhandled, .headers = .{ .content_type = .{ .override = "application/json" }, .authorization = .{ .omit = {} } }, .extra_headers = extra[0 .. attempt.headers.len + 2] }) catch |err| switch (err) {
++    var android_connection: ?*std.http.Client.Connection = null;
++    if (comptime builtin.target.abi.isAndroid()) {
++        var original_host_buffer: [std.Io.net.HostName.max_len]u8 = undefined;
++        const original_host = uri.getHost(&original_host_buffer) catch return error.InvalidBaseUrl;
++        var host_z_buffer: [std.Io.net.HostName.max_len + 1]u8 = undefined;
++        const host_z = std.fmt.bufPrintZ(&host_z_buffer, "{s}", .{original_host.bytes}) catch return error.InvalidBaseUrl;
++        var address_buffer: [4096]u8 = undefined;
++        if (misul_android_resolve_addresses(host_z.ptr, &address_buffer, address_buffer.len) == 0) return error.NameServerFailure;
++        const connection_protocol = std.http.Client.Protocol.fromUri(uri) orelse return error.InvalidBaseUrl;
++        const now = std.Io.Clock.real.now(attempt.io);
++        client.ca_bundle.rescan(client.allocator, attempt.io, now) catch return error.CertificateBundleLoadFailure;
++        client.now = now;
++        android_connection = connectAndroidAddresses(
++            &client,
++            std.mem.sliceTo(&address_buffer, 0),
++            uri.port orelse switch (connection_protocol) { .plain => 80, .tls => 443 },
++            connection_protocol,
++            original_host,
++        ) catch |err| switch (err) {
++            error.Canceled => return error.Canceled,
++            error.OutOfMemory => return error.OutOfMemory,
++            else => return error.ConnectionFailure,
++        };
++    }
++    var request = client.request(.POST, uri, .{ .connection = android_connection, .redirect_behavior = .unhandled, .headers = .{ .content_type = .{ .override = "application/json" }, .authorization = .{ .omit = {} } }, .extra_headers = extra[0 .. attempt.headers.len + 2] }) catch |err| switch (err) {
+@@ -768,0 +794,86 @@
++
++extern fn misul_android_resolve_addresses(host: [*:0]const u8, output: [*]u8, output_size: usize) c_int;
++
++const AndroidConnectionResult = std.http.Client.ConnectTcpError!*std.http.Client.Connection;
++
++fn connectAndroidAddresses(
++    client: *std.http.Client,
++    resolved_addresses: []const u8,
++    port: u16,
++    connection_protocol: std.http.Client.Protocol,
++    original_host: std.Io.net.HostName,
++) std.http.Client.ConnectTcpError!*std.http.Client.Connection {
++    var result_buffer: [32]AndroidConnectionResult = undefined;
++    var result_queue: std.Io.Queue(AndroidConnectionResult) = .init(&result_buffer);
++    var group: std.Io.Group = .init;
++    var launched: usize = 0;
++    var addresses = std.mem.splitScalar(u8, resolved_addresses, '\n');
++    while (addresses.next()) |address| {
++        if (address.len == 0) continue;
++        if (launched == result_buffer.len) break;
++        group.async(client.io, enqueueAndroidConnection, .{
++            client,
++            std.Io.net.HostName{ .bytes = address },
++            port,
++            connection_protocol,
++            original_host,
++            &result_queue,
++        });
++        launched += 1;
++    }
++    if (launched == 0) return error.UnknownHostName;
++    defer {
++        group.cancel(client.io);
++        result_queue.close(client.io);
++        while (result_queue.getOneUncancelable(client.io)) |loser| {
++            discardAndroidConnection(client, loser);
++        } else |err| switch (err) {
++            error.Closed => {},
++        }
++    }
++    var remaining = launched;
++    while (remaining > 0) : (remaining -= 1) {
++        const result = result_queue.getOne(client.io) catch |err| switch (err) {
++            error.Canceled => return error.Canceled,
++            error.Closed => return error.Unexpected,
++        };
++        if (result) |connection| return connection else |_| {}
++    }
++    return error.ConnectionRefused;
++}
++
++fn enqueueAndroidConnection(
++    client: *std.http.Client,
++    address: std.Io.net.HostName,
++    port: u16,
++    connection_protocol: std.http.Client.Protocol,
++    original_host: std.Io.net.HostName,
++    result_queue: *std.Io.Queue(AndroidConnectionResult),
++) std.Io.Cancelable!void {
++    const result: AndroidConnectionResult = client.connectTcpOptions(.{
++        .host = address,
++        .port = port,
++        .protocol = connection_protocol,
++        .proxied_host = original_host,
++    }) catch |err| switch (err) {
++        error.Canceled => return error.Canceled,
++        else => |connection_error| connection_error,
++    };
++    result_queue.putOne(client.io, result) catch |err| switch (err) {
++        error.Canceled => {
++            discardAndroidConnection(client, result);
++            return error.Canceled;
++        },
++        error.Closed => {
++            discardAndroidConnection(client, result);
++            return;
++        },
++    };
++}
++
++fn discardAndroidConnection(client: *std.http.Client, result: AndroidConnectionResult) void {
++    if (result) |connection| {
++        connection.closing = true;
++        client.connection_pool.release(connection, client.io);
++    } else |_| {}
++}

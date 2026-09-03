@@ -151,148 +151,98 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-internal fun AgentToolsPage(vm: ChatViewModel, onBack: () -> Unit) {
-    val state by collectSettingsState(vm)
-    var query by rememberSaveable { mutableStateOf("") }
-    var accessFilter by rememberSaveable { mutableStateOf(AgentToolAccessFilter.ALL) }
-    // Recompute from the current registry: tool identities can change while MCP/skill counts stay
-    // constant (for example, reconnecting a different server with the same number of tools).
+internal fun AgentToolsPage(
+    vm: ChatViewModel,
+    onBack: () -> Unit,
+    onOpenCategory: (AgentToolAccessFilter) -> Unit,
+) {
     val inventory = vm.availableTools()
     val summary = remember(inventory) { agentToolInventorySummary(inventory) }
-    val tools = remember(inventory, query, accessFilter) {
-        filterAgentTools(inventory, query, accessFilter)
-    }
-    val colors = MaterialTheme.colorScheme
     SettingsPageShell("Agent tools", onBack) {
-        MisulSectionLabel("Available capabilities")
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Text(
-                summary.total.toString(),
-                style = MaterialTheme.typography.headlineMedium,
-                color = colors.onBackground,
+        SettingsNote("${summary.total} tools available")
+        MisulSectionLabel("Access")
+        MisulGroup {
+            SettingsNavigationRow(
+                label = "Read only",
+                value = summary.readOnly.toString(),
+                onClick = { onOpenCategory(AgentToolAccessFilter.READ_ONLY) },
             )
-            Text(
-                " tools",
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 2.dp),
+            SettingsNavigationRow(
+                label = "Requires approval",
+                value = summary.needsApproval.toString(),
+                onClick = { onOpenCategory(AgentToolAccessFilter.NEEDS_APPROVAL) },
             )
-            Spacer(Modifier.weight(1f))
-            if (summary.remote > 0) {
-                AgentToolBadge("${summary.remote} connected", emphasized = true)
-            }
+            SettingsNavigationRow(
+                label = "Conditional",
+                value = summary.contextual.toString(),
+                showDivider = false,
+                onClick = { onOpenCategory(AgentToolAccessFilter.CONTEXTUAL) },
+            )
         }
-        Text(
-            "${summary.readOnly} read only · ${summary.needsApproval} require approval · ${summary.contextual} depend on the action",
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.onSurfaceVariant,
-        )
-        SettingsNote("Changes follow your approval setting in Files & permissions.")
-        MisulSearchField(query, { query = it }, "Search tools")
-        AgentToolFilters(accessFilter) { accessFilter = it }
-        if (inventory.isEmpty()) {
-            SettingsNote("No tools are available yet. Connect an MCP server or add a skill to extend Misul Agent.")
-        } else if (tools.isEmpty()) {
-            val message = if (query.isNotBlank()) {
-                "No tools match “${query.trim()}”. Clear the search or choose another access filter."
-            } else {
-                "No ${accessFilter.emptyLabel()} tools are available. Choose All to see the full inventory."
-            }
-            SettingsNote(message)
-            Spacer(Modifier.height(Spacing.xs))
-            MisulActionButton(
-                if (query.isNotBlank()) "Clear search" else "Show all tools",
-                onClick = {
-                    query = ""
-                    accessFilter = AgentToolAccessFilter.ALL
-                },
-                role = ActionRole.QUIET,
-            )
+        SettingsNote("Access follows Files & permissions. Misul asks before tools that can change data.")
+        if (summary.remote > 0) SettingsNote("${summary.remote} tools come from connected MCP servers.")
+    }
+}
+
+@Composable
+internal fun AgentToolsCategoryPage(
+    vm: ChatViewModel,
+    access: AgentToolAccessFilter,
+    onBack: () -> Unit,
+) {
+    var query by rememberSaveable(access) { mutableStateOf("") }
+    val inventory = vm.availableTools()
+    val tools = remember(inventory, query, access) { filterAgentTools(inventory, query, access) }
+    val colors = MaterialTheme.colorScheme
+    SettingsPageShell(access.pageTitle(), onBack) {
+        SettingsNote(access.explanation())
+        if (inventory.size >= 12 || query.isNotBlank()) {
+            MisulSearchField(query, { query = it }, "Search tools")
+        }
+        if (tools.isEmpty()) {
+            SettingsNote(if (query.isBlank()) "No tools in this category." else "No tools match “${query.trim()}”.")
         } else {
             tools.groupBy { it.source }.toList()
                 .sortedBy { (source, _) -> listOf("Misul Agent", "Skills", "MCP").indexOf(source).let { if (it < 0) Int.MAX_VALUE else it } }
                 .forEach { (source, entries) ->
-                MisulSectionLabel("$source · ${entries.size}")
-                MisulGroup {
-                    entries.forEachIndexed { index, tool ->
-                        MisulContentRow(showDivider = index != entries.lastIndex) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    tool.name,
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontFamily = PcMono),
-                                    color = colors.onBackground,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    tool.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = colors.onSurfaceVariant,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+                    MisulSectionLabel(source)
+                    MisulGroup {
+                        entries.forEachIndexed { index, tool ->
+                            MisulContentRow(showDivider = index != entries.lastIndex) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        tool.name,
+                                        style = MaterialTheme.typography.bodyLarge.copy(fontFamily = PcMono),
+                                        color = colors.onBackground,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        tool.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
-                            Spacer(Modifier.width(10.dp))
-                            AgentToolBadge(tool.access, emphasized = tool.access == "Read only")
                         }
                     }
                 }
-            }
         }
     }
 }
 
-@Composable
-private fun AgentToolFilters(
-    selected: AgentToolAccessFilter,
-    onSelect: (AgentToolAccessFilter) -> Unit,
-) {
-    FlowRow(
-        Modifier.fillMaxWidth().padding(top = Spacing.s).selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        AgentToolAccessFilter.entries.forEach { filter ->
-            MisulFilter(
-                label = filter.shortLabel(),
-                selected = selected == filter,
-                onClick = { onSelect(filter) },
-            )
-        }
-    }
+private fun AgentToolAccessFilter.pageTitle() = when (this) {
+    AgentToolAccessFilter.ALL -> "All tools"
+    AgentToolAccessFilter.READ_ONLY -> "Read-only tools"
+    AgentToolAccessFilter.NEEDS_APPROVAL -> "Approval tools"
+    AgentToolAccessFilter.CONTEXTUAL -> "Conditional tools"
 }
 
-@Composable
-private fun AgentToolBadge(text: String, emphasized: Boolean) {
-    val colors = MaterialTheme.colorScheme
-    Box(
-        Modifier.clip(MaterialTheme.shapes.large)
-            .background(if (emphasized) colors.secondaryContainer else colors.surfaceContainerHighest)
-            .semantics { stateDescription = text }
-            .padding(horizontal = 8.dp, vertical = 5.dp),
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (emphasized) colors.onSecondaryContainer else colors.onSurfaceVariant,
-            maxLines = 1,
-        )
-    }
-}
-
-private fun AgentToolAccessFilter.shortLabel() = when (this) {
-    AgentToolAccessFilter.ALL -> "All"
-    AgentToolAccessFilter.READ_ONLY -> "Read only"
-    AgentToolAccessFilter.NEEDS_APPROVAL -> "Approval"
-    AgentToolAccessFilter.CONTEXTUAL -> "Conditional"
-}
-
-private fun AgentToolAccessFilter.emptyLabel() = when (this) {
-    AgentToolAccessFilter.ALL -> "matching"
-    AgentToolAccessFilter.READ_ONLY -> "read-only"
-    AgentToolAccessFilter.NEEDS_APPROVAL -> "approval-gated"
-    AgentToolAccessFilter.CONTEXTUAL -> "conditional"
+private fun AgentToolAccessFilter.explanation() = when (this) {
+    AgentToolAccessFilter.ALL -> "All tools available to Misul Agent."
+    AgentToolAccessFilter.READ_ONLY -> "These tools inspect information without changing it."
+    AgentToolAccessFilter.NEEDS_APPROVAL -> "Misul asks before these tools can make a change."
+    AgentToolAccessFilter.CONTEXTUAL -> "Approval depends on the specific action and its target."
 }

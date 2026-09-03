@@ -51,6 +51,7 @@ import dev.phonecode.provider.domain.MessagePart
 internal val ComposerHeight = 56.dp
 internal val ComposerActionTarget = 48.dp
 internal val ComposerActionVisual = 40.dp
+internal val ComposerActionInset = 4.dp
 internal const val ComposerMaxLines = 6
 
 internal enum class ComposerVisualState {
@@ -131,6 +132,7 @@ internal fun ChatComposer(
                 Icons.Filled.Add,
                 "Add attachment",
                 enabled = canEdit,
+                visualOffsetY = -ComposerActionInset,
                 onClick = onAttach,
             )
             Box(Modifier.weight(1f)) {
@@ -221,11 +223,23 @@ internal fun ChatComposer(
                     ) { state ->
                         when (state) {
                             ComposerVisualState.READY -> {
-                                MisulIconButton(Icons.Filled.ArrowUpward, "Send", filled = true, onClick = onSend)
+                                MisulIconButton(
+                                    Icons.Filled.ArrowUpward,
+                                    "Send",
+                                    filled = true,
+                                    visualOffsetY = -ComposerActionInset,
+                                    onClick = onSend,
+                                )
                             }
                             ComposerVisualState.RUNNING,
                             ComposerVisualState.RUNNING_WITH_QUEUE -> {
-                                MisulIconButton(Icons.Filled.Stop, "Stop", filled = true, onClick = onStop)
+                                MisulIconButton(
+                                    Icons.Filled.Stop,
+                                    "Stop",
+                                    filled = true,
+                                    visualOffsetY = -ComposerActionInset,
+                                    onClick = onStop,
+                                )
                             }
                             ComposerVisualState.EMPTY,
                             ComposerVisualState.DISABLED -> Unit
@@ -242,6 +256,7 @@ internal fun ChatComposer(
                         Icons.Filled.ArrowUpward,
                         "Queue message",
                         filled = true,
+                        visualOffsetY = -ComposerActionInset,
                         onClick = { onQueue?.invoke() },
                     )
                 }

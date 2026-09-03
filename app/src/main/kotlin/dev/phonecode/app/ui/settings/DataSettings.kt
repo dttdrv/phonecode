@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,6 +38,7 @@ import dev.phonecode.app.ui.SettingsViewModel
 import dev.phonecode.app.ui.chat.MarkdownBlocks
 import dev.phonecode.app.ui.components.ActionRole
 import dev.phonecode.app.ui.components.MisulActionButton
+import dev.phonecode.app.ui.components.MisulActionRow
 import dev.phonecode.app.ui.components.MisulContentRow
 import dev.phonecode.app.ui.components.MisulDialog
 import dev.phonecode.app.ui.components.MisulDialogAction
@@ -58,13 +60,27 @@ internal fun ExportPage(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri -> if (uri != null) vm.exportTo(uri) }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importFrom(uri) { settingsVm.reload() } }
     SettingsPageShell("Export & import", onBack, backEnabled = !importing) {
-        SettingsDataSection("Your data")
-        SettingsNote("Exports are not encrypted. Saved provider and sign-in credentials are excluded, but chats and tool activity may contain sensitive content.")
-        SettingsNote("Import replaces chats and settings with the backup. Linked phone folders, provider keys, MCP servers, and skills are not included. Approval always returns to Ask before each change.")
-        Row(Modifier.fillMaxWidth().padding(top = Spacing.s), horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
-            MisulActionButton("Export chats & settings", onClick = { exporter.launch("phonecode-backup-$stamp.zip") }, role = ActionRole.SECONDARY, enabled = !importing, modifier = Modifier.weight(1f))
-            MisulActionButton("Import from a file", onClick = { confirmImport = true }, role = ActionRole.SECONDARY, enabled = !importing, modifier = Modifier.weight(1f))
+        SettingsDataSection("Backup")
+        MisulGroup {
+            MisulActionRow(
+                label = "Export chats and settings",
+                supportingText = "Create an unencrypted backup file",
+                icon = Icons.Outlined.ContentCopy,
+                enabled = !importing,
+            ) {
+                exporter.launch("phonecode-backup-$stamp.zip")
+            }
+            MisulActionRow(
+                label = "Import from file",
+                supportingText = "Replace chats and settings from a backup",
+                icon = Icons.Outlined.SwapVert,
+                enabled = !importing,
+                showDivider = false,
+            ) {
+                confirmImport = true
+            }
         }
+        SettingsNote("Backups exclude provider credentials, linked folders, MCP servers, and skills.")
         if (importing) SettingsNote("Importing backup…", announce = true)
         state.notice?.let { notice ->
             SettingsNote(notice, announce = true)

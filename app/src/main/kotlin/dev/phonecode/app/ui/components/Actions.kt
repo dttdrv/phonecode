@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -36,6 +37,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.material3.ColorScheme
 import dev.phonecode.app.ui.theme.LocalMisulAccent
 import dev.phonecode.app.ui.theme.PhoneDurations
@@ -191,6 +193,7 @@ fun MisulIconButton(
     selected: Boolean = false,
     filled: Boolean = false,
     enabled: Boolean = true,
+    visualOffsetY: Dp = 0.dp,
 ) {
     val colors = MaterialTheme.colorScheme
     val accent = LocalMisulAccent.current
@@ -213,6 +216,7 @@ fun MisulIconButton(
     ) {
         Box(
             Modifier.size(IconSurface)
+                .offset(y = visualOffsetY)
                 .clip(CircleShape)
                 .background(visual.container)
                 .misulTonalFeedback(interaction, visual.content),

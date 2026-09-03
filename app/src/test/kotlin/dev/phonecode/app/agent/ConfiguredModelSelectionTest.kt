@@ -52,4 +52,48 @@ class ConfiguredModelSelectionTest {
 
         assertNull(selected)
     }
+
+    @Test
+    fun activationSkipsModelsThatCannotUseAgentTools() {
+        val unsupported = ModelOption("openai", "gpt-3.5-turbo", "GPT-3.5 Turbo", toolCall = false)
+        val supported = ModelOption("openai", "gpt-5.6", "GPT-5.6")
+
+        val selected = configuredModelForActivation(
+            models = listOf(unsupported, supported),
+            current = unsupported,
+            providerConfigured = { it == "openai" },
+        )
+
+        assertEquals(supported, selected)
+    }
+
+    @Test
+    fun providerActivationSkipsModelsThatCannotUseAgentTools() {
+        val unsupported = ModelOption("openai", "gpt-3.5-turbo", "GPT-3.5 Turbo", toolCall = false)
+        val supported = ModelOption("openai", "gpt-5.6", "GPT-5.6")
+
+        val selected = configuredModelForProviderActivation(
+            models = listOf(unsupported, supported),
+            providerId = "openai",
+            hiddenModels = emptySet(),
+        )
+
+        assertEquals(supported, selected)
+    }
+
+    @Test
+    fun pickerModelsExcludeEntriesThatCannotUseAgentTools() {
+        val unsupported = ModelOption("openai", "gpt-3.5-turbo", "GPT-3.5 Turbo", toolCall = false)
+        val supported = ModelOption("openai", "gpt-5.6", "GPT-5.6")
+
+        assertEquals(listOf(supported), agentCapableModels(listOf(unsupported, supported)))
+    }
+
+    @Test
+    fun builtInFallbackDoesNotOverrideAReportedUnsupportedCapability() {
+        val builtIn = ModelOption("openai", "legacy-model", "Legacy Model")
+
+        assertEquals(emptyList<ModelOption>(), builtInFallbackModels(listOf(builtIn), setOf("legacy-model")))
+        assertEquals(listOf(builtIn), builtInFallbackModels(listOf(builtIn), emptySet()))
+    }
 }

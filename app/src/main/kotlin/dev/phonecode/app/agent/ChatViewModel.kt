@@ -40,6 +40,7 @@ import dev.phonecode.app.runtime.MisulProvider
 import dev.phonecode.app.runtime.MisulRuntimeEvent
 import dev.phonecode.app.runtime.MisulRuntimeSpec
 import dev.phonecode.app.runtime.toBoundedMisulImportSession
+import dev.phonecode.app.runtime.userFacingFailure
 import dev.phonecode.provider.catalog.Catalog
 import dev.phonecode.provider.catalog.CatalogLoader
 import dev.phonecode.provider.domain.ChatMessage
@@ -108,7 +109,12 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.TimeUnit
 
-data class ModelOption(val providerId: String, val modelId: String, val label: String)
+data class ModelOption(
+    val providerId: String,
+    val modelId: String,
+    val label: String,
+    val toolCall: Boolean = true,
+)
 
 enum class ToolStatus { AWAITING_APPROVAL, RUNNING, DONE, ERROR, STOPPED }
 enum class TurnOutcome { STOPPED, FAILED }
@@ -510,13 +516,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun applyModelOptions(options: List<ModelOption>) {
-        if (options.isEmpty()) return
+        val supportedOptions = agentCapableModels(options)
+        if (supportedOptions.isEmpty()) return
         _state.update { state ->
-            val builtinKeys = options.map { "${it.providerId}/${it.modelId}" }.toSet()
+            val builtinKeys = supportedOptions.map { "${it.providerId}/${it.modelId}" }.toSet()
             val custom = state.models.filter {
-                it.providerId in customPresets && "${it.providerId}/${it.modelId}" !in builtinKeys
+                it.toolCall && it.providerId in customPresets && "${it.providerId}/${it.modelId}" !in builtinKeys
             }
-            val merged = options + custom
+            val merged = supportedOptions + custom
             val current = state.selected
             val recentKey = modelPrefs.recents().firstOrNull()
             val resolved = merged.firstOrNull { modelKey(it) == recentKey && providerConfigured(it.providerId) }
@@ -542,20 +549,31 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     out += authenticated
                     return@forEach
                 }
-                val live = catalog["openai"]?.models?.values
-                    ?.filter { codexEligible(it.id) }
-                    ?.sortedByDescending { it.id }
-                    ?.map { ModelOption("codex", it.id, "${preset.displayName} · ${it.name}") }
-                    .orEmpty()
-                out += (live + builtInModels(BuildConfig.CODEX_OAUTH_ENABLED).filter { it.providerId == "codex" }).distinctBy { it.modelId }
+                val catalogModels = catalog["openai"]?.models.orEmpty()
+                val live = catalogModels.values
+                    .filter { codexEligible(it.id) && it.toolCall }
+                    .sortedByDescending { it.id }
+                    .map { ModelOption("codex", it.id, "${preset.displayName} · ${it.name}") }
+                val fallback = builtInFallbackModels(
+                    builtInModels(BuildConfig.CODEX_OAUTH_ENABLED).filter { it.providerId == "codex" },
+                    catalogModels.keys,
+                )
+                out += (live + fallback).distinctBy { it.modelId }
                 return@forEach
             }
             val info = catalog[catalogProviderId(preset.id)]
             if (info != null && info.models.isNotEmpty()) {
-                val live = info.models.values.sortedBy { it.name }.map { model ->
-                    ModelOption(preset.id, model.id, "${preset.displayName} · ${model.name}")
-                }
-                out += (live + builtInModels(BuildConfig.CODEX_OAUTH_ENABLED).filter { it.providerId == preset.id }).distinctBy { it.modelId }
+                val live = info.models.values
+                    .filter { it.toolCall }
+                    .sortedBy { it.name }
+                    .map { model ->
+                        ModelOption(preset.id, model.id, "${preset.displayName} · ${model.name}", toolCall = true)
+                    }
+                val fallback = builtInFallbackModels(
+                    builtInModels(BuildConfig.CODEX_OAUTH_ENABLED).filter { it.providerId == preset.id },
+                    info.models.keys,
+                )
+                out += (live + fallback).distinctBy { it.modelId }
             } else {
                 out += builtInModels(BuildConfig.CODEX_OAUTH_ENABLED).filter { it.providerId == preset.id }
             }
@@ -2085,7 +2103,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 contextWindow = contextWindow,
                 outputLimit = outputLimit,
                 reasoning = reasoning,
-                toolCall = catalogModel(selected)?.toolCall ?: true,
+                toolCall = selected.toolCall,
             ),
             provider = MisulProvider(
                 id = selected.providerId,
@@ -2314,7 +2332,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                 isRunning = false,
                                 interruptedTurn = false,
                                 turnOutcome = TurnOutcome.FAILED,
-                                error = "Misul stopped this turn: ${settlement.failure}.",
+                                error = settlement.userFacingFailure(),
                             )
                         }
                         break
@@ -2779,19 +2797,25 @@ internal fun catalogProviderId(id: String): String = when (id) {
 internal fun visibleCodexModels(models: List<CodexModelInfo>): List<CodexModelInfo> =
     models.filter { it.visibility == "list" }
 
+internal fun agentCapableModels(models: List<ModelOption>): List<ModelOption> =
+    models.filter { it.toolCall }
+
+internal fun builtInFallbackModels(models: List<ModelOption>, catalogModelIds: Set<String>): List<ModelOption> =
+    models.filter { it.modelId !in catalogModelIds }
+
 internal fun configuredModelForActivation(
     models: List<ModelOption>,
     current: ModelOption?,
     providerConfigured: (String) -> Boolean,
-): ModelOption? = current?.takeIf { providerConfigured(it.providerId) }
-    ?: models.firstOrNull { providerConfigured(it.providerId) }
+): ModelOption? = current?.takeIf { it.toolCall && providerConfigured(it.providerId) }
+    ?: models.firstOrNull { it.toolCall && providerConfigured(it.providerId) }
 
 internal fun configuredModelForProviderActivation(
     models: List<ModelOption>,
     providerId: String,
     hiddenModels: Set<String>,
 ): ModelOption? = models.firstOrNull {
-    it.providerId == providerId && "${it.providerId}/${it.modelId}" !in hiddenModels
+    it.providerId == providerId && it.toolCall && "${it.providerId}/${it.modelId}" !in hiddenModels
 }
 
 private fun newSessionId(): String = "session-${UUID.randomUUID()}"

@@ -1,8 +1,6 @@
 package dev.phonecode.app.ui.chat
 
-import android.Manifest
 import android.annotation.SuppressLint
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
@@ -170,7 +168,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonecode.app.R
 import dev.phonecode.app.agent.ChatLine
@@ -265,8 +262,6 @@ fun ChatScreen(
     val blurBottomBand = !empty && listState.canScrollForward
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val attachContext = LocalContext.current
-    var notificationRequested by rememberSaveable { mutableStateOf(false) }
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) scope.launch {
             val mime = attachContext.contentResolver.getType(uri).orEmpty()
@@ -572,12 +567,6 @@ fun ChatScreen(
             )
             val submitMessage = {
                 if (vm.send(input, photos)) {
-                    if (!notificationRequested && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        ContextCompat.checkSelfPermission(attachContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        notificationRequested = true
-                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
                     rootView.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
                     input = ""
                     vm.setDraftPhotos(composerKey, emptyList())

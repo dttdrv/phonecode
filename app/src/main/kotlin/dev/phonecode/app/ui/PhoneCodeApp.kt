@@ -117,6 +117,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.text.font.FontWeight
@@ -158,6 +159,13 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+
+internal fun resolvedDrawerWidthPx(layoutWidthPx: Int, windowWidthPx: Int, density: Float): Float {
+    val availableWidth = layoutWidthPx.takeIf { it > 0 }
+        ?: windowWidthPx.takeIf { it > 0 }
+        ?: (400f * density).toInt()
+    return minOf(availableWidth * 0.82f, 400f * density).coerceAtLeast(1f)
+}
 
 private fun formatSessionDate(value: Long) = SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(value))
 internal fun renameSaveEnabled(initial: String, value: String): Boolean {
@@ -260,10 +268,15 @@ fun PhoneCodeApp() {
 
         val density = LocalDensity.current
         val windowInfo = LocalWindowInfo.current
-        val screenWidth = with(density) { windowInfo.containerSize.width.toDp() }
+        var drawerContainerWidthPx by remember { mutableIntStateOf(0) }
+        val resolvedDrawerWidthPx = resolvedDrawerWidthPx(
+            layoutWidthPx = drawerContainerWidthPx,
+            windowWidthPx = windowInfo.containerSize.width,
+            density = density.density,
+        )
         // Keep phone proportions while avoiding a giant sheet on tablets and unfolded devices.
-        val drawerWidth = minOf(screenWidth * 0.82f, 400.dp)
-        val drawerWidthPx = with(density) { drawerWidth.toPx() }
+        val drawerWidthPx = resolvedDrawerWidthPx
+        val drawerWidth = with(density) { drawerWidthPx.toDp() }
         val drawerState = remember {
             AnchoredDraggableState(DrawerValue.CLOSED)
         }
@@ -343,6 +356,7 @@ fun PhoneCodeApp() {
 
         Box(
             Modifier.fillMaxSize().background(colors.background)
+                .onSizeChanged { size -> drawerContainerWidthPx = size.width }
                 .anchoredDraggable(
                     state = drawerState,
                     orientation = Orientation.Horizontal,

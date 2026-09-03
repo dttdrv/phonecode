@@ -127,11 +127,9 @@ class UiSmokeTest {
         }
         assertFalse(homeSource.contains("Memory"))
         assertTrue(homeSource.contains("showDivider = false"))
-        assertTrue(homeSource.contains("MisulSelectionRow"))
-        assertTrue(homeSource.contains("MisulToggleRow"))
-        assertTrue(homeSource.contains("MisulField"))
+        assertTrue(homeSource.contains("SettingsNavigationRow"))
         assertTrue(workspace.readText().contains("Link a folder"))
-        assertTrue(data.readText().contains("Export chats & settings"))
+        assertTrue(data.readText().contains("Export chats and settings"))
         assertTrue(data.readText().contains("Copy config directory path"))
     }
 
@@ -896,8 +894,10 @@ Original instruction.
         compose.onNodeWithContentDescription("Settings").performClick()
 
         compose.onNodeWithText("Agent tools").performClick()
+        compose.onNodeWithText("Read only").performClick()
         compose.onNodeWithContentDescription("Search tools").performTextInput("definitely-no-such-tool")
         compose.onNodeWithText("No tools match", substring = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("MCP servers").performClick()
@@ -953,8 +953,8 @@ Original instruction.
 
         compose.onNodeWithText("Export & import").performClick()
         compose.onNodeWithText("Import failed: damaged backup").assertIsDisplayed()
-        compose.onNodeWithText("Import replaces chats and settings", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Import from a file").performClick()
+        compose.onNodeWithText("Replace chats and settings from a backup", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Import from file").performClick()
         compose.onNodeWithText("Replace chats and settings?").assertIsDisplayed()
         compose.onNodeWithText("approval returns to Ask", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Export first").assertIsDisplayed()
@@ -978,8 +978,8 @@ Original instruction.
         state.value = state.value.copy(sessionLoading = true)
 
         compose.onNodeWithText("Importing backup…").assertIsDisplayed()
-        compose.onNodeWithText("Export chats & settings").assertIsNotEnabled()
-        compose.onNodeWithText("Import from a file").assertIsNotEnabled()
+        compose.onNodeWithText("Export chats and settings").assertIsNotEnabled()
+        compose.onNodeWithText("Import from file").assertIsNotEnabled()
         compose.onNodeWithContentDescription("Back").assertIsNotEnabled()
     }
 
@@ -1000,11 +1000,9 @@ Original instruction.
         compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("Skills").performClick()
-        compose.onNodeWithText("All").assertIsDisplayed()
-        compose.onNodeWithText("Active").assertIsDisplayed()
-        compose.onNodeWithText("Inactive").assertIsDisplayed()
-        compose.onNodeWithText("Issues").assertIsDisplayed()
-        compose.onNodeWithText("Skill files reload automatically", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Create skill").assertIsDisplayed()
+        compose.onNodeWithText("Installed").assertIsDisplayed()
+        compose.onNodeWithText("active", substring = true).assertIsDisplayed()
     }
 
     @Test

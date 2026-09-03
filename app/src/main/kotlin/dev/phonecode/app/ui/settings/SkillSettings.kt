@@ -158,140 +158,50 @@ internal fun SkillsPage(
 ) {
     val state by collectSettingsState(vm)
     var query by rememberSaveable { mutableStateOf("") }
-    var filter by rememberSaveable { mutableStateOf(SkillFilter.ALL) }
-    val colors = MaterialTheme.colorScheme
-    val filtered = remember(state.skills, query, filter) {
+    val filtered = remember(state.skills, query) {
         state.skills.filter { skill ->
-            val matchesQuery = query.isBlank() || skill.name.contains(query, true) ||
+            query.isBlank() || skill.name.contains(query, true) ||
                 skill.manifest?.description?.contains(query, true) == true || skill.issue?.contains(query, true) == true
-            val matchesFilter = when (filter) {
-                SkillFilter.ALL -> true
-                SkillFilter.ACTIVE -> skill.status == SkillStatus.ACTIVE
-                SkillFilter.OFF -> skill.status == SkillStatus.DISABLED || skill.status == SkillStatus.SHADOWED
-                SkillFilter.ISSUES -> skill.status == SkillStatus.INVALID
-            }
-            matchesQuery && matchesFilter
         }
     }
-    SettingsPageShell(
-        "Skills",
-        onBack,
-        action = {
-            MisulIconButton(
-                Icons.Filled.Add,
-                "New skill",
-                onClick = onNewSkill,
-                filled = true,
-            )
-        },
-    ) {
+    SettingsPageShell("Skills", onBack) {
         val active = state.skills.count { it.status == SkillStatus.ACTIVE }
         val issues = state.skills.count { it.status == SkillStatus.INVALID }
-        if (state.skills.isEmpty()) {
-            MisulSectionLabel("Your skills")
-            Text(
-                "No skills yet",
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.onBackground,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = Spacing.xs),
-            )
-            SettingsNote("Create one to give the agent a reusable workflow or set of instructions.")
-            Spacer(Modifier.height(Spacing.s))
-            MisulActionButton(
-                "Create skill",
-                onClick = onNewSkill,
-                role = ActionRole.PRIMARY,
+        MisulGroup {
+            SettingsNavigationRow(
+                label = "Create skill",
+                supportingText = "Add reusable instructions or a workflow",
                 icon = Icons.Filled.Add,
+                showDivider = false,
+                onClick = onNewSkill,
             )
-        } else {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = Spacing.xs),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-            ) {
-                Text(
-                    "$active active · ${state.skills.size} discovered",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                if (issues > 0) {
-                    Text(
-                        "$issues skill${if (issues == 1) "" else "s"} ${if (issues == 1) "needs" else "need"} attention",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.error,
+        }
+        val summary = buildString {
+            append("$active active · ${state.skills.size} discovered")
+            if (issues > 0) append(" · $issues need attention")
+        }
+        SettingsNote(summary)
+        if (state.skills.size >= 12 || query.isNotBlank()) {
+            MisulSearchField(query, { query = it }, "Search skills")
+        }
+        MisulSectionLabel("Installed")
+        when {
+            state.skills.isEmpty() -> SettingsNote("No skills installed.")
+            filtered.isEmpty() -> SettingsNote("No skills match “${query.trim()}”.")
+            else -> MisulGroup {
+                filtered.forEachIndexed { index, skill ->
+                    SettingsNavigationRow(
+                        label = skill.name,
+                        supportingText = if (skill.status == SkillStatus.ACTIVE) {
+                            skill.scope.label()
+                        } else {
+                            "${skill.scope.label()} · ${skill.status.label()}"
+                        },
+                        showDivider = index != filtered.lastIndex,
+                        onClick = { onOpenSkill(skill.id) },
                     )
                 }
             }
-            if (state.skills.size >= 6 || query.isNotBlank()) {
-                Spacer(Modifier.height(Spacing.s))
-                MisulSearchField(query, { query = it }, "Search skills")
-            }
-            if (state.skills.size > 1) {
-                SkillFilters(filter) { filter = it }
-            }
-            MisulSectionLabel(filter.label())
-            when {
-                filtered.isNotEmpty() -> MisulGroup {
-                    filtered.forEachIndexed { index, skill ->
-                        MisulContentRow(onClick = {
-                            onOpenSkill(skill.id)
-                        }, showDivider = index != filtered.lastIndex) {
-                            Column(Modifier.weight(1f)) {
-                                Text(skill.name, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                                Text(
-                                    "${skill.scope.label()} · ${skill.status.label()}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (skill.status == SkillStatus.INVALID) colors.error else colors.onSurfaceVariant,
-                                )
-                                skill.issue?.takeIf { it.isNotBlank() }?.let { issue ->
-                                    SettingsErrorText(
-                                        issue,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.padding(top = 2.dp),
-                                    )
-                                }
-                                skill.manifest?.description?.takeIf { it.isNotBlank() }?.let {
-                                    Text(
-                                        it,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = colors.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                            Icon(
-                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                null,
-                                tint = colors.tertiary,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
-                }
-                query.isNotBlank() -> {
-                    SettingsNote("No skills match “${query.trim()}”.")
-                    Spacer(Modifier.height(Spacing.xs))
-                    MisulActionButton("Clear search", onClick = { query = "" }, role = ActionRole.QUIET)
-                }
-                filter == SkillFilter.ISSUES -> {
-                    SettingsNote("No skills need attention.")
-                    Spacer(Modifier.height(Spacing.xs))
-                    MisulActionButton("Show all skills", onClick = { filter = SkillFilter.ALL }, role = ActionRole.QUIET)
-                }
-                filter == SkillFilter.ACTIVE -> {
-                    SettingsNote("No active skills.")
-                    Spacer(Modifier.height(Spacing.xs))
-                    MisulActionButton("Show all skills", onClick = { filter = SkillFilter.ALL }, role = ActionRole.QUIET)
-                }
-                else -> {
-                    SettingsNote("No inactive or overridden skills.")
-                    Spacer(Modifier.height(Spacing.xs))
-                    MisulActionButton("Show all skills", onClick = { filter = SkillFilter.ALL }, role = ActionRole.QUIET)
-                }
-            }
-            Spacer(Modifier.height(Spacing.xs))
-            SettingsNote("Skill files reload automatically. The agent can create and edit global or project skills with your permission.")
         }
     }
 }
@@ -703,61 +613,6 @@ private fun newSkillTemplate(name: String): String =
 
 private const val NEW_SKILL_ID = "__phonecode_new_skill__"
 
-internal enum class SkillFilter { ALL, ACTIVE, OFF, ISSUES }
-
-@Composable
-private fun SkillFilters(selected: SkillFilter, onSelect: (SkillFilter) -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = Spacing.s).selectableGroup()) {
-        val wrap = maxWidth < 360.dp || LocalDensity.current.fontScale >= 1.3f
-        if (wrap) {
-            FlowRow(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                maxItemsInEachRow = 2,
-            ) {
-                SkillFilter.entries.forEach { filter ->
-                    SkillFilterButton(
-                        filter = filter,
-                        active = filter == selected,
-                        onClick = { onSelect(filter) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        } else {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                SkillFilter.entries.forEach { filter ->
-                    SkillFilterButton(
-                        filter = filter,
-                        active = filter == selected,
-                        onClick = { onSelect(filter) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SkillFilterButton(
-    filter: SkillFilter,
-    active: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    MisulFilter(
-        label = filter.shortLabel(),
-        selected = active,
-        onClick = onClick,
-        modifier = modifier,
-    )
-}
-
 private fun SkillScope.label() = if (this == SkillScope.PROJECT) "Project" else "Global"
 
 private fun SkillStatus.label() = when (this) {
@@ -765,18 +620,4 @@ private fun SkillStatus.label() = when (this) {
     SkillStatus.DISABLED -> "Off"
     SkillStatus.SHADOWED -> "Overridden"
     SkillStatus.INVALID -> "Needs attention"
-}
-
-private fun SkillFilter.label() = when (this) {
-    SkillFilter.ALL -> "All skills"
-    SkillFilter.ACTIVE -> "Active"
-    SkillFilter.OFF -> "Inactive skills"
-    SkillFilter.ISSUES -> "Needs attention"
-}
-
-private fun SkillFilter.shortLabel() = when (this) {
-    SkillFilter.ALL -> "All"
-    SkillFilter.ACTIVE -> "Active"
-    SkillFilter.OFF -> "Inactive"
-    SkillFilter.ISSUES -> "Issues"
 }

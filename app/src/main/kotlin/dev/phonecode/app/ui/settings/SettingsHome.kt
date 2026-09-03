@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Build
@@ -35,6 +36,7 @@ import dev.phonecode.app.ui.components.ActionRole
 import dev.phonecode.app.ui.components.MisulActionButton
 import dev.phonecode.app.ui.components.MisulField
 import dev.phonecode.app.ui.components.MisulGroup
+import dev.phonecode.app.ui.components.MisulIconButton
 import dev.phonecode.app.ui.components.MisulSelectionRow
 import dev.phonecode.app.ui.components.MisulToggleRow
 import dev.phonecode.app.ui.theme.Spacing
@@ -109,10 +111,12 @@ internal fun AppearancePage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-internal fun PersonalPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
+internal fun PersonalPage(
+    settingsVm: SettingsViewModel,
+    onBack: () -> Unit,
+    onOpenCustomInstructions: () -> Unit,
+) {
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
-    var draft by remember(settings.customInstructions) { mutableStateOf(settings.customInstructions) }
-    val changed = draft != settings.customInstructions
     SettingsPageShell("Personalization", onBack) {
         Text("Message input", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = androidx.compose.ui.Modifier.padding(Spacing.s))
         MisulGroup {
@@ -125,24 +129,53 @@ internal fun PersonalPage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
             )
         }
         Text("Custom instructions", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = androidx.compose.ui.Modifier.padding(start = Spacing.s, top = Spacing.m, bottom = Spacing.xs))
+        MisulGroup {
+            SettingsNavigationRow(
+                label = "Custom instructions",
+                value = if (settings.customInstructions.isBlank()) "Not set" else "Configured",
+                showDivider = false,
+                onClick = onOpenCustomInstructions,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun CustomInstructionsPage(
+    settingsVm: SettingsViewModel,
+    onBack: () -> Unit,
+    onDirtyChange: (Boolean) -> Unit,
+    onSaved: () -> Unit,
+) {
+    val settings by settingsVm.settings.collectAsStateWithLifecycle()
+    var draft by androidx.compose.runtime.saveable.rememberSaveable(settings.customInstructions) {
+        mutableStateOf(settings.customInstructions)
+    }
+    val changed = draft != settings.customInstructions
+    androidx.compose.runtime.LaunchedEffect(changed) { onDirtyChange(changed) }
+    SettingsPageShell(
+        title = "Custom instructions",
+        onBack = onBack,
+        action = {
+            MisulIconButton(
+                icon = Icons.Filled.Check,
+                contentDescription = "Save custom instructions",
+                enabled = changed,
+                onClick = {
+                    settingsVm.update { it.copy(customInstructions = draft) }
+                    onSaved()
+                },
+            )
+        },
+    ) {
         MisulField(
             value = draft,
             onValueChange = { draft = it },
-            label = "Custom instructions",
-            placeholder = "Tell the agent how you like to work - style, tools, conventions...",
+            label = "Instructions",
+            placeholder = "How should Misul work with you?",
             singleLine = false,
+            minLines = 8,
         )
-        Row(
-            androidx.compose.ui.Modifier.fillMaxWidth().padding(top = Spacing.s),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            MisulActionButton(
-                label = "Save",
-                role = ActionRole.PRIMARY,
-                enabled = changed,
-                onClick = { settingsVm.update { it.copy(customInstructions = draft) } },
-            )
-        }
-        SettingsNote("These instructions are included in new agent turns. Do not add passwords, tokens, or other secrets.")
+        SettingsNote("Applied to new turns. Do not include passwords, tokens, or other secrets.")
     }
 }

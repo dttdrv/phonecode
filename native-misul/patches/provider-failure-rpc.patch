@@ -1,0 +1,18 @@
+--- a/src/rpc_server.zig
++++ b/src/rpc_server.zig
+@@ -1176,6 +1176,7 @@
+             .status = settlementStatus(settlement.stop_reason),
+             .stop_reason = @tagName(settlement.stop_reason),
+             .failure = @tagName(settlement.failure),
++            .provider_failure = settlement.provider_failure,
+             .steps = settlement.step_count,
+             .content = bridge.content.items,
+             .input_message_id = bridge.input_message_id.items,
+@@ -1944,6 +1945,7 @@
+         .status = settlementStatus(settlement.stop_reason),
+         .stop_reason = @tagName(settlement.stop_reason),
+         .failure = @tagName(settlement.failure),
++        .provider_failure = settlement.provider_failure,
+         .steps = settlement.step_count,
+         .content = bridge.content.items,
+         .input_message_id = bridge.input_message_id.items,

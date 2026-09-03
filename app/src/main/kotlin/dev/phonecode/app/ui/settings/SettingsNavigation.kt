@@ -52,7 +52,19 @@ internal fun SettingsNavigation(
                     onOpen = navController::navigate,
                 )
 
-                SettingsRoute.AgentTools -> AgentToolsPage(vm, ::popOrExit)
+                SettingsRoute.AgentTools -> AgentToolsPage(
+                    vm = vm,
+                    onBack = ::popOrExit,
+                    onOpenCategory = { filter ->
+                        navController.navigate(SettingsRoute.AgentToolsCategory(filter.name))
+                    },
+                )
+
+                is SettingsRoute.AgentToolsCategory -> AgentToolsCategoryPage(
+                    vm = vm,
+                    access = AgentToolAccessFilter.valueOf(route.access),
+                    onBack = ::popOrExit,
+                )
 
                 SettingsRoute.Files -> FilesPage(
                     vm = vm,
@@ -61,7 +73,18 @@ internal fun SettingsNavigation(
 
                 SettingsRoute.Appearance -> AppearancePage(settingsVm, ::popOrExit)
 
-                SettingsRoute.Personalization -> PersonalPage(settingsVm, ::popOrExit)
+                SettingsRoute.Personalization -> PersonalPage(
+                    settingsVm = settingsVm,
+                    onBack = ::popOrExit,
+                    onOpenCustomInstructions = {
+                        navController.navigate(SettingsRoute.CustomInstructions)
+                    },
+                )
+
+                SettingsRoute.CustomInstructions -> CustomInstructionsDestination(
+                    settingsVm = settingsVm,
+                    onBack = ::popOrExit,
+                )
 
                 SettingsRoute.Providers -> ProvidersPage(
                     vm = vm,
@@ -246,9 +269,13 @@ internal fun NavGraphBuilder.settingsRouteGraph(
 ) {
     composable<SettingsRoute.Home> { destination(SettingsRoute.Home) }
     composable<SettingsRoute.AgentTools> { destination(SettingsRoute.AgentTools) }
+    composable<SettingsRoute.AgentToolsCategory> { entry ->
+        destination(entry.toRoute<SettingsRoute.AgentToolsCategory>())
+    }
     composable<SettingsRoute.Files> { destination(SettingsRoute.Files) }
     composable<SettingsRoute.Appearance> { destination(SettingsRoute.Appearance) }
     composable<SettingsRoute.Personalization> { destination(SettingsRoute.Personalization) }
+    composable<SettingsRoute.CustomInstructions> { destination(SettingsRoute.CustomInstructions) }
     composable<SettingsRoute.Providers> { destination(SettingsRoute.Providers) }
     composable<SettingsRoute.Provider> { entry -> destination(entry.toRoute<SettingsRoute.Provider>()) }
     composable<SettingsRoute.Mcp> { destination(SettingsRoute.Mcp) }
@@ -261,6 +288,29 @@ internal fun NavGraphBuilder.settingsRouteGraph(
     composable<SettingsRoute.Data> { destination(SettingsRoute.Data) }
     composable<SettingsRoute.About> { destination(SettingsRoute.About) }
     composable<SettingsRoute.Document> { entry -> destination(entry.toRoute<SettingsRoute.Document>()) }
+}
+
+@Composable
+private fun CustomInstructionsDestination(
+    settingsVm: SettingsViewModel,
+    onBack: () -> Unit,
+) {
+    var dirty by rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    DiscardChangesBackHandler(
+        dirty = dirty,
+        message = "Custom instructions have unsaved changes.",
+        onDiscard = onBack,
+    ) { requestBack ->
+        CustomInstructionsPage(
+            settingsVm = settingsVm,
+            onBack = requestBack,
+            onDirtyChange = { dirty = it },
+            onSaved = {
+                dirty = false
+                onBack()
+            },
+        )
+    }
 }
 
 @Composable

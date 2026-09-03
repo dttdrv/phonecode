@@ -588,7 +588,7 @@ class ScreenshotTest {
             shootPage("settings-selection", "Appearance")
             compose.onNodeWithContentDescription("Back").performClick()
             compose.onNodeWithText("Skills").performClick()
-            compose.onNodeWithContentDescription("New skill").performClick()
+            compose.onNodeWithText("Create skill").performClick()
             compose.onNodeWithContentDescription("Skill name").performTextInput("fixture")
             compose.onNodeWithContentDescription("Skill name").assertTextEquals("fixturenew-skill")
             shootPage("settings-editor-dirty", "New skill")
@@ -676,8 +676,10 @@ class ScreenshotTest {
 
         compose.onNodeWithText("Agent tools").performClick()
         shootPage("22-agent-tools-inventory", "Agent tools")
+        compose.onNodeWithText("Read only").performClick()
         compose.onNodeWithContentDescription("Search tools").performTextInput("missing-production-tool")
-        shootPage("22-tools-no-results", "Agent tools")
+        shootPage("22-tools-no-results", "Read-only tools")
+        compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("MCP servers").performClick()
@@ -688,7 +690,7 @@ class ScreenshotTest {
         compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("Export & import").performClick()
-        compose.onNodeWithText("Import from a file").performClick()
+        compose.onNodeWithText("Import from file").performClick()
         shootDialog("24-import-confirmation")
     }
 
@@ -831,13 +833,13 @@ class ScreenshotTest {
             // so the successful setup state is visibly distinct.
             compose.onNodeWithText("Add custom provider").assertIsDisplayed()
             compose.onAllNodesWithText("Providers").onLast().assertIsDisplayed()
-            compose.onAllNodesWithText("Setup required · Shown in model picker").onFirst().assertIsDisplayed()
+            compose.onAllNodesWithText("Setup required").onFirst().assertIsDisplayed()
             shootFullPage("41-task10-providers-clean", "Providers")
 
             assertTrue(app.chatViewModel.setKey("openai", "screenshot-openai-key"))
             show(SettingsRoute.Data)
             show(SettingsRoute.Providers)
-            compose.onAllNodesWithText("API key saved · Shown in model picker").onFirst().performScrollTo().assertIsDisplayed()
+            compose.onAllNodesWithText("API key saved").onFirst().performScrollTo().assertIsDisplayed()
             shootFullPage("41-task10-provider-key-success", "Providers")
 
             val providerSaveGate = CompletableDeferred<Unit>()
@@ -940,7 +942,7 @@ class ScreenshotTest {
             shootDialog("45-task10-mcp-dirty-discard")
             compose.onNodeWithText("Discard").performClick()
 
-            compose.onNodeWithContentDescription("$matrixServer details").performClick()
+            compose.onNodeWithText(matrixServer).performClick()
             compose.onNodeWithText("Delete server").performScrollTo().performClick()
             compose.onNodeWithText("Delete MCP server?").assertIsDisplayed()
             shootDialog("45-task10-mcp-destructive")
@@ -1168,7 +1170,7 @@ class ScreenshotTest {
             compose.waitForIdle()
             shootPage("31-mcp-server-states", "MCP servers")
 
-            compose.onNodeWithContentDescription("Workspace Index details").performClick()
+            compose.onNodeWithText("Workspace Index").performClick()
             compose.onNodeWithText("Connected to Workspace Index").assertIsDisplayed()
             compose.mainClock.advanceTimeBy(500)
             compose.waitForIdle()
@@ -1201,7 +1203,7 @@ class ScreenshotTest {
             compose.onNodeWithContentDescription("Back").performClick()
             compose.mainClock.advanceTimeBy(300)
             compose.waitForIdle()
-            compose.onNodeWithContentDescription("New skill").performClick()
+            compose.onNodeWithText("Create skill").performClick()
             compose.onNodeWithContentDescription("When to use this skill").assertIsDisplayed()
             compose.onNodeWithContentDescription("Skill instructions").assertIsDisplayed()
             shootPage("40-skill-guided-editor", "New skill")

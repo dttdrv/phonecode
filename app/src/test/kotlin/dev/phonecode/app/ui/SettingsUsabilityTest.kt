@@ -14,10 +14,10 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -184,17 +184,18 @@ class SettingsUsabilityTest {
     @Test
     fun personalizationSavesOnlyThroughItsEnabledPrimaryAction() {
         showSettings("personal")
-        val field = compose.onNodeWithContentDescription("Custom instructions")
+        compose.onAllNodesWithText("Custom instructions").onLast().performClick()
+        compose.waitForIdle()
+        val field = compose.onNodeWithContentDescription("Instructions")
             .assertIsDisplayed()
-        compose.onNodeWithText("Save").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Save custom instructions").assertIsNotEnabled()
 
         field.performTextReplacement("Prefer concise status updates.")
-        compose.onNodeWithText("Save").assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription("Save custom instructions").performClick()
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("Save").fetchSemanticsNodes().isNotEmpty() &&
-                runCatching { compose.onNodeWithText("Save").assertIsNotEnabled() }.isSuccess
+            compose.onAllNodesWithText("Configured").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Save").assertIsNotEnabled()
+        compose.onNodeWithText("Configured").assertIsDisplayed()
     }
 
     @Test
@@ -324,8 +325,9 @@ class SettingsUsabilityTest {
         try {
             showSettings("skills")
 
+            compose.onNodeWithText("1 need attention", substring = true).assertIsDisplayed()
+            compose.onNodeWithText("legacy-deploy").performClick()
             compose.onNodeWithText("Invalid SKILL.md frontmatter").assertIsDisplayed()
-            compose.onNodeWithText("1 skill needs attention").assertIsDisplayed()
         } finally {
             state.value = original
         }
@@ -343,7 +345,7 @@ class SettingsUsabilityTest {
         try {
             showSettings("skills")
 
-            compose.onNodeWithText("No skills yet").assertIsDisplayed()
+            compose.onNodeWithText("No skills installed.").assertIsDisplayed()
             compose.onNodeWithText("Create skill").assertIsDisplayed()
             assertTrue(compose.onAllNodesWithText("Search skills").fetchSemanticsNodes().isEmpty())
         } finally {
@@ -352,45 +354,23 @@ class SettingsUsabilityTest {
     }
 
     @Test
-    fun skillSearchAndFiltersOfferDifferentRecoveryActions() {
+    fun skillSearchAppearsAtTheTwelveSkillThreshold() {
         val vm = app().chatViewModel
         val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
         val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
         val original = state.value
-        state.value = original.copy(skills = (1..6).map { skill("skill-$it") })
+        state.value = original.copy(
+            skillInventoryLoaded = true,
+            skills = (1..12).map { skill("skill-$it") },
+        )
 
         try {
             showSettings("skills")
+            compose.onNodeWithContentDescription("Search skills").assertIsDisplayed()
             compose.onNodeWithContentDescription("Search skills").performTextReplacement("missing")
 
             compose.onNodeWithText("No skills match “missing”.").assertIsDisplayed()
-            compose.onNodeWithText("Clear search").performClick()
-            compose.onNodeWithText("Issues").performClick()
-            compose.onNodeWithText("No skills need attention.").assertIsDisplayed()
-            compose.onNodeWithText("Show all skills").assertIsDisplayed()
-        } finally {
-            state.value = original
-        }
-    }
-
-    @Test
-    fun skillFiltersExposeASelectableGroup() {
-        val vm = app().chatViewModel
-        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
-        @Suppress("UNCHECKED_CAST")
-        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
-        val original = state.value
-        state.value = original.copy(skills = listOf(skill("release-pilot"), skill("disabled", SkillStatus.DISABLED)))
-
-        try {
-            showSettings("skills")
-            val all = compose.onNodeWithText("All", useUnmergedTree = true).fetchSemanticsNode()
-
-            assertTrue(
-                generateSequence(all.parent) { it.parent }
-                    .any { SemanticsProperties.SelectableGroup in it.config },
-            )
         } finally {
             state.value = original
         }
@@ -460,58 +440,5 @@ class SettingsUsabilityTest {
             state.value = original
             vm.refreshSkills()
         }
-    }
-}
-
-@RunWith(AndroidJUnit4::class)
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(
-    sdk = [34],
-    qualifiers = "w320dp-h640dp-xhdpi",
-    shadows = [UiTestSecureKeyStore::class],
-)
-class SettingsCompactLayoutTest {
-
-    private val seedSettings = object : ExternalResource() {
-        override fun before() {
-            val filesDir = ApplicationProvider
-                .getApplicationContext<Context>().filesDir
-            UiTestSecureKeyStore.replaceWith(emptyMap())
-            java.io.File(filesDir, "app_settings.json")
-                .writeText("""{"onboarded":true}""")
-        }
-    }
-
-    private val compose = createAndroidComposeRule<MainActivity>()
-
-    @get:Rule
-    val rules: RuleChain = RuleChain.outerRule(seedSettings).around(compose)
-
-    @Test
-    fun skillFiltersWrapInsteadOfCrowdingOnANarrowScreen() {
-        val application = ApplicationProvider
-            .getApplicationContext<PhoneCodeApplication>()
-        val settingsVm = SettingsViewModel(application)
-        compose.activity.setContent {
-            PhoneCodeTheme(darkTheme = false) {
-                SettingsScreen(
-                    vm = application.chatViewModel,
-                    settingsVm = settingsVm,
-                    onBack = {},
-                    initialPage = "skills",
-                )
-            }
-        }
-        compose.waitForIdle()
-
-        val firstRowTop = compose.onNodeWithText("All")
-            .assertIsDisplayed()
-            .fetchSemanticsNode().boundsInRoot.top
-        compose.onNodeWithText("Active").assertIsDisplayed()
-        val secondRowTop = compose.onNodeWithText("Inactive")
-            .assertIsDisplayed()
-            .fetchSemanticsNode().boundsInRoot.top
-        compose.onNodeWithText("Issues").assertIsDisplayed()
-        assertTrue(secondRowTop > firstRowTop)
     }
 }

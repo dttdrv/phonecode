@@ -57,6 +57,8 @@ class UiPolishRegressionTest {
         assertTrue(composer.contains("maxLines = ComposerMaxLines"))
         assertTrue(composer.contains("Box(Modifier.weight(1f)) {"))
         assertTrue(composer.contains(".align(Alignment.BottomEnd)"))
+        assertTrue(composer.contains("visualOffsetY = -ComposerActionInset"))
+        assertTrue(composer.contains("ComposerActionInset = 4.dp"))
         val photoRemove = composer.substringAfter("PhotoThumbnail").substringBefore("if (value.isEmpty())")
         assertTrue(photoRemove.contains(".size(ComposerActionTarget)\n                                            .clickable"))
         assertFalse(photoRemove.contains(".clip(CircleShape).clickable"))
@@ -100,15 +102,58 @@ class UiPolishRegressionTest {
     }
 
     @Test
-    fun settingsRowsAreOpenAndSkillSummariesStayCompact() {
+    fun settingsRowsStayOpenAndUseFineDividers() {
         val rows = source("app/src/main/kotlin/dev/phonecode/app/ui/components/Rows.kt")
-        val settings = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/SkillSettings.kt")
 
         assertFalse(rows.contains("background(colors.surface)"))
         assertTrue(rows.contains("HorizontalDivider"))
-        assertTrue(settings.contains("style = MaterialTheme.typography.bodySmall,"))
-        assertTrue(settings.contains("color = colors.onSurfaceVariant,"))
-        assertTrue(settings.contains("maxLines = 1,"))
+    }
+
+    @Test
+    fun capabilityLandingPagesUseGroupedRowsInsteadOfControlStrips() {
+        val tools = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/AgentToolsSettings.kt")
+        val skills = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/SkillSettings.kt")
+
+        val toolsLanding = tools.substringAfter("internal fun AgentToolsPage").substringBefore("internal fun AgentToolsCategoryPage")
+        val skillsLanding = skills.substringAfter("internal fun SkillsPage").substringBefore("internal fun SkillDetailPage")
+
+        assertTrue(toolsLanding.contains("SettingsNavigationRow("))
+        assertFalse(toolsLanding.contains("MisulSearchField("))
+        assertFalse(toolsLanding.contains("MisulFilter("))
+        assertTrue(skillsLanding.contains("SettingsNavigationRow("))
+        assertFalse(skillsLanding.contains("SkillFilters("))
+        assertFalse(skillsLanding.contains("MisulIconButton("))
+    }
+
+    @Test
+    fun secondarySettingsActionsUseRowsInsteadOfStandaloneButtons() {
+        val mcp = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/McpSettings.kt")
+            .substringAfter("internal fun McpPage")
+            .substringBefore("internal fun McpServerPage")
+        val providers = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/ProviderSettings.kt")
+            .substringAfter("internal fun ProvidersPage")
+            .substringBefore("internal fun ProviderDetailPage")
+        val data = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/DataSettings.kt")
+            .substringAfter("internal fun ExportPage")
+            .substringBefore("private fun ConfirmImportDialog")
+
+        assertTrue(mcp.contains("SettingsNavigationRow("))
+        assertFalse(mcp.contains("MisulActionButton("))
+        assertTrue(providers.contains("MisulActionRow("))
+        assertFalse(providers.contains("MisulActionButton("))
+        assertTrue(data.contains("MisulActionRow("))
+        assertFalse(data.contains("MisulActionButton("))
+    }
+
+    @Test
+    fun personalizationUsesAFocusedCustomInstructionsEditor() {
+        val settings = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/SettingsHome.kt")
+        val personal = settings.substringAfter("internal fun PersonalPage").substringBefore("internal fun CustomInstructionsPage")
+
+        assertTrue(personal.contains("SettingsNavigationRow("))
+        assertFalse(personal.contains("MisulField("))
+        assertTrue(settings.contains("internal fun CustomInstructionsPage"))
+        assertTrue(settings.contains("Save custom instructions"))
     }
 
     @Test
@@ -212,7 +257,7 @@ class UiPolishRegressionTest {
         assertTrue(build.contains("signingConfig = signingConfigs.getByName(\"debug\")"))
         assertTrue(build.contains("sourceSets.getByName(\"sideload\")"))
         assertTrue(build.contains("withBuildType(\"sideload\")"))
-        assertTrue(build.contains("output.versionCode.set(55)"))
-        assertTrue(build.contains("output.versionName.set(\"0.6.0-beta.1\")"))
+        assertTrue(build.contains("output.versionCode.set(56)"))
+        assertTrue(build.contains("output.versionName.set(\"0.6.0-beta.2\")"))
     }
 }

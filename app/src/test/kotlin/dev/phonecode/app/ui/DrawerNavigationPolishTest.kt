@@ -1,6 +1,7 @@
 package dev.phonecode.app.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
@@ -28,6 +29,9 @@ import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -195,5 +199,24 @@ class DrawerNavigationPolishTest {
         compose.onNodeWithText(
             "${activeChat.title} will be permanently removed from this device. This cannot be undone.",
         ).assertIsDisplayed()
+    }
+
+    @Test
+    fun chatDateRemainsInsideTheNavigationTarget() {
+        showFixture()
+        val date = SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(activeChat.updatedAt))
+
+        compose.onNodeWithText(date).assertHasClickAction()
+    }
+
+    @Test
+    fun searchKeepsScrollChromeAndPredictiveBackStaysLatchedThroughCommit() {
+        val drawer = java.io.File("src/main/kotlin/dev/phonecode/app/ui/drawer/WorkspaceDrawer.kt").readText()
+        val shell = java.io.File("src/main/kotlin/dev/phonecode/app/ui/PhoneCodeApp.kt").readText()
+
+        assertFalse(drawer.contains("(listScrolled || hasMoreBelow) && !searchExpanded"))
+        assertTrue(shell.contains("drawerVisible || drawerBackGestureInProgress"))
+        assertTrue(shell.contains("drawerBackGestureInProgress = true"))
+        assertTrue(shell.contains("finally {\n                drawerBackGestureInProgress = false"))
     }
 }

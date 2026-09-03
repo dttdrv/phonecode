@@ -31,6 +31,7 @@ fun phoneHazeBand(): HazeStyle {
 }
 
 private val isRobolectric = Build.FINGERPRINT == "robolectric"
+private const val EdgeTintAlpha = 0.88f
 
 private fun HazeEffectScope.applyDefaults() {
     if (isRobolectric) blurEnabled = false
@@ -47,7 +48,9 @@ fun Modifier.progressiveBlurEdge(
     fromTop: Boolean,
     edgeColor: Color,
 ): Modifier {
-    // Ramp in a little before the bar, then dissolve the content into the background at the edge.
+    if (isRobolectric) return edgeDissolve(fromTop, edgeColor)
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S) return edgeDissolve(fromTop, edgeColor)
+
     val onset = CubicBezierEasing(0.55f, 0f, 0.82f, 0.6f)
     return hazeEffect(state, style) {
         applyDefaults()
@@ -56,13 +59,29 @@ fun Modifier.progressiveBlurEdge(
             startIntensity = if (fromTop) 1f else 0f,
             endIntensity = if (fromTop) 0f else 1f,
         )
-    }.background(
+    }.edgeDissolve(fromTop, edgeColor)
+}
+
+private fun Modifier.edgeDissolve(fromTop: Boolean, edgeColor: Color): Modifier =
+    background(
         Brush.verticalGradient(
-            if (fromTop) listOf(edgeColor, Color.Transparent)
-            else listOf(Color.Transparent, edgeColor),
+            colorStops = if (fromTop) {
+                arrayOf(
+                    0f to edgeColor.copy(alpha = EdgeTintAlpha),
+                    0.55f to edgeColor.copy(alpha = 0.70f),
+                    0.80f to edgeColor.copy(alpha = 0.24f),
+                    1f to Color.Transparent,
+                )
+            } else {
+                arrayOf(
+                    0f to Color.Transparent,
+                    0.20f to edgeColor.copy(alpha = 0.24f),
+                    0.45f to edgeColor.copy(alpha = 0.70f),
+                    1f to edgeColor.copy(alpha = EdgeTintAlpha),
+                )
+            },
         ),
     )
-}
 
 fun Modifier.blurFade(state: HazeState, style: HazeStyle, fromTop: Boolean, edgeColor: Color): Modifier =
     progressiveBlurEdge(state, style, fromTop, edgeColor)

@@ -42,12 +42,16 @@ class MisulBrandContractTest {
 
     @Test
     fun editingSurfacesUseMisulAccentForCarets() {
-        val kit = source("app/src/main/kotlin/dev/phonecode/app/ui/components/Kit.kt")
+        val fields = source("app/src/main/kotlin/dev/phonecode/app/ui/components/Fields.kt")
         val chat = source("app/src/main/kotlin/dev/phonecode/app/ui/chat/ChatScreen.kt")
+        val composer = source("app/src/main/kotlin/dev/phonecode/app/ui/chat/ChatComposer.kt")
+        val overlays = source("app/src/main/kotlin/dev/phonecode/app/ui/chat/ChatOverlays.kt")
         val accentedCaret = "cursorBrush = SolidColor(LocalMisulAccent.current)"
 
-        assertTrue(kit.contains(accentedCaret))
-        assertEquals(3, chat.windowed(accentedCaret.length).count { it == accentedCaret })
+        assertEquals(2, fields.windowed(accentedCaret.length).count { it == accentedCaret })
+        assertEquals(0, chat.windowed(accentedCaret.length).count { it == accentedCaret })
+        assertEquals(1, composer.windowed(accentedCaret.length).count { it == accentedCaret })
+        assertEquals(2, overlays.windowed(accentedCaret.length).count { it == accentedCaret })
     }
 
     private fun assertOklch(

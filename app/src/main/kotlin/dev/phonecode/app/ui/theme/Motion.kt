@@ -27,6 +27,17 @@ object PhoneEasings {
     val drawer = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 }
 
+object PhoneDurations {
+    const val PRESS_IN = 70
+    const val PRESS_OUT = 140
+    const val POPOVER_IN = 180
+    const val POPOVER_OUT = 120
+    const val NAV_IN = 240
+    const val NAV_OUT = 180
+    const val MESSAGE_IN = 180
+    const val STATE_CHANGE = 140
+}
+
 object PhoneTweens {
     val popEnter get() = tween<Float>(durationMillis = 220, easing = PhoneEasings.easeOut)
     val popExit get() = tween<Float>(durationMillis = 150, easing = PhoneEasings.easeOut)

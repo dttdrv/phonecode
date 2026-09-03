@@ -1,11 +1,11 @@
 package dev.phonecode.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -27,6 +27,7 @@ import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
+import androidx.compose.foundation.gestures.snapTo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
@@ -92,6 +93,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -125,26 +129,22 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import dev.phonecode.app.agent.ChatViewModel
 import dev.phonecode.app.agent.ChatUiState
 import dev.phonecode.app.R
 import dev.phonecode.app.PhoneCodeApplication
-import dev.phonecode.app.data.Project
-import dev.phonecode.app.data.SessionMeta
 import dev.phonecode.app.data.SkillStatus
 import dev.phonecode.app.data.ThemeMode
 import dev.phonecode.app.ui.chat.ChatScreen
+import dev.phonecode.app.ui.drawer.WorkspaceDrawer
+import dev.phonecode.app.ui.drawer.WorkspaceDrawerState
 import dev.phonecode.app.ui.onboarding.ModelSetupScreen
 import dev.phonecode.app.ui.onboarding.OnboardingScreen
-import dev.phonecode.app.ui.components.PcIconButton
-import dev.phonecode.app.ui.components.PcButton
-import dev.phonecode.app.ui.components.PcField
-import dev.phonecode.app.ui.components.MorphingMenu
+import dev.phonecode.app.ui.components.StretchSyncedScrollChrome
 import dev.phonecode.app.ui.components.contentVerticalScroll
 import dev.phonecode.app.ui.components.pressFeedback
 import dev.phonecode.app.ui.components.rememberContentOverscroll
-import dev.phonecode.app.ui.components.rememberPredictiveBackMotion
 import dev.phonecode.app.ui.components.shortContentVerticalOverscroll
+import dev.phonecode.app.ui.navigation.MisulNavigationMotion
 import androidx.compose.material3.ripple
 import dev.phonecode.app.ui.settings.SettingsScreen
 import dev.phonecode.app.ui.theme.LocalMisulAccent
@@ -153,10 +153,6 @@ import dev.phonecode.app.ui.theme.PhoneEasings
 import dev.phonecode.app.ui.theme.PhoneSprings
 import dev.phonecode.app.ui.theme.ShapePill
 import dev.phonecode.app.ui.theme.Spacing
-import dev.phonecode.app.ui.theme.phoneHazeBand
-import dev.phonecode.app.ui.theme.progressiveBlurEdge
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -286,6 +282,7 @@ fun PhoneCodeApp() {
         // Keep composition out of the continuous drag path. This boolean changes only when the
         // drawer crosses the visible boundary; offset/progress are read later by graphicsLayer.
         var drawerVisible by remember { mutableStateOf(false) }
+        var drawerBackGestureInProgress by remember { mutableStateOf(false) }
         LaunchedEffect(drawerState) {
             snapshotFlow { (drawerState.offset.takeUnless(Float::isNaN) ?: 0f) > 0.5f }
                 .collect { visible -> drawerVisible = visible }
@@ -321,8 +318,27 @@ fun PhoneCodeApp() {
             if (drawerState.targetValue == DrawerValue.OPEN) focusManager.clearFocus()
         }
 
-        val drawerBackMotion = rememberPredictiveBackMotion(enabled = drawerVisible) {
-            drawerState.animateTo(DrawerValue.CLOSED, snap())
+        PredictiveBackHandler(enabled = drawerVisible || drawerBackGestureInProgress) { events ->
+            val startOffset = drawerState.offset.takeUnless(Float::isNaN) ?: 0f
+            var lastOffset = startOffset
+            drawerBackGestureInProgress = true
+            try {
+                events.collect { event ->
+                    val nextOffset = (startOffset * (1f - event.progress)).coerceIn(0f, drawerWidthPx)
+                    drawerState.dispatchRawDelta(nextOffset - lastOffset)
+                    lastOffset = nextOffset
+                }
+                // Commit the exact anchored offset driven by gesture progress. This must not replay
+                // a second close animation after the system has already completed the gesture.
+                drawerState.snapTo(DrawerValue.CLOSED)
+            } catch (cancelled: CancellationException) {
+                withContext(NonCancellable) {
+                    drawerState.animateTo(DrawerValue.OPEN, PhoneSprings.drawer)
+                }
+                throw cancelled
+            } finally {
+                drawerBackGestureInProgress = false
+            }
         }
 
         Box(
@@ -356,7 +372,7 @@ fun PhoneCodeApp() {
                             // while the sidebar overlays it.
                             val drawerOffset = drawerState.offset.takeUnless(Float::isNaN) ?: 0f
                             val drawerProgress = (drawerOffset / drawerWidthPx).coerceIn(0f, 1f)
-                            val progress = drawerProgress * (1f - drawerBackMotion.progress.value)
+                            val progress = drawerProgress
                             if (progress > 0f) {
                                 val ds = 1f - 0.06f * progress
                                 scaleX = ds; scaleY = ds
@@ -367,18 +383,10 @@ fun PhoneCodeApp() {
                         navController = navController,
                         startDestination = "chat",
                         modifier = Modifier.fillMaxSize(),
-                        enterTransition = {
-                            slideInHorizontally(tween(220, easing = PhoneEasings.easeOut)) { it }
-                        },
-                        exitTransition = {
-                            slideOutHorizontally(tween(180, easing = PhoneEasings.easeOut)) { -it / 4 }
-                        },
-                        popEnterTransition = {
-                            slideInHorizontally(tween(200, easing = PhoneEasings.easeOut)) { -it / 4 }
-                        },
-                        popExitTransition = {
-                            slideOutHorizontally(tween(170, easing = PhoneEasings.easeOut)) { it }
-                        },
+                        enterTransition = { MisulNavigationMotion.forwardEnter() },
+                        exitTransition = { MisulNavigationMotion.forwardExit() },
+                        popEnterTransition = { MisulNavigationMotion.backEnter() },
+                        popExitTransition = { MisulNavigationMotion.backExit() },
                     ) {
                         composable("chat") {
                             ChatScreen(
@@ -444,7 +452,7 @@ fun PhoneCodeApp() {
                         Modifier.fillMaxSize().graphicsLayer {
                             val drawerOffset = drawerState.offset.takeUnless(Float::isNaN) ?: 0f
                             val drawerProgress = (drawerOffset / drawerWidthPx).coerceIn(0f, 1f)
-                            val progress = drawerProgress * (1f - drawerBackMotion.progress.value)
+                            val progress = drawerProgress
                             alpha = (0.5f * progress).coerceIn(0f, 1f)
                         }.background(colors.scrim)
                             .semantics { contentDescription = "Close navigation drawer" }
@@ -454,22 +462,37 @@ fun PhoneCodeApp() {
                         Modifier.fillMaxSize().graphicsLayer {
                             val drawerOffset = drawerState.offset.takeUnless(Float::isNaN) ?: 0f
                             val drawerProgress = (drawerOffset / drawerWidthPx).coerceIn(0f, 1f)
-                            val progress = drawerProgress * (1f - drawerBackMotion.progress.value)
+                            val progress = drawerProgress
                             translationX = -drawerWidthPx * (1f - progress)
                         },
                     ) {
-                        Sidebar(
-                            vm = vm,
+                        WorkspaceDrawer(
+                            state = WorkspaceDrawerState(
+                                projects = chatState.projects,
+                                sessions = chatState.sessions,
+                                currentSessionId = chatState.currentSessionId,
+                                isRunning = chatState.isRunning,
+                                activeSkillCount = chatState.skills.count { it.status == SkillStatus.ACTIVE },
+                                mcpServerCount = chatState.mcpServers.size,
+                            ),
                             width = drawerWidth,
                             collapsed = collapsedProjects,
-                            onToggleCollapse = { id ->
+                            onToggleProjectCollapse = { id ->
                                 collapsedProjects = if (id in collapsedProjects) collapsedProjects - id else collapsedProjects + id
                             },
-                            onOpenChat = closeDrawer,
-                            onNewProject = openProjectPickerFromDrawer,
+                            onOpenSession = { id -> vm.switchSession(id); closeDrawer() },
+                            onNewChat = { projectId -> vm.newChat(projectId); closeDrawer() },
+                            onCreateProject = openProjectPickerFromDrawer,
                             onOpenSettings = { settingsInitial = "home"; navigateFromDrawer("settings") },
                             onOpenSkills = { navigateFromDrawer("skills") },
                             onOpenMcp = { navigateFromDrawer("mcp") },
+                            onSetSessionPinned = vm::setSessionPinned,
+                            onRenameSession = vm::renameSession,
+                            onMoveSession = vm::moveSession,
+                            onSetSessionArchived = vm::setSessionArchived,
+                            onDeleteSession = vm::deleteSession,
+                            onRenameProject = vm::renameProject,
+                            onDeleteProject = vm::deleteProject,
                         )
                     }
                 }
@@ -524,821 +547,6 @@ fun PhoneCodeApp() {
                         modifier = Modifier.size(48.dp),
                     )
                 }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun Sidebar(
-    vm: ChatViewModel,
-    width: androidx.compose.ui.unit.Dp,
-    collapsed: Set<String>,
-    onToggleCollapse: (String) -> Unit,
-    onOpenChat: () -> Unit,
-    onNewProject: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenSkills: () -> Unit,
-    onOpenMcp: () -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    val accent = LocalMisulAccent.current
-    val state by remember(vm) {
-        vm.state.map(ChatUiState::shellSnapshot).distinctUntilChanged()
-    }.collectAsState(initial = ChatUiState().shellSnapshot())
-    var query by rememberSaveable { mutableStateOf("") }
-    var searchExpanded by rememberSaveable { mutableStateOf(false) }
-    var chatMenu by remember { mutableStateOf<SessionMeta?>(null) }
-    var projectMenu by remember { mutableStateOf<Project?>(null) }
-    var renameChat by remember { mutableStateOf<SessionMeta?>(null) }
-    var renameProject by remember { mutableStateOf<Project?>(null) }
-    var deleteChat by remember { mutableStateOf<SessionMeta?>(null) }
-    var deleteProject by remember { mutableStateOf<Project?>(null) }
-    var archivedOpen by remember { mutableStateOf(false) }
-    val searchFocus = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
-    val keyboard = LocalSoftwareKeyboardController.current
-    val listState = rememberLazyListState()
-    val hazeState = remember { HazeState() }
-    val hazeStyle = phoneHazeBand()
-    val listScrolled by remember { derivedStateOf { listState.canScrollBackward } }
-    val hasMoreBelow by remember { derivedStateOf { listState.canScrollForward } }
-    val listCanScroll by remember { derivedStateOf { listState.canScrollBackward || listState.canScrollForward } }
-    val blurChrome = (listScrolled || hasMoreBelow) && !searchExpanded
-    val listOverscroll = rememberContentOverscroll()
-    val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val navigationInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-
-    fun closeSearch() {
-        query = ""
-        searchExpanded = false
-        focusManager.clearFocus()
-        keyboard?.hide()
-    }
-
-    BackHandler(enabled = searchExpanded) { closeSearch() }
-    LaunchedEffect(searchExpanded) {
-        if (searchExpanded) {
-            searchFocus.requestFocus()
-            keyboard?.show()
-        }
-    }
-
-    val matchingProjects = remember(state.projects, state.sessions, query) {
-        state.projects.filter { project ->
-            query.isBlank() || project.name.contains(query, ignoreCase = true) ||
-                state.sessions.any { it.projectId == project.id && it.title.contains(query, ignoreCase = true) }
-        }
-    }
-    val filtered = remember(state.projects, state.sessions, query) {
-        state.sessions.filter { session ->
-            query.isBlank() || session.title.contains(query, ignoreCase = true) ||
-                state.projects.any { it.id == session.projectId && it.name.contains(query, ignoreCase = true) }
-        }
-    }
-    val pinned = remember(filtered) { filtered.filter { it.pinned && !it.archived && it.projectId == null } }
-    val archived = remember(filtered) { filtered.filter { it.archived } }
-    val archivedVisible = archivedOpen || query.isNotBlank()
-    val byProject = remember(filtered) { filtered.filter { !it.archived && it.projectId != null }.groupBy { it.projectId } }
-    val loose = remember(filtered) { filtered.filter { !it.pinned && !it.archived && it.projectId == null } }
-
-    @Composable
-    fun SessionItem(meta: SessionMeta, indent: androidx.compose.ui.unit.Dp) {
-        ChatRow(
-            meta = meta,
-            active = meta.id == state.currentSessionId,
-            running = meta.id == state.currentSessionId && state.isRunning,
-            indent = indent,
-            onClick = { vm.switchSession(meta.id); onOpenChat() },
-            onMenu = { chatMenu = meta },
-            menuExpanded = chatMenu?.id == meta.id,
-            onDismissMenu = { chatMenu = null },
-        ) {
-            ChatOptionsMenu(
-                meta = meta,
-                projects = state.projects,
-                onDismiss = { chatMenu = null },
-                onPin = { vm.setSessionPinned(meta.id, !meta.pinned) },
-                onRequestRename = { renameChat = meta },
-                onMove = { vm.moveSession(meta.id, it) },
-                onArchive = { vm.setSessionArchived(meta.id, !meta.archived) },
-                onDelete = { deleteChat = meta },
-                lifecycleMutationsEnabled = meta.id != state.currentSessionId || !state.isRunning,
-            )
-        }
-    }
-
-    Box(
-        Modifier.width(width).fillMaxSize().background(colors.background)
-            .semantics { paneTitle = "Navigation drawer" }
-            .clipToBounds(),
-    ) {
-        Box(
-            Modifier.fillMaxSize().shortContentVerticalOverscroll(
-                enabled = !listCanScroll,
-                effect = listOverscroll,
-            ).background(colors.background),
-        ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize()
-                    .then(if (blurChrome) Modifier.hazeSource(hazeState) else Modifier)
-                    .padding(horizontal = 10.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    top = statusInset + 112.dp,
-                    bottom = navigationInset + 132.dp,
-                ),
-                overscrollEffect = listOverscroll.takeIf { listCanScroll },
-                userScrollEnabled = listCanScroll,
-            ) {
-            item {
-                Text("Projects", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 6.dp))
-            }
-            if (query.isNotBlank() && matchingProjects.isEmpty() && filtered.isEmpty()) {
-                item(key = "search_empty") {
-                    Column(
-                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 28.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text("No results for \"${query.take(40)}\"", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                        TextButton(onClick = ::closeSearch, modifier = Modifier.heightIn(min = Spacing.touchTarget)) { Text("Clear search") }
-                    }
-                }
-            }
-            if (state.projects.isEmpty() && query.isBlank()) {
-                item(key = "projects_empty") {
-                    Row(
-                        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onNewProject)
-                            .heightIn(min = Spacing.touchTarget)
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Icon(Icons.Outlined.Folder, null, tint = colors.secondary, modifier = Modifier.size(19.dp))
-                        Text("Link a folder", style = MaterialTheme.typography.bodyMedium, color = colors.onBackground)
-                    }
-                }
-            }
-            matchingProjects.forEach { project ->
-                // Search is a temporary reveal layer: matching chats remain reachable without
-                // changing the user's saved project-collapse choice.
-                val open = query.isNotBlank() || project.id !in collapsed
-                item(key = "p_${project.id}") {
-                    Row(
-                        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
-                            .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
-                            .combinedClickable(
-                                onClick = { onToggleCollapse(project.id) },
-                                onLongClick = { projectMenu = project },
-                            )
-                            .heightIn(min = Spacing.touchTarget).padding(start = 12.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(11.dp),
-                    ) {
-                        val rotation by animateFloatAsState(if (open) 90f else 0f, PhoneSprings.standard, label = "chev")
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary,
-                            modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = rotation },
-                        )
-                        Icon(Icons.Outlined.Folder, null, tint = colors.secondary, modifier = Modifier.size(19.dp))
-                        Text(project.name, style = MaterialTheme.typography.titleSmall, color = colors.onBackground, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("${byProject[project.id]?.size ?: 0}", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
-                        Box {
-                            PcIconButton(Icons.Filled.MoreVert, "Project options", tint = colors.secondary) { projectMenu = project }
-                            MorphingMenu(
-                                expanded = projectMenu?.id == project.id,
-                                onDismiss = { projectMenu = null },
-                                above = false,
-                                alignEnd = true,
-                                anchorSize = 48.dp,
-                                modifier = Modifier.width(240.dp),
-                            ) {
-                                ProjectOptionsMenu(
-                                    project = project,
-                                    onDismiss = { projectMenu = null },
-                                    onNewChat = {
-                                        vm.newChat(project.id)
-                                        onOpenChat()
-                                    },
-                                    onRequestRename = { renameProject = project },
-                                    onDelete = { deleteProject = project },
-                                )
-                            }
-                        }
-                    }
-                }
-                if (open) {
-                    val chats = byProject[project.id].orEmpty()
-                    if (chats.isEmpty()) item(key = "pe_${project.id}") {
-                        Text("No chats", style = MaterialTheme.typography.labelMedium, color = colors.tertiary, modifier = Modifier.padding(start = 40.dp, bottom = 8.dp, top = 2.dp))
-                    }
-                    chats.forEach { meta ->
-                        item(key = "c_${meta.id}") {
-                            SessionItem(meta, 40.dp)
-                        }
-                    }
-                }
-            }
-            if (pinned.isNotEmpty()) {
-                item(key = "h_pinned") { SectionHeader("Pinned") }
-                pinned.forEach { meta ->
-                    item(key = "pin_${meta.id}") {
-                        SessionItem(meta, 12.dp)
-                    }
-                }
-            }
-            timeBuckets(loose).forEach { (label, chats) ->
-                item(key = "h_$label") {
-                    Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 4.dp))
-                }
-                chats.forEach { meta ->
-                    item(key = "u_${meta.id}") {
-                        SessionItem(meta, 12.dp)
-                    }
-                }
-            }
-            if (archived.isNotEmpty()) {
-                item(key = "h_archived") {
-                    Row(
-                        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { archivedOpen = !archivedOpen }
-                            .semantics { stateDescription = if (archivedVisible) "Expanded" else "Collapsed" }
-                            .heightIn(min = Spacing.touchTarget).padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        val rotation by animateFloatAsState(if (archivedVisible) 90f else 0f, PhoneSprings.standard, label = "arch")
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = rotation })
-                        Text("Archived", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
-                        Text("${archived.size}", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
-                    }
-                }
-                if (archivedVisible) archived.forEach { meta ->
-                    item(key = "a_${meta.id}") {
-                        SessionItem(meta, 35.dp)
-                    }
-                }
-            }
-            }
-        }
-
-        Row(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .navigationBarsPadding()
-                .then(
-                    if (hasMoreBelow && !searchExpanded) {
-                        Modifier.progressiveBlurEdge(hazeState, hazeStyle, fromTop = false, edgeColor = colors.background)
-                    } else {
-                        Modifier.background(colors.background)
-                    },
-                )
-                .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            val settingsInteraction = remember { MutableInteractionSource() }
-            Box(
-                Modifier.size(Spacing.touchTarget).clip(CircleShape)
-                    .pressFeedback(settingsInteraction, pressedScale = 0.96f)
-                    .clickable(interactionSource = settingsInteraction, indication = ripple(), onClick = onOpenSettings),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier.size(Spacing.controlVisual).clip(CircleShape).background(colors.surfaceContainerHigh),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Outlined.Settings, "Settings", tint = colors.onBackground, modifier = Modifier.size(20.dp))
-                }
-            }
-            Spacer(Modifier.weight(1f))
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                val newProjectInteraction = remember { MutableInteractionSource() }
-                Box(
-                    Modifier.size(Spacing.touchTarget).clip(CircleShape)
-                        .pressFeedback(newProjectInteraction, pressedScale = 0.96f)
-                        .clickable(interactionSource = newProjectInteraction, indication = ripple(), onClick = onNewProject),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        Modifier.size(Spacing.controlVisual).clip(CircleShape).background(colors.surfaceContainerHigh),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Outlined.CreateNewFolder, "New project", tint = colors.onBackground, modifier = Modifier.size(20.dp))
-                    }
-                }
-                val newChatInteraction = remember { MutableInteractionSource() }
-                Box(
-                    Modifier.size(Spacing.touchTarget).clip(CircleShape)
-                        .pressFeedback(newChatInteraction, pressedScale = 0.96f)
-                        .clickable(interactionSource = newChatInteraction, indication = ripple()) { vm.newChat(null); onOpenChat() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        Modifier.size(44.dp).clip(CircleShape).background(colors.primary),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Outlined.Edit, "New chat", tint = colors.onPrimary, modifier = Modifier.size(22.dp))
-                    }
-                }
-            }
-        }
-
-        Column(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                .height(statusInset + 112.dp)
-                .then(
-                    if (listScrolled && !searchExpanded) {
-                        Modifier.progressiveBlurEdge(hazeState, hazeStyle, fromTop = true, edgeColor = colors.background)
-                    } else {
-                        Modifier.background(colors.background)
-                    },
-                ),
-        ) {
-            Row(
-                Modifier.fillMaxWidth().padding(top = statusInset).height(56.dp)
-                    .padding(start = 18.dp, end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_misul_mark),
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(24.dp),
-                )
-                Box(Modifier.weight(1f).height(40.dp), contentAlignment = Alignment.CenterStart) {
-                    SidebarTitleSearch(searchExpanded, query, { query = it }, searchFocus)
-                }
-                val searchInteraction = remember { MutableInteractionSource() }
-                Box(
-                    Modifier.size(48.dp).pressFeedback(searchInteraction, pressedScale = 0.96f)
-                        .clip(CircleShape)
-                        .clickable(interactionSource = searchInteraction, indication = ripple()) {
-                            if (searchExpanded) closeSearch() else searchExpanded = true
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (searchExpanded) Icons.Filled.Close else Icons.Outlined.Search,
-                        if (searchExpanded) "Close search" else "Search chats and projects",
-                        tint = colors.onBackground,
-                        modifier = Modifier.size(21.dp),
-                    )
-                }
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SidebarDestination(
-                    icon = Icons.Outlined.AutoAwesome,
-                    label = "Skills",
-                    value = state.skills.count { it.status == SkillStatus.ACTIVE }.toString(),
-                    onClick = onOpenSkills,
-                    modifier = Modifier.weight(1f),
-                )
-                SidebarDestination(
-                    icon = Icons.Outlined.Extension,
-                    label = "MCP",
-                    value = state.mcpServers.size.toString(),
-                    onClick = onOpenMcp,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-    }
-
-    renameChat?.let { meta ->
-        TextPromptDialog("Rename chat", "Chat title", meta.title, { renameChat = null }) {
-            vm.renameSession(meta.id, it); renameChat = null
-        }
-    }
-    renameProject?.let { project ->
-        TextPromptDialog("Rename project", "Project name", project.name, { renameProject = null }) {
-            vm.renameProject(project.id, it); renameProject = null
-        }
-    }
-    deleteChat?.let { meta ->
-        ConfirmDeleteDialog(
-            title = "Delete chat?",
-            detail = "${meta.title} will be permanently removed from this device. This cannot be undone.",
-            onDismiss = { deleteChat = null },
-        ) {
-            vm.deleteSession(meta.id)
-            deleteChat = null
-        }
-    }
-    deleteProject?.let { project ->
-        ConfirmDeleteDialog(
-            title = "Delete project?",
-            detail = "The project link will be removed and its chats moved to Unsorted. Workspace files stay under Recovered projects. The linked phone folder is not deleted.",
-            onDismiss = { deleteProject = null },
-        ) {
-            vm.deleteProject(project.id)
-            deleteProject = null
-        }
-    }
-}
-
-@Composable
-private fun SidebarTitleSearch(
-    expanded: Boolean,
-    query: String,
-    onQueryChange: (String) -> Unit,
-    focusRequester: FocusRequester,
-) {
-    val colors = MaterialTheme.colorScheme
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-        AnimatedVisibility(
-            visible = !expanded,
-            enter = fadeIn(tween(150, easing = PhoneEasings.easeOut)),
-            exit = fadeOut(tween(100, easing = PhoneEasings.easeOut)),
-        ) {
-            Text(
-                "Misul Agent",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = colors.onBackground,
-            )
-        }
-        AnimatedVisibility(
-            visible = expanded,
-            enter = expandHorizontally(expandFrom = Alignment.End, animationSpec = tween(220, easing = PhoneEasings.easeInOut)) +
-                fadeIn(tween(160, easing = PhoneEasings.easeOut)),
-            exit = shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = tween(170, easing = PhoneEasings.easeInOut)) +
-                fadeOut(tween(110, easing = PhoneEasings.easeOut)),
-        ) {
-            Row(
-                Modifier.fillMaxSize().clip(ShapePill).background(colors.surfaceContainerHigh)
-                    .padding(start = 12.dp, end = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Outlined.Search, null, tint = colors.secondary, modifier = Modifier.size(18.dp))
-                Box(Modifier.weight(1f).padding(start = 8.dp)) {
-                    if (query.isEmpty()) Text("Search", style = MaterialTheme.typography.bodySmall, color = colors.secondary)
-                    BasicTextField(
-                        value = query,
-                        onValueChange = onQueryChange,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onBackground),
-                        cursorBrush = SolidColor(colors.primary),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
-                            .semantics { contentDescription = "Search chats and projects" },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SidebarDestination(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        modifier.heightIn(min = 48.dp).clip(MaterialTheme.shapes.large)
-            .background(colors.surfaceContainerHigh.copy(alpha = 0.72f)).clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Icon(icon, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = colors.onBackground, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
-    }
-}
-
-/** Recency buckets for the loose chat list: Today / Yesterday / Previous 7 days / Earlier. */
-private fun timeBuckets(sessions: List<SessionMeta>): List<Pair<String, List<SessionMeta>>> {
-    val now = System.currentTimeMillis()
-    val day = 86_400_000L
-    val labels = listOf("Today", "Yesterday", "Previous 7 days", "Earlier")
-    fun idx(t: Long): Int = when {
-        now - t < day -> 0
-        now - t < 2 * day -> 1
-        now - t < 7 * day -> 2
-        else -> 3
-    }
-    return labels.indices.mapNotNull { i ->
-        val chats = sessions.filter { idx(it.updatedAt) == i }
-        if (chats.isEmpty()) null else labels[i] to chats
-    }
-}
-
-/** A drawer list-section label (Pinned / Today / ...) in the shared quiet-caption style. */
-@Composable
-private fun SectionHeader(label: String) {
-    Text(
-        label,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 4.dp),
-    )
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ChatRow(
-    meta: SessionMeta,
-    active: Boolean,
-    running: Boolean,
-    indent: androidx.compose.ui.unit.Dp,
-    onClick: () -> Unit,
-    onMenu: () -> Unit,
-    menuExpanded: Boolean,
-    onDismissMenu: () -> Unit,
-    menuContent: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 1.dp).clip(MaterialTheme.shapes.medium)
-            .background(if (active) colors.surfaceContainerHigh else androidx.compose.ui.graphics.Color.Transparent)
-            .semantics { selected = active }
-            .combinedClickable(onClick = onClick, onLongClick = onMenu)
-            .heightIn(min = 50.dp).padding(start = indent, end = 2.dp, top = 7.dp, bottom = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Two lines: title + a one-line preview. Selection is a quiet tone pill (grok-design.md).
-        Column(Modifier.weight(1f)) {
-            Text(
-                meta.title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onBackground,
-                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-            if (meta.preview.isNotEmpty()) {
-                Text(
-                    meta.preview,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.tertiary,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 1.dp),
-                )
-            }
-        }
-        Text(if (running) "Running" else formatSessionDate(meta.updatedAt), style = MaterialTheme.typography.labelSmall, color = if (running) LocalMisulAccent.current else colors.tertiary, modifier = Modifier.padding(start = 8.dp))
-        // Three-dot overflow: pin / move / archive / delete (also reachable via long-press).
-        Box(
-            contentAlignment = Alignment.Center,
-        ) {
-            PcIconButton(Icons.Filled.MoreVert, "Chat options", tint = colors.secondary, onClick = onMenu)
-            MorphingMenu(
-                expanded = menuExpanded,
-                onDismiss = onDismissMenu,
-                above = false,
-                alignEnd = true,
-                anchorSize = 48.dp,
-                modifier = Modifier.width(280.dp),
-                content = menuContent,
-            )
-        }
-    }
-}
-
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-@Composable
-private fun OptionsCard(
-    title: String,
-    onDismiss: () -> Unit,
-    body: @Composable ColumnScope.() -> Unit,
-    actions: @Composable ColumnScope.() -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    val density = LocalDensity.current
-    val maxHeight = with(density) {
-        (LocalWindowInfo.current.containerSize.height.toDp() - 32.dp)
-            .coerceAtLeast(Spacing.touchTarget * 3f)
-    }
-    val dialogScroll = rememberScrollState()
-    // Material dialog container (publish-plan N2): platform shape/tonal elevation conventions.
-    androidx.compose.material3.BasicAlertDialog(onDismissRequest = onDismiss) {
-        androidx.compose.material3.Surface(
-            modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight)
-                .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom)),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = colors.surfaceContainerHigh,
-            tonalElevation = 6.dp,
-        ) {
-            Column(Modifier.fillMaxWidth().padding(Spacing.m)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = colors.onBackground,
-                    modifier = Modifier.padding(bottom = Spacing.s),
-                )
-                Column(
-                    Modifier.fillMaxWidth().weight(1f, fill = false)
-                        .contentVerticalScroll(dialogScroll),
-                    content = body,
-                )
-                Spacer(Modifier.height(Spacing.m))
-                Column(Modifier.fillMaxWidth(), content = actions)
-            }
-        }
-    }
-}
-
-@Composable
-private fun MenuActionRow(
-    label: String,
-    icon: ImageVector,
-    destructive: Boolean = false,
-    enabled: Boolean = true,
-    selected: Boolean = false,
-    onClick: () -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    val interaction = remember { MutableInteractionSource() }
-    val contentColor = when {
-        !enabled -> colors.tertiary
-        destructive -> colors.error
-        else -> colors.onBackground
-    }
-    Row(
-        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
-            .pressFeedback(interaction, pressedScale = 0.97f)
-            .clickable(
-                interactionSource = interaction,
-                indication = ripple(),
-                enabled = enabled,
-                onClick = onClick,
-            )
-            .then(if (selected) Modifier.semantics { this.selected = true } else Modifier)
-            .heightIn(min = 48.dp).padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(11.dp),
-    ) {
-        Icon(
-            icon,
-            null,
-            tint = if (enabled && !destructive) colors.secondary else contentColor,
-            modifier = Modifier.size(19.dp),
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            color = contentColor,
-            modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun ChatOptionsMenu(
-    meta: SessionMeta,
-    projects: List<Project>,
-    onDismiss: () -> Unit,
-    onPin: () -> Unit,
-    onRequestRename: () -> Unit,
-    onMove: (String?) -> Unit,
-    onArchive: () -> Unit,
-    onDelete: () -> Unit,
-    lifecycleMutationsEnabled: Boolean,
-) {
-    var mode by remember { mutableStateOf("menu") }
-    val density = LocalDensity.current
-    val maxMenuHeight = with(density) {
-        (LocalWindowInfo.current.containerSize.height.toDp() - 16.dp)
-            .coerceAtLeast(Spacing.touchTarget * 2f)
-    }
-    Column(Modifier.fillMaxWidth().heightIn(max = maxMenuHeight).padding(6.dp)) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 42.dp).padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (mode == "move") {
-                PcIconButton(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    "Back",
-                    tint = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.graphicsLayer { rotationZ = 180f },
-                ) { mode = "menu" }
-            }
-            Text(
-                if (mode == "move") "Move to" else meta.title,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (mode == "move") {
-            LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
-                item(key = "unsorted") {
-                    val current = meta.projectId == null
-                    MenuActionRow(
-                        label = if (current) "Unsorted (current)" else "Unsorted",
-                        icon = Icons.Outlined.Inbox,
-                        enabled = !current,
-                        selected = current,
-                    ) {
-                        onMove(null)
-                        onDismiss()
-                    }
-                }
-                items(projects, key = { "project:${it.id}" }) { project ->
-                    val current = meta.projectId == project.id
-                    MenuActionRow(
-                        label = if (current) "${project.name} (current)" else project.name,
-                        icon = Icons.Outlined.Folder,
-                        enabled = !current,
-                        selected = current,
-                    ) {
-                        onMove(project.id)
-                        onDismiss()
-                    }
-                }
-            }
-        } else {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                MenuActionRow(if (meta.pinned) "Unpin" else "Pin", Icons.Outlined.PushPin) { onPin(); onDismiss() }
-                MenuActionRow("Rename", Icons.Outlined.Edit) { onDismiss(); onRequestRename() }
-                if (lifecycleMutationsEnabled) {
-                    MenuActionRow("Move to…", Icons.Outlined.Folder) { mode = "move" }
-                    MenuActionRow(if (meta.archived) "Unarchive" else "Archive", Icons.Outlined.Archive) { onArchive(); onDismiss() }
-                    MenuActionRow("Delete", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); onDismiss() }
-                } else {
-                    Text(
-                        "Stop the agent to move, archive, or delete this chat.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProjectOptionsMenu(
-    project: Project,
-    onDismiss: () -> Unit,
-    onNewChat: () -> Unit,
-    onRequestRename: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    Column(Modifier.fillMaxWidth().padding(6.dp)) {
-        Text(
-            project.name,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
-        )
-        MenuActionRow("New chat", Icons.Filled.Add) { onDismiss(); onNewChat() }
-        MenuActionRow("Rename", Icons.Outlined.Edit) { onDismiss(); onRequestRename() }
-        MenuActionRow("Delete project", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); onDismiss() }
-    }
-}
-
-@Composable
-private fun ConfirmDeleteDialog(
-    title: String,
-    detail: String,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    OptionsCard(
-        title = title,
-        onDismiss = onDismiss,
-        body = {
-            Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        },
-    ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-            Box(Modifier.weight(1f)) { PcButton("Cancel", filled = false, onClick = onDismiss) }
-            Box(Modifier.weight(1f)) { PcButton("Delete", destructive = true, onClick = onConfirm) }
-        }
-    }
-}
-
-@Composable
-private fun TextPromptDialog(title: String, placeholder: String, initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var value by remember { mutableStateOf(initial) }
-    val trimmed = value.trim()
-    val saveEnabled = renameSaveEnabled(initial, value)
-    OptionsCard(
-        title = title,
-        onDismiss = onDismiss,
-        body = {
-            PcField(value, { value = it }, placeholder)
-        },
-    ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-            Box(Modifier.weight(1f)) { PcButton("Cancel", filled = false, onClick = onDismiss) }
-            Box(Modifier.weight(1f)) {
-                PcButton("Save", enabled = saveEnabled) { onConfirm(trimmed) }
             }
         }
     }

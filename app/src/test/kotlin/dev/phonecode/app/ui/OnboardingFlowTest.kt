@@ -20,7 +20,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureScreenRoboImage
 import dev.phonecode.app.R
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.agent.ChatViewModel
@@ -30,12 +32,15 @@ import dev.phonecode.app.ui.onboarding.OnboardingScreen
 import dev.phonecode.app.ui.onboarding.providerSetupFailureMessage
 import dev.phonecode.app.ui.theme.PhoneCodeTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -51,6 +56,40 @@ class OnboardingFlowTest {
     @get:Rule
     val rule = compose
 
+    @Test
+    fun onboardingAndModelSetupUseTheSharedControlRoles() {
+        val onboarding = java.io.File(
+            "src/main/kotlin/dev/phonecode/app/ui/onboarding/OnboardingScreen.kt",
+        ).readText()
+        val setup = java.io.File(
+            "src/main/kotlin/dev/phonecode/app/ui/onboarding/ModelSetupScreen.kt",
+        ).readText()
+
+        assertFalse(onboarding.contains("PcButton"))
+        assertFalse(onboarding.contains("PcGroup"))
+        assertFalse(onboarding.contains("PcIconButton"))
+        assertFalse(onboarding.contains("PcRow"))
+        assertTrue(onboarding.contains("MisulContentRow"))
+        assertTrue(onboarding.contains("MisulNavigationRow"))
+        assertTrue(onboarding.contains("MisulActionButton"))
+        assertTrue(onboarding.contains("ActionRole.PRIMARY"))
+        assertTrue(onboarding.contains("ActionRole.QUIET"))
+        assertTrue(onboarding.contains("MisulNavigationMotion"))
+
+        assertFalse(setup.contains("PcButton"))
+        assertFalse(setup.contains("PcField"))
+        assertFalse(setup.contains("PcGroup"))
+        assertFalse(setup.contains("PcIconButton"))
+        assertFalse(setup.contains("PcRow"))
+        assertFalse(setup.contains("PcSectionLabel"))
+        assertTrue(setup.contains("MisulSelectionRow"))
+        assertTrue(setup.contains("MisulField"))
+        assertTrue(setup.contains("secure = true"))
+        assertTrue(setup.contains("MisulActionButton"))
+        assertTrue(setup.contains("MisulNavigationMotion"))
+    }
+
+    @OptIn(ExperimentalRoborazziApi::class)
     @Test
     fun onboardingUsesFocusedModelSetupAndSkipLeadsToHonestChat() {
         UiTestSecureKeyStore.clear()
@@ -96,10 +135,11 @@ class OnboardingFlowTest {
         compose.mainClock.advanceTimeBy(300)
         compose.waitForIdle()
         compose.onNodeWithText("Save and continue").assertIsNotEnabled()
-        compose.onNodeWithContentDescription("Show OpenAI API key").assertIsDisplayed()
-        compose.onRoot().captureRoboImage("screenshots/27-model-setup-api-key.png")
+        compose.onNodeWithContentDescription("Show API key").assertIsDisplayed()
+        assertStableDetailChrome("OpenAI")
+        captureScreenRoboImage("screenshots/27-model-setup-api-key.png")
         compose.onNodeWithContentDescription("OpenAI API key").performTextInput("test-key")
-        compose.onNodeWithText("API key").assertIsDisplayed()
+        compose.onNodeWithContentDescription("OpenAI API key").assertIsDisplayed()
         assertNull(UiTestSecureKeyStore.stored("openai"))
         compose.onNodeWithText("Save and continue").performClick()
         compose.waitUntil(5_000) {
@@ -185,6 +225,19 @@ class OnboardingFlowTest {
         assertEquals(
             "API key saved, but Misul Agent could not activate an available model for this provider.",
             providerSetupFailureMessage(keySaved = true),
+        )
+    }
+
+    private fun assertStableDetailChrome(title: String) {
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val back = compose.onNodeWithContentDescription("Back").fetchSemanticsNode().boundsInRoot
+        val heading = compose.onNodeWithText(title).fetchSemanticsNode().boundsInRoot
+        assertTrue("Back is outside the capture root: $back vs $root", back.left >= root.left)
+        assertTrue("Back is outside the capture root: $back vs $root", back.right <= root.right)
+        assertTrue("Title is above the capture root: $heading vs $root", heading.top >= root.top)
+        assertTrue(
+            "Title is not centered in the capture root: $heading vs $root",
+            abs((heading.left + heading.right - root.left - root.right) / 2f) <= 8f * compose.density.density,
         )
     }
 }

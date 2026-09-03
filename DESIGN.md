@@ -106,7 +106,7 @@ rounded:
   sm: "12px"
   md: "16px"
   lg: "20px"
-  composer: "24px"
+  composer: "9999px"
   sheet: "28px"
   full: "9999px"
 spacing:
@@ -156,16 +156,16 @@ components:
     backgroundColor: "{colors.surface-input-dark}"
     textColor: "{colors.ink-dark}"
     typography: "{typography.body-md}"
-    rounded: "{rounded.composer}"
+    rounded: "{rounded.full}"
     padding: "12px 12px"
-    height: "48px"
+    height: "56px"
   composer-light:
     backgroundColor: "{colors.surface-input-light}"
     textColor: "{colors.ink-light}"
     typography: "{typography.body-md}"
-    rounded: "{rounded.composer}"
+    rounded: "{rounded.full}"
     padding: "12px 12px"
-    height: "48px"
+    height: "56px"
   user-turn-dark:
     backgroundColor: "{colors.surface-input-dark}"
     textColor: "{colors.ink-dark}"
@@ -514,9 +514,8 @@ The form language is soft, precise, and functional. Rounded geometry should feel
 - **12px:** tool rows, list groups, search fields, and compact menus.
 - **16px:** standard content containers and user bubbles.
 - **20px:** primary buttons and prominent grouped controls.
-- **24px:** the resting composer; it stays 24px as multiline height grows rather than becoming a stretched pill.
 - **28px:** full-width sheets and rare large surfaces.
-- **Full/pill:** circular icon controls, status capsules, and compact selectors only.
+- **Full/pill:** the composer at every height, circular icon controls, status capsules, and compact selectors.
 
 Use continuous-looking corners where the platform supports them. Hairline rules may define an edge without changing the silhouette. The harmonic-arcs mark is the only recurring decorative geometry; do not echo it as arbitrary waves across cards or dividers.
 
@@ -542,10 +541,11 @@ Sending a message has no entrance spectacle. Echo the user turn immediately, pre
 
 The composer is the primary control and remains reachable with one hand.
 
-- Resting height: 48px; multiline growth is bounded before the field scrolls internally.
-- Leading action: attachment or contextual add menu with a visible 48px target.
+- Resting height: 56px; multiline growth rises upward to six lines before the field scrolls internally.
+- Leading action: attachment or contextual add menu with a separate visible 48px circular target.
 - Text field: plain-language placeholder tied to readiness, such as “Ask Misul” or “Connect a model to start.”
-- Trailing action: send when ready, stop while running. The silhouette stays stable as the icon changes.
+- The text surface is one true capsule, with a stable 48px trailing slot: send when ready, stop while running. Its size never animates as the icon changes.
+- When a sendable draft can be queued during a running turn, queue receives one distinct external 48px action; idle states do not reserve that empty slot.
 - Model selection belongs in session chrome, not inside the typing line.
 - Voice, camera, or future tools appear only when implemented and permission-ready.
 - Keyboard actions are immediate and unanimated. `Enter` behavior follows the user’s setting; multiline entry remains discoverable.

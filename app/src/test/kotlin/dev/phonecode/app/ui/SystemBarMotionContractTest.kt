@@ -33,10 +33,13 @@ class SystemBarMotionContractTest {
 
     @Test
     fun settingsNestedPagesUseDepthAwareAnimatedContent() {
-        val settings = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/SettingsScreen.kt")
+        val navigation = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/SettingsNavigation.kt")
 
-        assertTrue(settings.contains("label = \"mcpNestedPage\""))
-        assertTrue(settings.contains("label = \"skillNestedPage\""))
-        assertTrue(settings.contains("nestedSettingsTransition("))
+        assertTrue(navigation.contains("NavHost("))
+        assertTrue(navigation.contains("settingsRouteGraph"))
+        assertTrue(navigation.contains("enterTransition = { if (motionEnabled) MisulNavigationMotion.forwardEnter()"))
+        assertTrue(navigation.contains("exitTransition = { if (motionEnabled) MisulNavigationMotion.forwardExit()"))
+        assertTrue(navigation.contains("popEnterTransition = { if (motionEnabled) MisulNavigationMotion.backEnter()"))
+        assertTrue(navigation.contains("popExitTransition = { if (motionEnabled) MisulNavigationMotion.backExit()"))
     }
 }

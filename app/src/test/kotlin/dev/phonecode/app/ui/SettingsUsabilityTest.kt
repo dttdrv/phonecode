@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
@@ -20,6 +21,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.agent.ChatUiState
@@ -27,6 +30,8 @@ import dev.phonecode.app.data.ManagedSkill
 import dev.phonecode.app.data.SkillScope
 import dev.phonecode.app.data.SkillStatus
 import dev.phonecode.app.ui.settings.SettingsScreen
+import dev.phonecode.app.ui.settings.SettingsNavigation
+import dev.phonecode.app.ui.settings.SettingsRoute
 import dev.phonecode.app.ui.settings.customProviderDraftIsDirty
 import dev.phonecode.app.ui.settings.openExternalUrl
 import dev.phonecode.app.ui.theme.PhoneCodeTheme
@@ -50,6 +55,8 @@ import org.robolectric.annotation.GraphicsMode
     shadows = [UiTestSecureKeyStore::class],
 )
 class SettingsUsabilityTest {
+
+    private lateinit var settingsNavController: NavHostController
 
     private val seedSettings = object : ExternalResource() {
         override fun before() {
@@ -85,6 +92,33 @@ class SettingsUsabilityTest {
             }
         }
         compose.waitForIdle()
+    }
+
+    private fun showSkillRoute(id: String) {
+        val application = app()
+        val settingsVm = SettingsViewModel(application)
+        compose.activity.setContent {
+            PhoneCodeTheme(darkTheme = false) {
+                val navController = rememberNavController()
+                SideEffect { settingsNavController = navController }
+                SettingsNavigation(
+                    vm = application.chatViewModel,
+                    settingsVm = settingsVm,
+                    onExit = {},
+                    startRoute = SettingsRoute.Skills,
+                    navController = navController,
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { settingsNavController.navigate(SettingsRoute.Skill(id)) }
+        compose.waitForIdle()
+    }
+
+    private fun stateFlow(): MutableStateFlow<ChatUiState> {
+        val field = app().chatViewModel.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        return field.get(app().chatViewModel) as MutableStateFlow<ChatUiState>
     }
 
     private fun contextWithoutBrowser(): Context = object : ContextWrapper(compose.activity) {
@@ -148,17 +182,19 @@ class SettingsUsabilityTest {
     }
 
     @Test
-    fun personalizationHasAConciseNameAndSaveFeedback() {
+    fun personalizationSavesOnlyThroughItsEnabledPrimaryAction() {
         showSettings("personal")
         val field = compose.onNodeWithContentDescription("Custom instructions")
             .assertIsDisplayed()
+        compose.onNodeWithText("Save").assertIsNotEnabled()
 
         field.performTextReplacement("Prefer concise status updates.")
-        compose.onNodeWithText("Saving…").assertIsDisplayed()
+        compose.onNodeWithText("Save").assertIsDisplayed().performClick()
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("Saved").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("Save").fetchSemanticsNodes().isNotEmpty() &&
+                runCatching { compose.onNodeWithText("Save").assertIsNotEnabled() }.isSuccess
         }
-        compose.onNodeWithText("Saved").assertIsDisplayed()
+        compose.onNodeWithText("Save").assertIsNotEnabled()
     }
 
     @Test
@@ -225,6 +261,44 @@ class SettingsUsabilityTest {
                 compose.onAllNodesWithContentDescription("release-pilot enabled")
                     .fetchSemanticsNodes().isEmpty(),
             )
+        } finally {
+            state.value = original
+        }
+    }
+
+    @Test
+    fun restoredSkillRouteWaitsForItsInventoryThenRendersThePersistedSkill() {
+        val state = stateFlow()
+        val original = state.value
+        state.value = original.copy(
+            skillInventoryLoaded = false,
+            skills = emptyList(),
+        )
+        try {
+            showSkillRoute("global/release-pilot")
+            compose.onNodeWithText("Loading skills…").assertIsDisplayed()
+
+            state.value = state.value.copy(
+                skillInventoryLoaded = true,
+                skills = listOf(skill("release-pilot")),
+            )
+            compose.onNodeWithContentDescription("Edit skill").assertIsDisplayed()
+        } finally {
+            state.value = original
+        }
+    }
+
+    @Test
+    fun loadedMissingSkillRoutePopsToTheSkillsInventory() {
+        val state = stateFlow()
+        val original = state.value
+        state.value = original.copy(
+            skillInventoryLoaded = true,
+            skills = emptyList(),
+        )
+        try {
+            showSkillRoute("global/missing")
+            compose.onNodeWithText("Skills").assertIsDisplayed()
         } finally {
             state.value = original
         }
@@ -371,6 +445,11 @@ class SettingsUsabilityTest {
             compose.onNodeWithText("Save").performClick()
 
             compose.waitUntil(5_000) { java.io.File(skillDir, "SKILL.md").isFile }
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithText("Skills").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Skills").assertIsDisplayed()
+            assertTrue(compose.onAllNodesWithContentDescription("Skill name").fetchSemanticsNodes().isEmpty())
             val source = java.io.File(skillDir, "SKILL.md").readText()
             assertTrue(source.contains("name: release-guardian"))
             assertTrue(source.contains("description: Checks a release before it is published."))

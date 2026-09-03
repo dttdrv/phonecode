@@ -1,7 +1,5 @@
 package dev.phonecode.app.ui
 
-import dev.phonecode.app.ui.settings.nestedBackgroundSemanticsHidden
-import dev.phonecode.app.ui.settings.outgoingNestedContentSemanticsHidden
 import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -27,31 +25,38 @@ class PredictiveBackSemanticsTest {
     }
 
     @Test
-    fun settingsKeepsBackgroundSemanticsHiddenForTheWholeTransition() {
+    fun settingsDelegatesCleanRouteProgressAndSemanticsToItsNavHost() {
         val settings = source(
             "app/src/main/kotlin/dev/phonecode/app/ui/settings/SettingsScreen.kt",
         )
+        val settingsRoot = settings.substringAfter("fun SettingsScreen(")
+            .substringBefore("// ---------------------------------------------------------------------------------------------\n// Scaffolding")
 
-        assertTrue(settings.contains("nestedBackgroundSemanticsHidden("))
-        assertTrue(
-            settings.contains(
-                "if (backMotion.active) {\n" +
-                    "            Box(Modifier.fillMaxSize().clearAndSetSemantics {})",
-            ),
+        assertTrue(settingsRoot.contains("SettingsNavigation(vm, settingsVm, onExit = onBack, startRoute = initialRoute)"))
+        assertFalse(settingsRoot.contains("AnimatedContent("))
+        assertFalse(settingsRoot.contains("rememberPredictiveBackMotion("))
+    }
+
+    @Test
+    fun mcpAndSkillsHaveOnlyRequiredTypedRouteCallbacksAndNoSecondNavigationSystem() {
+        val navigation = source(
+            "app/src/main/kotlin/dev/phonecode/app/ui/settings/SettingsNavigation.kt",
         )
-    }
+        val mcp = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/McpSettings.kt")
+            .substringAfter("internal fun McpPage(")
+            .substringBefore("internal fun McpServerPage(")
+        val skills = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/SkillSettings.kt")
+            .substringAfter("internal fun SkillsPage(")
+            .substringBefore("internal fun SkillDetailPage(")
 
-    @Test
-    fun nestedBackgroundIsHiddenWhileEitherTransitionSideIsNested() {
-        assertTrue(nestedBackgroundSemanticsHidden(currentNested = false, targetNested = true))
-        assertTrue(nestedBackgroundSemanticsHidden(currentNested = true, targetNested = false))
-        assertTrue(nestedBackgroundSemanticsHidden(currentNested = true, targetNested = true))
-        assertFalse(nestedBackgroundSemanticsHidden(currentNested = false, targetNested = false))
-    }
-
-    @Test
-    fun onlyTheTargetNestedPageKeepsItsSemanticsDuringMotion() {
-        assertFalse(outgoingNestedContentSemanticsHidden(isTargetContent = true))
-        assertTrue(outgoingNestedContentSemanticsHidden(isTargetContent = false))
+        assertTrue(mcp.contains("onOpenServer: (String) -> Unit"))
+        assertTrue(skills.contains("onOpenSkill: (String) -> Unit"))
+        assertTrue(skills.contains("onNewSkill: () -> Unit"))
+        listOf(mcp, skills).forEach { page ->
+            assertFalse(page.contains("AnimatedContent("))
+            assertFalse(page.contains("rememberPredictiveBackMotion("))
+            assertFalse(page.contains("onNestedBackActive"))
+        }
+        assertTrue(navigation.contains("DiscardChangesBackHandler"))
     }
 }

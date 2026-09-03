@@ -16,8 +16,5 @@ val PhoneShapes = Shapes(
 
 val ShapePill = RoundedCornerShape(percent = 50)
 
-// The composer capsule has a fixed radius equal to half its 48dp resting outer height. A fixed
-// radius keeps multiline growth generous without the corner distortion of a percent-based pill.
-val ShapeComposer = RoundedCornerShape(24.dp)
 val ShapeButton = RoundedCornerShape(18.dp)
 val ShapeMediumIcon = RoundedCornerShape(13.dp)

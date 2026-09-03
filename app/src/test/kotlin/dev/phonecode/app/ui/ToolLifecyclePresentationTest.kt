@@ -6,7 +6,7 @@ import org.junit.Test
 
 class ToolLifecyclePresentationTest {
     private fun action(tool: String, status: ToolStatus): String {
-        val method = Class.forName("dev.phonecode.app.ui.chat.ChatScreenKt")
+        val method = Class.forName("dev.phonecode.app.ui.chat.ChatTurnKt")
             .getDeclaredMethod("toolAction", String::class.java, ToolStatus::class.java)
             .apply { isAccessible = true }
         return method.invoke(null, tool, status) as String

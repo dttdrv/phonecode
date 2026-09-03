@@ -4,8 +4,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -25,15 +23,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,14 +41,18 @@ import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.phonecode.app.R
-import dev.phonecode.app.ui.components.PcButton
-import dev.phonecode.app.ui.components.PcGroup
-import dev.phonecode.app.ui.components.PcIconButton
-import dev.phonecode.app.ui.components.PcRow
+import dev.phonecode.app.ui.components.ActionRole
+import dev.phonecode.app.ui.components.MisulActionButton
+import dev.phonecode.app.ui.components.MisulContentRow
+import dev.phonecode.app.ui.components.MisulGroup
+import dev.phonecode.app.ui.components.MisulIconButton
+import dev.phonecode.app.ui.components.MisulNavigationRow
+import dev.phonecode.app.ui.navigation.MisulNavigationMotion
 import dev.phonecode.app.ui.theme.LocalMisulAccent
 import dev.phonecode.app.ui.theme.PhoneEasings
 
@@ -88,12 +87,13 @@ fun OnboardingScreen(
             targetState = step,
             transitionSpec = {
                 val forward = targetState > initialState
-                val enterOffset: (Int) -> Int = { if (forward) it / 3 else -it / 3 }
-                val exitOffset: (Int) -> Int = { if (forward) -it / 4 else it / 4 }
-                (slideInHorizontally(tween(240, easing = PhoneEasings.easeInOut), enterOffset) +
-                    fadeIn(tween(180, easing = PhoneEasings.easeOut))) togetherWith
-                    (slideOutHorizontally(tween(160, easing = PhoneEasings.easeInOut), exitOffset) +
-                        fadeOut(tween(120, easing = PhoneEasings.easeOut)))
+                if (forward) {
+                    (MisulNavigationMotion.forwardEnter() + fadeIn(tween(180, easing = PhoneEasings.easeOut))) togetherWith
+                        (MisulNavigationMotion.forwardExit() + fadeOut(tween(120, easing = PhoneEasings.easeOut)))
+                } else {
+                    (MisulNavigationMotion.backEnter() + fadeIn(tween(180, easing = PhoneEasings.easeOut))) togetherWith
+                        (MisulNavigationMotion.backExit() + fadeOut(tween(120, easing = PhoneEasings.easeOut)))
+                }
             },
             label = "onboarding",
         ) { currentStep ->
@@ -167,15 +167,21 @@ private fun Welcome(onNext: () -> Unit) {
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(28.dp))
-            PcGroup {
+            MisulGroup {
                 FeatureRow(Icons.Outlined.Folder, "Private project workspaces", "Keep each project and its chats together")
                 FeatureRow(Icons.Outlined.AccountTree, "Local tools and Git", "Build, test, and manage source control on device")
-                FeatureRow(Icons.Outlined.Cloud, "Your choice of model", "Sign in or add provider access")
+                FeatureRow(
+                    Icons.Outlined.Cloud,
+                    "Your choice of model",
+                    "Sign in or add provider access",
+                    showDivider = false,
+                )
             }
         }
-        PcButton(
-            text = "Get started",
-            modifier = Modifier.heightIn(min = 56.dp),
+        MisulActionButton(
+            label = "Get started",
+            role = ActionRole.PRIMARY,
+            modifier = Modifier.fillMaxWidth(),
             onClick = onNext,
         )
         Spacer(Modifier.height(24.dp))
@@ -205,7 +211,7 @@ private fun Connect(
             Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            PcIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClick = onBack)
+            MisulIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClick = onBack)
             Text(
                 "Setup",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
@@ -235,12 +241,13 @@ private fun Connect(
                 color = colors.onSurfaceVariant,
             )
             Spacer(Modifier.height(24.dp))
-            PcGroup {
+            MisulGroup {
                 OptionRow(
                     icon = Icons.Outlined.Cloud,
                     title = "Connect a model",
                     sub = if (modelReady) "Model configured on this device" else "Required for agent work",
                     complete = modelReady,
+                    active = !modelReady,
                     onClick = onConnectModels,
                 )
                 OptionRow(
@@ -248,6 +255,7 @@ private fun Connect(
                     title = "Link a phone folder",
                     sub = if (projectReady) "Folder linked for shared file access" else "Optional access to files already on your phone",
                     complete = projectReady,
+                    active = false,
                     onClick = onCreateProject,
                 )
                 OptionRow(
@@ -255,6 +263,8 @@ private fun Connect(
                     title = "Connect GitHub",
                     sub = if (githubReady) "GitHub account connected" else "Optional for repository sync",
                     complete = githubReady,
+                    active = false,
+                    showDivider = false,
                     onClick = onConnectGitHub,
                 )
             }
@@ -272,10 +282,11 @@ private fun Connect(
                     },
             )
         }
-        PcButton(
-            text = "Start building",
+        MisulActionButton(
+            label = "Start building",
+            role = ActionRole.PRIMARY,
             enabled = modelReady,
-            modifier = Modifier.padding(horizontal = 20.dp).heightIn(min = 56.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
             onClick = onDone,
         )
         if (!modelReady) {
@@ -288,11 +299,12 @@ private fun Connect(
             )
         }
         if (!modelReady) {
-            TextButton(
-                onClick = onSkip,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 20.dp),
-            ) {
-                Text("Explore without a model")
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                MisulActionButton(
+                    label = "Explore without a model",
+                    role = ActionRole.QUIET,
+                    onClick = onSkip,
+                )
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -300,9 +312,14 @@ private fun Connect(
 }
 
 @Composable
-private fun FeatureRow(icon: ImageVector, title: String, sub: String) {
+private fun FeatureRow(
+    icon: ImageVector,
+    title: String,
+    sub: String,
+    showDivider: Boolean = true,
+) {
     val colors = MaterialTheme.colorScheme
-    PcRow {
+    MisulContentRow(showDivider = showDivider) {
         Icon(icon, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(22.dp))
         Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
@@ -312,20 +329,27 @@ private fun FeatureRow(icon: ImageVector, title: String, sub: String) {
 }
 
 @Composable
-private fun OptionRow(icon: ImageVector, title: String, sub: String, complete: Boolean, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val accent = LocalMisulAccent.current
-    PcRow(onClick = onClick) {
-        Icon(icon, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(24.dp))
-        Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-            Text(sub, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 1.dp))
-        }
-        Icon(
-            if (complete) Icons.Filled.Check else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            null,
-            tint = if (complete) accent else colors.tertiary,
-            modifier = Modifier.size(20.dp),
-        )
+private fun OptionRow(
+    icon: ImageVector,
+    title: String,
+    sub: String,
+    complete: Boolean,
+    active: Boolean,
+    showDivider: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val state = when {
+        complete -> "Complete"
+        active -> "Required"
+        else -> "Optional"
     }
+    MisulNavigationRow(
+        label = title,
+        supportingText = sub,
+        value = state,
+        icon = icon,
+        showDivider = showDivider,
+        modifier = Modifier.semantics { stateDescription = state },
+        onClick = onClick,
+    )
 }

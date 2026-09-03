@@ -51,4 +51,30 @@ class LegacySessionImportTest {
             messages = List(257) { PersistedMessage(PersistedRole.USER, emptyList()) },
         ).toMisulImportSession("openai", "gpt-5.6", "openai_chat")
     }
+
+    @Test
+    fun activeMigrationKeepsTheNewest256Messages() {
+        val session = PersistedSession(
+            id = "long-active-chat",
+            title = "Long",
+            updatedAt = 1,
+            messages = List(300) { index ->
+                PersistedMessage(PersistedRole.USER, listOf(PersistedPart.Text("message-$index")))
+            },
+        )
+
+        val imported = session.toBoundedMisulImportSession("openai", "gpt-5.6", "openai_chat").messages
+
+        assertEquals(256, imported.length())
+        assertEquals(
+            "message-44",
+            imported.getJSONObject(0).getJSONObject("user")
+                .getJSONArray("content").getJSONObject(0).getJSONObject("text").getString("text"),
+        )
+        assertEquals(
+            "message-299",
+            imported.getJSONObject(255).getJSONObject("user")
+                .getJSONArray("content").getJSONObject(0).getJSONObject("text").getString("text"),
+        )
+    }
 }

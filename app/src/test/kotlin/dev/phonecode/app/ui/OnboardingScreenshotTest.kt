@@ -1,8 +1,12 @@
 package dev.phonecode.app.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -53,6 +57,8 @@ class OnboardingScreenshotTest {
         compose.waitForIdle()
         compose.onNodeWithText("Misul Agent").assertIsDisplayed()
         compose.onNodeWithText("Get started").assertIsDisplayed()
+        compose.onNodeWithText("Private project workspaces").assertHasNoClickAction()
+        compose.onAllNodesWithTag("misul-row-divider-content").assertCountEquals(2)
         compose.onRoot().captureRoboImage("screenshots/15-onboarding-welcome.png")
         compose.onNodeWithText("Get started").performClick()
         compose.mainClock.advanceTimeBy(500)

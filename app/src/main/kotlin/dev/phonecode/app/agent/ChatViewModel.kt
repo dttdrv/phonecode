@@ -39,7 +39,7 @@ import dev.phonecode.app.runtime.MisulModel
 import dev.phonecode.app.runtime.MisulProvider
 import dev.phonecode.app.runtime.MisulRuntimeEvent
 import dev.phonecode.app.runtime.MisulRuntimeSpec
-import dev.phonecode.app.runtime.toMisulImportSession
+import dev.phonecode.app.runtime.toBoundedMisulImportSession
 import dev.phonecode.provider.catalog.Catalog
 import dev.phonecode.provider.catalog.CatalogLoader
 import dev.phonecode.provider.domain.ChatMessage
@@ -178,6 +178,7 @@ data class ChatUiState(
     val retry: RetryState? = null,
     val todos: List<TodoItem> = emptyList(),
     val mcpServers: Map<String, McpServerConfig> = emptyMap(),
+    val mcpInventoryLoaded: Boolean = false,
     val mcpSnapshots: Map<String, McpServerSnapshot> = emptyMap(),
     val mcpToolCount: Int = 0,
     val mcpConnecting: Set<String> = emptySet(),
@@ -185,10 +186,10 @@ data class ChatUiState(
     val mcpOperationError: String? = null,
     val providerConfigError: String? = null,
     val skills: List<ManagedSkill> = emptyList(),
+    val skillInventoryLoaded: Boolean = false,
     val sessions: List<SessionMeta> = emptyList(),
-    // Bumped whenever `lines` is REWOUND (redo) - the chat list keys its index-cache remembers
-    // on this so truncation doesn't leak stale animation/identity state (index keys are otherwise
-    // append-only-safe).
+    // Bumped whenever a timeline is replaced or rewound. The chat list treats a new epoch as a
+    // restored baseline so reused indices cannot inherit per-row UI state from prior history.
     val timelineEpoch: Int = 0,
     val projects: List<Project> = emptyList(),
     val sharedFolders: List<SharedFolder> = emptyList(),
@@ -374,8 +375,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             delay(STARTUP_DEFER_MILLIS)
             configDir.mkdirs()
-            repo.seedBundledSkills(app.assets)
-            refreshSkillsNow()
+            runCatching {
+                repo.seedBundledSkills(app.assets)
+                refreshSkillsNow()
+            }.onFailure { failure ->
+                if (failure is kotlinx.coroutines.CancellationException) throw failure
+                // A restored skill route must not wait forever when the one-time seed fails.
+                _state.update {
+                    it.copy(
+                        skillInventoryLoaded = true,
+                        error = failure.message ?: "Skills could not be loaded",
+                    )
+                }
+            }
             _state.update { it.copy(sessions = sessionStore.list(), projects = projectStore.list()) }
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -419,6 +431,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     _state.update {
                         it.copy(
                             lines = lines,
+                            timelineEpoch = it.timelineEpoch + 1,
                             currentSessionId = latest.id,
                             currentProjectId = activeProjectId,
                             error = if (interrupted) TURN_INTERRUPTED_MESSAGE else it.error,
@@ -1049,6 +1062,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update {
                     it.copy(
                         lines = restored.toChatLines(),
+                        timelineEpoch = it.timelineEpoch + 1,
                         streaming = "",
                         streamingReasoning = "",
                         usageInput = 0,
@@ -1374,15 +1388,36 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun reconnectMcpNow(force: Boolean = false) = mcpReloadMutex.withLock {
-        val fingerprint = repo.runtimeFingerprint(workspace).mcp
+        val fingerprint = runCatching { repo.runtimeFingerprint(workspace).mcp }.getOrElse { failure ->
+            _state.update {
+                it.copy(
+                    mcpInventoryLoaded = true,
+                    mcpConnecting = emptySet(),
+                    mcpConfigError = failure.message ?: "MCP configuration could not be read",
+                    mcpOperationError = null,
+                )
+            }
+            return@withLock
+        }
         if (!force && fingerprint == lastMcpFingerprint) return@withLock
-        val loaded = repo.loadMcpConfigState()
+        val loaded = runCatching { repo.loadMcpConfigState() }.getOrElse { failure ->
+            _state.update {
+                it.copy(
+                    mcpInventoryLoaded = true,
+                    mcpConnecting = emptySet(),
+                    mcpConfigError = failure.message ?: "MCP configuration could not be read",
+                    mcpOperationError = null,
+                )
+            }
+            return@withLock
+        }
         if (loaded is McpConfigLoad.Invalid) {
             mcpTools = emptyList()
             rebuildTools()
             lastMcpFingerprint = fingerprint
             _state.update {
                 it.copy(
+                    mcpInventoryLoaded = true,
                     mcpConnecting = emptySet(),
                     mcpSnapshots = emptyMap(),
                     mcpToolCount = 0,
@@ -1396,6 +1431,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             it.copy(
                 mcpServers = config.mcp,
+                mcpInventoryLoaded = true,
                 mcpConnecting = config.mcp.filterValues { server -> server.enabled }.keys,
                 mcpConfigError = null,
                 mcpOperationError = null,
@@ -1414,6 +1450,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             it.copy(
                 mcpServers = config.mcp,
+                mcpInventoryLoaded = true,
                 mcpSnapshots = connected.snapshots,
                 mcpToolCount = connected.tools.size,
                 mcpConnecting = emptySet(),
@@ -1493,11 +1530,32 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
 
     private fun refreshSkillsNow() {
-        val inventory = repo.scanSkills(workspace)
-        discoveredSkills = inventory.active
-        rebuildTools()
-        lastSkillsFingerprint = repo.runtimeFingerprint(workspace).skills
-        _state.update { it.copy(skills = inventory.items) }
+        runCatching {
+            repo.scanSkills(workspace) to repo.runtimeFingerprint(workspace).skills
+        }.fold(
+            onSuccess = { (inventory, fingerprint) ->
+                _state.update { it.copy(skills = inventory.items, skillInventoryLoaded = true) }
+                runCatching {
+                    discoveredSkills = inventory.active
+                    rebuildTools()
+                    lastSkillsFingerprint = fingerprint
+                }.onFailure { failure ->
+                    if (failure is kotlinx.coroutines.CancellationException) throw failure
+                    _state.update {
+                        it.copy(error = failure.message ?: "Skills could not be loaded")
+                    }
+                }
+            },
+            onFailure = { failure ->
+                if (failure is kotlinx.coroutines.CancellationException) throw failure
+                _state.update {
+                    it.copy(
+                        skillInventoryLoaded = true,
+                        error = failure.message ?: "Skills could not be loaded",
+                    )
+                }
+            },
+        )
     }
 
     private suspend fun refreshRuntimeConfiguration() = runtimeReloadMutex.withLock {
@@ -1943,6 +2001,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                 disabledProviders = restored.disabledProviders,
                                 autoAccept = restored.settings.autoAccept,
                                 lines = restored.messages.toChatLines(),
+                                timelineEpoch = it.timelineEpoch + 1,
                                 currentSessionId = restored.session.id,
                                 currentProjectId = activeProjectId,
                                 sessions = restored.sessions,
@@ -1998,6 +2057,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         selected: ModelOption,
         pinnedWorkspace: File,
         credential: String,
+        projectId: String?,
     ): MisulRuntimeSpec {
         require(preset.wireFormat == WireFormat.OPENAI_COMPAT) { "${preset.displayName} is not available in this alpha" }
         val limits = limitFor(selected)
@@ -2016,7 +2076,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         return MisulRuntimeSpec(
             workspaceRoot = pinnedWorkspace,
-            stateRoot = File(getApplication<Application>().filesDir, "misul/state"),
+            stateRoot = misulStateRoot(getApplication<Application>().filesDir, projectId),
             systemPrompt = systemPrompt,
             model = MisulModel(
                 id = selected.modelId,
@@ -2166,8 +2226,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 ) {
                     sessionStore.setBranchInitialized(turnSessionId)
                 }
-                val runtimeSpec = misulRuntimeSpec(preset, selected, pinnedWorkspace, credential)
-                importLegacySessionsOnce(runtimeSpec, turnSessionId, startingHistory)
+                val runtimeSpec = misulRuntimeSpec(preset, selected, pinnedWorkspace, credential, turnProjectId)
+                importActiveSession(runtimeSpec, turnSessionId, startingHistory)
                 var promptText = text
                 while (gen == generation) {
                     val completeText = StringBuilder()
@@ -2565,31 +2625,23 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return snapshot
     }
 
-    private suspend fun importLegacySessionsOnce(
+    private suspend fun importActiveSession(
         spec: MisulRuntimeSpec,
         activeSessionId: String,
         activeHistoryBeforePrompt: List<ChatMessage>,
     ) {
-        val receipt = File(spec.stateRoot, LEGACY_SESSION_IMPORT_RECEIPT)
-        if (receipt.isFile) return
-        val sessions = sessionStore.list().mapNotNull { meta ->
-            sessionStore.load(meta.id)?.let { session ->
-                if (session.id == activeSessionId) {
-                    session.copy(messages = activeHistoryBeforePrompt.map { it.toPersisted() })
-                } else {
-                    session
-                }
-            }
-        }.map { session ->
-            session.toMisulImportSession(
-                provider = spec.provider.id,
-                model = spec.model.id,
-                api = spec.provider.dialect,
-            )
-        }
-        val imported = misulRuntime.importSessions(spec, sessions)
-        receipt.parentFile?.mkdirs()
-        receipt.writeTextAtomically("schema=phonecode-misul-legacy-import-v1\nsessions=${sessions.size}\nimported=$imported\n")
+        val session = sessionStore.load(activeSessionId) ?: return
+        val active = session.copy(messages = activeHistoryBeforePrompt.map { it.toPersisted() })
+        misulRuntime.importSessions(
+            spec,
+            listOf(
+                active.toBoundedMisulImportSession(
+                    provider = spec.provider.id,
+                    model = spec.model.id,
+                    api = spec.provider.dialect,
+                ),
+            ),
+        )
     }
 
     private fun fail(message: String) = _state.update { it.copy(error = humanizeError(message), interruptedTurn = false) }
@@ -2777,9 +2829,18 @@ private const val CATALOG_REFRESH_TTL_MS = 6L * 60 * 60 * 1000
 private const val CODEX_REFRESH_TTL_MS = 5L * 60 * 1000
 private val STARTUP_DEFER_MILLIS = if (Build.FINGERPRINT == "robolectric") 0L else 1_500L
 private const val MAX_TOOL_INPUT_CHARS = 64_000
-private const val LEGACY_SESSION_IMPORT_RECEIPT = "phonecode-legacy-import-v1.receipt"
 private const val STREAM_UI_INTERVAL_NANOS = 50_000_000L
-private val PROJECT_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,119}")
+internal val PROJECT_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,119}")
+
+internal fun misulStateRoot(filesDir: File, projectId: String?): File {
+    require(projectId == null || PROJECT_ID.matches(projectId)) { "Invalid project id" }
+    val root = File(filesDir, "misul/state").canonicalFile
+    val parent = if (projectId == null) root else File(root, "projects").canonicalFile
+    require(projectId == null || parent.parentFile == root) { "Misul project state root was redirected" }
+    val scoped = File(parent, projectId ?: "unassigned").canonicalFile
+    require(scoped.parentFile == parent) { "Misul state must remain inside its project scope" }
+    return scoped
+}
 private const val BUNDLED_CATALOG = """
 {
   "openai":{"id":"openai","name":"OpenAI","models":{"gpt-5.6":{"id":"gpt-5.6","name":"GPT-5.6","reasoning":true,"reasoning_options":[{"type":"effort","values":["none","low","medium","high","xhigh","max"]}],"tool_call":true,"attachment":true,"limit":{"context":1050000,"output":128000}},"gpt-5.6-sol":{"id":"gpt-5.6-sol","name":"GPT-5.6 Sol","reasoning":true,"reasoning_options":[{"type":"effort","values":["none","low","medium","high","xhigh","max"]}],"tool_call":true,"attachment":true,"limit":{"context":1050000,"output":128000}},"gpt-5.6-terra":{"id":"gpt-5.6-terra","name":"GPT-5.6 Terra","reasoning":true,"reasoning_options":[{"type":"effort","values":["none","low","medium","high","xhigh","max"]}],"tool_call":true,"attachment":true,"limit":{"context":1050000,"output":128000}},"gpt-5.6-luna":{"id":"gpt-5.6-luna","name":"GPT-5.6 Luna","reasoning":true,"reasoning_options":[{"type":"effort","values":["none","low","medium","high","xhigh","max"]}],"tool_call":true,"attachment":true,"limit":{"context":1050000,"output":128000}},"gpt-5.5":{"id":"gpt-5.5","name":"GPT-5.5"},"o3":{"id":"o3","name":"o3"}}},

@@ -9,12 +9,23 @@ import org.json.JSONTokener
 
 internal data class MisulImportSession(val id: String, val messages: JSONArray)
 
+private const val MAX_MISUL_IMPORT_MESSAGES = 256
+
+internal fun PersistedSession.toBoundedMisulImportSession(
+    provider: String,
+    model: String,
+    api: String,
+): MisulImportSession = copy(messages = messages.takeLast(MAX_MISUL_IMPORT_MESSAGES))
+    .toMisulImportSession(provider, model, api)
+
 internal fun PersistedSession.toMisulImportSession(
     provider: String,
     model: String,
     api: String,
 ): MisulImportSession {
-    require(messages.size <= 256) { "Session $id exceeds the 256-message migration limit" }
+    require(messages.size <= MAX_MISUL_IMPORT_MESSAGES) {
+        "Session $id exceeds the $MAX_MISUL_IMPORT_MESSAGES-message migration limit"
+    }
     val toolNames = buildMap {
         messages.flatMap { it.parts }.filterIsInstance<PersistedPart.ToolCall>().forEach { put(it.id, it.name) }
     }

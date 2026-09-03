@@ -9,8 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
@@ -32,13 +30,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,14 +56,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonecode.app.agent.ChatViewModel
-import dev.phonecode.app.ui.components.PcButton
-import dev.phonecode.app.ui.components.PcField
-import dev.phonecode.app.ui.components.PcGroup
-import dev.phonecode.app.ui.components.PcIconButton
-import dev.phonecode.app.ui.components.PcRow
-import dev.phonecode.app.ui.components.PcSectionLabel
+import dev.phonecode.app.ui.components.ActionRole
+import dev.phonecode.app.ui.components.MisulActionButton
+import dev.phonecode.app.ui.components.MisulContentRow
+import dev.phonecode.app.ui.components.MisulField
+import dev.phonecode.app.ui.components.MisulGroup
+import dev.phonecode.app.ui.components.MisulIconButton
+import dev.phonecode.app.ui.components.MisulNavigationRow
+import dev.phonecode.app.ui.components.MisulSelectionRow
+import dev.phonecode.app.ui.components.MisulSectionLabel
+import dev.phonecode.app.ui.components.MisulTextAction
 import dev.phonecode.app.ui.components.predictiveBackTransform
 import dev.phonecode.app.ui.components.rememberPredictiveBackMotion
+import dev.phonecode.app.ui.navigation.MisulNavigationMotion
 import dev.phonecode.app.ui.theme.Spacing
 import dev.phonecode.app.ui.theme.PhoneEasings
 import dev.phonecode.app.ui.theme.PhoneSprings
@@ -126,12 +127,13 @@ fun ModelSetupScreen(
                     EnterTransition.None togetherWith ExitTransition.None
                 } else {
                     val forward = targetState != null
-                    (slideInHorizontally(tween(220, easing = PhoneEasings.easeInOut)) {
-                        if (forward) it / 4 else -it / 4
-                    } + fadeIn(tween(160, easing = PhoneEasings.easeOut))) togetherWith
-                        (slideOutHorizontally(tween(180, easing = PhoneEasings.easeInOut)) {
-                            if (forward) -it / 4 else it / 4
-                        } + fadeOut(tween(120, easing = PhoneEasings.easeOut)))
+                    if (forward) {
+                        (MisulNavigationMotion.forwardEnter() + fadeIn(tween(160, easing = PhoneEasings.easeOut))) togetherWith
+                            (MisulNavigationMotion.forwardExit() + fadeOut(tween(120, easing = PhoneEasings.easeOut)))
+                    } else {
+                        (MisulNavigationMotion.backEnter() + fadeIn(tween(160, easing = PhoneEasings.easeOut))) togetherWith
+                            (MisulNavigationMotion.backExit() + fadeOut(tween(120, easing = PhoneEasings.easeOut)))
+                    }
                 }
             },
             contentKey = { it },
@@ -188,9 +190,10 @@ private fun ProviderChoice(
         onBack = onBack,
         footer = if (codexConnected) {
             {
-                PcButton(
-                    text = "Continue with ChatGPT",
-                    modifier = Modifier.heightIn(min = 56.dp),
+                MisulActionButton(
+                    label = "Continue with ChatGPT",
+                    role = ActionRole.PRIMARY,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (vm.activateProvider("codex")) onConfigured()
                 }
@@ -217,10 +220,10 @@ private fun ProviderChoice(
         }
 
         if (codexOAuthAvailable) {
-            PcSectionLabel("ChatGPT")
+            MisulSectionLabel("ChatGPT")
             if (codexConnected) {
-                PcGroup {
-                    PcRow {
+                MisulGroup {
+                    MisulContentRow(showDivider = false) {
                         Icon(Icons.Outlined.Cloud, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(24.dp))
                         Column(Modifier.weight(1f)) {
                             Text("ChatGPT", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
@@ -230,7 +233,10 @@ private fun ProviderChoice(
                     }
                 }
             } else {
-                PcButton("Sign in with ChatGPT") {
+                MisulActionButton(
+                    label = "Sign in with ChatGPT",
+                    role = ActionRole.PRIMARY,
+                ) {
                     vm.startCodexSignIn()?.let { url ->
                         runCatching {
                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -242,7 +248,7 @@ private fun ProviderChoice(
             }
         }
 
-        PcSectionLabel("Recommended providers")
+        MisulSectionLabel("Recommended providers")
         Column(
             Modifier.fillMaxWidth().animateContentSize(animationSpec = PhoneSprings.standardSpec()),
             verticalArrangement = Arrangement.spacedBy(Spacing.s),
@@ -253,9 +259,9 @@ private fun ProviderChoice(
                 onSelectProvider = onSelectProvider,
             )
             if (otherProviders.isNotEmpty()) {
-                PcButton(
-                    text = if (showAllProviders) "Fewer providers" else "More providers",
-                    filled = false,
+                MisulActionButton(
+                    label = if (showAllProviders) "Fewer providers" else "More providers",
+                    role = ActionRole.QUIET,
                 ) {
                     showAllProviders = !showAllProviders
                 }
@@ -277,25 +283,24 @@ private fun ProviderGroup(
     vm: ChatViewModel,
     onSelectProvider: (String) -> Unit,
 ) {
-    val colors = MaterialTheme.colorScheme
-    PcGroup {
-        providers.forEach { provider ->
+    MisulGroup {
+        providers.forEachIndexed { index, provider ->
             val configured = vm.keyFor(provider.id).isNotBlank()
-            PcRow(onClick = { onSelectProvider(provider.id) }) {
-                Icon(Icons.Outlined.Cloud, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(provider.displayName, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                    Text(
-                        if (configured) "Configured" else "Add an API key",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceVariant,
-                    )
-                }
-                Icon(
-                    if (configured) Icons.Filled.Check else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    null,
-                    tint = if (configured) colors.primary else colors.tertiary,
-                    modifier = Modifier.size(20.dp),
+            if (configured) {
+                MisulSelectionRow(
+                    label = provider.displayName,
+                    supportingText = "Configured",
+                    selected = true,
+                    showDivider = index != providers.lastIndex,
+                    onClick = { onSelectProvider(provider.id) },
+                )
+            } else {
+                MisulNavigationRow(
+                    label = provider.displayName,
+                    supportingText = "Add an API key",
+                    icon = Icons.Outlined.Cloud,
+                    showDivider = index != providers.lastIndex,
+                    onClick = { onSelectProvider(provider.id) },
                 )
             }
         }
@@ -322,10 +327,11 @@ private fun ApiKeySetup(
         title = provider.displayName,
         onBack = onBack,
         footer = {
-            PcButton(
-                text = if (key.isBlank() && hasStoredKey) "Use configured provider" else "Save and continue",
+            MisulActionButton(
+                label = if (key.isBlank() && hasStoredKey) "Use configured provider" else "Save and continue",
+                role = ActionRole.PRIMARY,
                 enabled = canContinue,
-                modifier = Modifier.heightIn(min = 56.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 val configured = if (key.isBlank()) {
                     vm.activateProvider(provider.id)
@@ -363,37 +369,22 @@ private fun ApiKeySetup(
             SetupError(it, onDismissError)
         }
         Spacer(Modifier.height(Spacing.l))
-        PcField(
+        MisulField(
             value = key,
             onValueChange = {
                 key = it
                 error = null
             },
             placeholder = if (hasStoredKey) "New API key (optional)" else "API key",
-            password = true,
+            secure = true,
             contentDescription = "${provider.displayName} API key",
             label = "API key",
+            error = error ?: if (secureStorageUnavailable) {
+                "Secure storage is unavailable on this device, so Misul Agent cannot save this key."
+            } else {
+                null
+            },
         )
-        if (secureStorageUnavailable) {
-            Spacer(Modifier.height(Spacing.s))
-            Text(
-                "Secure storage is unavailable on this device, so Misul Agent cannot save this key.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.error,
-            )
-        }
-        error?.let {
-            Spacer(Modifier.height(Spacing.s))
-            Text(
-                it,
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.error,
-                modifier = Modifier.semantics {
-                    error(it)
-                    liveRegion = LiveRegionMode.Polite
-                },
-            )
-        }
     }
 }
 
@@ -423,9 +414,7 @@ private fun SetupError(message: String, onDismiss: () -> Unit) {
             color = colors.onErrorContainer,
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) {
-            Text("Dismiss", color = colors.onErrorContainer)
-        }
+        MisulTextAction("Dismiss", onClick = onDismiss)
     }
 }
 
@@ -446,7 +435,7 @@ private fun SetupPage(
             Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            PcIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClick = onBack)
+            MisulIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClick = onBack)
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),

@@ -3,6 +3,8 @@ package dev.phonecode.app.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertIsToggleable
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
@@ -14,14 +16,18 @@ import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
+import androidx.activity.ComponentActivity
 import dev.phonecode.app.agent.ChatUiState
 import dev.phonecode.app.agent.ChatLine
 import dev.phonecode.app.agent.PermissionRequest
@@ -49,6 +55,21 @@ import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.Offset
+import dev.phonecode.app.ui.components.MisulDialog
+import dev.phonecode.app.ui.components.MisulDialogAction
+import dev.phonecode.app.ui.components.MisulField
+import dev.phonecode.app.ui.components.MisulGroup
+import dev.phonecode.app.ui.components.MisulNavigationRow
+import dev.phonecode.app.ui.components.MisulSelectionRow
+import dev.phonecode.app.ui.components.MisulSearchField
+import dev.phonecode.app.ui.components.MisulToggleRow
+import dev.phonecode.app.ui.theme.PhoneCodeTheme
 
 /**
  * Robolectric smoke tests over the REAL app composition: launch PhoneCodeApp and press everything
@@ -63,6 +84,79 @@ import java.util.concurrent.atomic.AtomicInteger
     shadows = [UiTestSecureKeyStore::class],
 )
 class UiSmokeTest {
+
+    @Test
+    fun workspaceDrawerIsAnExtractedImmutableSurfaceWithDedicatedMenus() {
+        val drawerRoot = java.io.File("src/main/kotlin/dev/phonecode/app/ui/drawer")
+        val app = java.io.File("src/main/kotlin/dev/phonecode/app/ui/PhoneCodeApp.kt").readText()
+        val drawer = java.io.File(drawerRoot, "WorkspaceDrawer.kt")
+        val menus = java.io.File(drawerRoot, "WorkspaceDrawerMenus.kt")
+
+        assertTrue(drawer.isFile)
+        assertTrue(menus.isFile)
+        assertTrue(app.contains("WorkspaceDrawer("))
+        assertFalse(app.contains("private fun Sidebar("))
+        assertTrue(drawer.readText().contains("data class WorkspaceDrawerState"))
+        assertFalse(drawer.readText().contains("ChatViewModel"))
+        assertTrue(drawer.readText().contains("testTag(\"workspace-drawer\")"))
+        assertTrue(menus.readText().contains("fun WorkspaceDrawerMenu("))
+        assertTrue(menus.readText().contains("destructive = true"))
+    }
+
+    @Test
+    fun settingsFoundationExtractsTheShellAndExactRootGroups() {
+        val settingsRoot = java.io.File("src/main/kotlin/dev/phonecode/app/ui/settings")
+        val screen = java.io.File(settingsRoot, "SettingsScreen.kt").readText()
+        val components = java.io.File(settingsRoot, "SettingsComponents.kt")
+        val home = java.io.File(settingsRoot, "SettingsHome.kt")
+        val workspace = java.io.File(settingsRoot, "WorkspaceSettings.kt")
+        val data = java.io.File(settingsRoot, "DataSettings.kt")
+
+        assertTrue(components.isFile)
+        assertTrue(home.isFile)
+        assertTrue(workspace.isFile)
+        assertTrue(data.isFile)
+        assertFalse(screen.contains("private fun Page("))
+        assertFalse(screen.contains("internal fun HomePage("))
+        assertTrue(components.readText().contains("fun SettingsPageShell("))
+        assertTrue(components.readText().contains("StretchSyncedScrollChrome"))
+        assertTrue(components.readText().contains("testTag(\"settings-page-shell\")"))
+        val homeSource = home.readText()
+        listOf("Agent", "Capabilities", "Workspace", "App").forEach { group ->
+            assertTrue("Missing settings root group: $group", homeSource.contains("MisulGroup") && homeSource.contains("\"$group\""))
+        }
+        assertFalse(homeSource.contains("Memory"))
+        assertTrue(homeSource.contains("showDivider = false"))
+        assertTrue(homeSource.contains("MisulSelectionRow"))
+        assertTrue(homeSource.contains("MisulToggleRow"))
+        assertTrue(homeSource.contains("MisulField"))
+        assertTrue(workspace.readText().contains("Link a folder"))
+        assertTrue(data.readText().contains("Export chats & settings"))
+        assertTrue(data.readText().contains("Copy config directory path"))
+    }
+
+    @Test
+    fun chatFeedbackAndDecisionOverlaysUseDedicatedScreenRoles() {
+        val root = java.io.File("src/main/kotlin/dev/phonecode/app/ui/chat")
+        val screen = java.io.File(root, "ChatScreen.kt").readText()
+        val status = java.io.File(root, "ChatStatus.kt")
+        val overlays = java.io.File(root, "ChatOverlays.kt")
+        val turns = java.io.File(root, "ChatTurn.kt")
+
+        assertTrue(status.isFile)
+        assertTrue(overlays.isFile)
+        assertTrue(turns.isFile)
+        assertTrue(screen.contains("ChatStatus("))
+        assertTrue(screen.contains("ChatOverlays("))
+        assertTrue(turns.readText().contains("fun AssistantTurn("))
+        assertTrue(turns.readText().contains("fun ToolActivityView("))
+        assertTrue(status.readText().contains("fun ChatStatus("))
+        assertTrue(status.readText().contains("TurnOutcome.FAILED"))
+        assertTrue(overlays.readText().contains("fun ChatOverlays("))
+        assertTrue(overlays.readText().contains("ModalBottomSheet"))
+        assertTrue(overlays.readText().contains("MisulDialogAction"))
+        assertTrue(overlays.readText().contains("DialogProperties(usePlatformDefaultWidth = false)"))
+    }
 
     private val skillFixture = """---
 name: hot-skill
@@ -138,7 +232,7 @@ Original instruction.
         compose.onNodeWithText("Skills").assertIsDisplayed()
         compose.onNodeWithText("MCP").assertIsDisplayed()
         compose.onNodeWithContentDescription("Settings").performClick()
-        compose.onNodeWithText("Providers").assertIsDisplayed()
+        compose.onNodeWithText("Models & providers").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Menu").assertIsDisplayed()
     }
@@ -228,7 +322,7 @@ Original instruction.
         listOf(
             "Appearance",
             "Personalization",
-            "Providers",
+            "Models & providers",
             "Agent tools",
             "MCP servers",
             "Skills",
@@ -240,7 +334,7 @@ Original instruction.
             compose.onNodeWithContentDescription("Back").performClick()
         }
         // Provider detail page (toggles + per-model visibility).
-        compose.onNodeWithText("Providers").performClick()
+        compose.onNodeWithText("Models & providers").performClick()
         compose.onNodeWithText("OpenAI").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
@@ -347,7 +441,7 @@ Original instruction.
         compose.onNodeWithContentDescription("Message").performTextInput("Follow up")
 
         compose.onNodeWithContentDescription("Stop").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Send").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Queue message").assertIsDisplayed()
         state.value = state.value.copy(isRunning = false)
     }
 
@@ -833,7 +927,7 @@ Original instruction.
             .getApplicationContext<PhoneCodeApplication>()
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
-        compose.onNodeWithText("Providers").performClick()
+        compose.onNodeWithText("Models & providers").performClick()
         compose.onNodeWithText("Anthropic").performClick()
 
         compose.onNodeWithContentDescription("Anthropic API key").performTextInput("replacement-key")
@@ -927,7 +1021,7 @@ Original instruction.
 
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
-        compose.onNodeWithText("Providers").performClick()
+        compose.onNodeWithText("Models & providers").performClick()
         compose.onNodeWithText("ChatGPT").performScrollTo().performClick()
 
         compose.onNodeWithText("Disconnect").performClick()
@@ -944,4 +1038,134 @@ Original instruction.
         assertFalse(state.value.codexConnected)
     }
 
+}
+
+/** Focused Compose contract fixture kept beside the app-wide smoke coverage. */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], qualifiers = "w412dp-h915dp-xhdpi")
+class UiSmokeComponentsTest {
+    private val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @get:Rule
+    val rule = compose
+
+    @Test
+    fun fieldPaddingTapFocusesTextInput() {
+        compose.setContent {
+            PhoneCodeTheme {
+                MisulField(
+                    value = "",
+                    onValueChange = {},
+                    label = "Workspace name",
+                    placeholder = "Name",
+                )
+            }
+        }
+
+        compose.onNodeWithContentDescription("Workspace name").performTouchInput {
+            click(Offset(8f, 8f))
+        }
+        assertEquals(
+            true,
+            compose.onNodeWithContentDescription("Workspace name").fetchSemanticsNode().config[SemanticsProperties.Focused],
+        )
+    }
+
+    @Test
+    fun searchIconAndPaddingTapsFocusTheirTextInputs() {
+        compose.setContent {
+            PhoneCodeTheme {
+                Column {
+                    MisulSearchField(value = "", onValueChange = {}, placeholder = "Search first")
+                    MisulSearchField(value = "", onValueChange = {}, placeholder = "Search second")
+                }
+            }
+        }
+
+        compose.onRoot().performTouchInput { click(Offset(8f, 24f)) }
+        assertEquals(
+            true,
+            compose.onNodeWithContentDescription("Search first").fetchSemanticsNode().config[SemanticsProperties.Focused],
+        )
+        compose.onRoot().performTouchInput {
+            click(Offset(100f, 48.dp.value * compose.density.density + 8f))
+        }
+        assertEquals(
+            true,
+            compose.onNodeWithContentDescription("Search second").fetchSemanticsNode().config[SemanticsProperties.Focused],
+        )
+    }
+
+    @Test
+    fun focusedInteractionComponentsKeepWholeRowAndDialogSemantics() {
+        compose.setContent {
+            PhoneCodeTheme {
+                val toggle = remember { mutableStateOf(false) }
+                val field = remember { mutableStateOf("") }
+                Column {
+                    MisulGroup {
+                        MisulNavigationRow(label = "Appearance", onClick = {})
+                        MisulSelectionRow(label = "System", selected = true, onClick = {}, showDivider = false)
+                    }
+                    MisulToggleRow(
+                        label = "Send on Enter",
+                        checked = toggle.value,
+                        onCheckedChange = { toggle.value = it },
+                    )
+                    MisulField(
+                        value = field.value,
+                        onValueChange = { field.value = it },
+                        label = "Email",
+                        error = "Email is required",
+                    )
+                    MisulDialog(
+                        title = "Delete project?",
+                        onDismissRequest = {},
+                        body = {},
+                        actions = {
+                            MisulDialogAction(label = "Cancel", onClick = {}, primary = false)
+                            MisulDialogAction(label = "Delete", onClick = {}, destructive = true)
+                        },
+                    )
+                }
+            }
+        }
+
+        compose.onNodeWithText("Appearance").assertHasClickAction()
+        compose.onNodeWithText("System").assertIsDisplayed()
+        compose.onAllNodesWithTag("misul-row-divider-Appearance").assertCountEquals(1)
+        compose.onAllNodesWithTag("misul-row-divider-System").assertCountEquals(0)
+        compose.onNodeWithContentDescription("Send on Enter").assertIsToggleable()
+        val toggleBounds = compose.onNodeWithContentDescription("Send on Enter").fetchSemanticsNode().boundsInRoot
+        assertTrue(toggleBounds.height >= 48.dp.value * compose.density.density)
+        compose.onNodeWithText("Send on Enter").performClick()
+        assertEquals(
+            androidx.compose.ui.state.ToggleableState.On,
+            compose.onNodeWithContentDescription("Send on Enter").fetchSemanticsNode().config[SemanticsProperties.ToggleableState],
+        )
+        compose.onNodeWithContentDescription("Send on Enter").performTouchInput {
+            click(Offset(width - 24f, center.y))
+        }
+        assertEquals(
+            androidx.compose.ui.state.ToggleableState.Off,
+            compose.onNodeWithContentDescription("Send on Enter").fetchSemanticsNode().config[SemanticsProperties.ToggleableState],
+        )
+        compose.onNodeWithText("Email is required").assertIsDisplayed()
+        assertEquals(
+            "Email is required",
+            compose.onNodeWithContentDescription("Email").fetchSemanticsNode().config[SemanticsProperties.Error],
+        )
+        compose.onNodeWithText("Delete").assertHasClickAction()
+        assertEquals(
+            "Destructive action",
+            compose.onNodeWithText("Delete").fetchSemanticsNode().config[SemanticsProperties.StateDescription],
+        )
+
+        val cancelBounds = compose.onNodeWithText("Cancel").fetchSemanticsNode().boundsInRoot
+        val deleteBounds = compose.onNodeWithText("Delete").fetchSemanticsNode().boundsInRoot
+        assertTrue(cancelBounds.height >= 48.dp.value * compose.density.density)
+        assertTrue(deleteBounds.height >= 48.dp.value * compose.density.density)
+        assertTrue(deleteBounds.width < 200.dp.value * compose.density.density)
+    }
 }

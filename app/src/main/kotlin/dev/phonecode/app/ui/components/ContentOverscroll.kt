@@ -14,7 +14,9 @@ import androidx.compose.ui.Modifier
 fun rememberContentOverscroll(): OverscrollEffect? = rememberOverscrollEffect()
 
 @Composable
-fun Modifier.contentVerticalScroll(state: ScrollState): Modifier {
+fun Modifier.contentVerticalScroll(
+    state: ScrollState,
+): Modifier {
     val effect = rememberContentOverscroll()
     val fallback = rememberScrollableState { 0f }
     val canScroll = state.maxValue > 0

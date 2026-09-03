@@ -1,6 +1,7 @@
 package dev.phonecode.app.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -295,12 +296,15 @@ class SettingsReliabilityTest {
             openSettingsPage("MCP servers")
             compose.onNodeWithText("Reconnect enabled servers").performClick()
 
-            compose.onNodeWithText("Reconnecting…").assertIsDisplayed().assertIsNotEnabled()
+            compose.onNodeWithText("Reconnect enabled servers").assertIsDisplayed().assertIsNotEnabled()
         } finally {
             mutex.unlock()
         }
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("Reconnecting…").fetchSemanticsNodes().isEmpty()
+            runCatching {
+                compose.onNodeWithText("Reconnect enabled servers").assertIsEnabled()
+                true
+            }.getOrDefault(false)
         }
     }
 

@@ -2,12 +2,15 @@ package dev.phonecode.app.ui
 
 import android.content.Context
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -15,14 +18,19 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.agent.ChatUiState
 import dev.phonecode.app.data.McpSkillRepository
 import dev.phonecode.app.data.SecretValueStore
+import dev.phonecode.app.ui.settings.SettingsNavigation
+import dev.phonecode.app.ui.settings.SettingsRoute
 import dev.phonecode.app.ui.settings.SettingsScreen
 import dev.phonecode.app.ui.theme.PhoneCodeTheme
 import dev.phonecode.tools.mcp.McpServerConfig
@@ -53,6 +61,8 @@ import java.util.concurrent.TimeUnit
 )
 class McpWorkflowPolishTest {
 
+    private lateinit var settingsNavController: NavHostController
+
     private val seedSettings = object : ExternalResource() {
         override fun before() {
             val filesDir = ApplicationProvider.getApplicationContext<Context>().filesDir
@@ -81,6 +91,27 @@ class McpWorkflowPolishTest {
                 )
             }
         }
+        compose.waitForIdle()
+    }
+
+    private fun showMcpServerRoute(id: String) {
+        val application = app()
+        val settingsViewModel = SettingsViewModel(application)
+        compose.activity.setContent {
+            PhoneCodeTheme(darkTheme = false) {
+                val navController = rememberNavController()
+                SideEffect { settingsNavController = navController }
+                SettingsNavigation(
+                    vm = application.chatViewModel,
+                    settingsVm = settingsViewModel,
+                    onExit = {},
+                    startRoute = SettingsRoute.Mcp,
+                    navController = navController,
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { settingsNavController.navigate(SettingsRoute.McpServer(id)) }
         compose.waitForIdle()
     }
 
@@ -116,6 +147,80 @@ class McpWorkflowPolishTest {
 
         compose.onNodeWithContentDescription("Docs details").assertIsDisplayed()
         compose.onNodeWithContentDescription("Docs enabled").assertIsDisplayed()
+    }
+
+    @Test
+    fun existingServerSeedsItsFirstEditorCompositionAndRouteBackKeepsOrDiscardsTheDraft() {
+        stateFlow().value = stateFlow().value.copy(
+            sessionLoading = false,
+            mcpInventoryLoaded = true,
+            mcpServers = mapOf(
+                "Docs" to McpServerConfig(url = "https://example.com/mcp", enabled = false),
+            ),
+        )
+        showMcp()
+
+        compose.onNodeWithContentDescription("Docs details").performClick()
+        compose.onNodeWithContentDescription("Remote URL")
+            .assertTextEquals("https://example.com/mcp")
+        compose.onNodeWithText("Save").assertIsNotEnabled()
+        compose.onAllNodesWithText("Reload latest").assertCountEquals(0)
+
+        compose.onNodeWithContentDescription("Remote URL")
+            .performTextReplacement("https://changed.example/mcp")
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("Discard changes?").assertIsDisplayed()
+        compose.onNodeWithText("Keep editing").performClick()
+        compose.onNodeWithContentDescription("Remote URL")
+            .assertTextEquals("https://changed.example/mcp")
+
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("Discard").performClick()
+        compose.onNodeWithText("MCP servers").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Docs details").assertIsDisplayed()
+    }
+
+    @Test
+    fun restoredMcpRouteWaitsForItsInventoryThenRendersThePersistedServer() {
+        val state = stateFlow()
+        val original = state.value
+        state.value = original.copy(
+            sessionLoading = false,
+            mcpInventoryLoaded = false,
+            mcpServers = emptyMap(),
+            mcpConfigError = null,
+        )
+        try {
+            showMcpServerRoute("Docs")
+            compose.onNodeWithText("Loading MCP servers…").assertIsDisplayed()
+
+            state.value = state.value.copy(
+                mcpInventoryLoaded = true,
+                mcpServers = mapOf("Docs" to McpServerConfig(url = "https://example.com/mcp")),
+            )
+            compose.onNodeWithContentDescription("Remote URL")
+                .assertTextEquals("https://example.com/mcp")
+        } finally {
+            state.value = original
+        }
+    }
+
+    @Test
+    fun loadedMissingMcpRoutePopsToTheMcpInventory() {
+        val state = stateFlow()
+        val original = state.value
+        state.value = original.copy(
+            sessionLoading = false,
+            mcpInventoryLoaded = true,
+            mcpServers = emptyMap(),
+            mcpConfigError = null,
+        )
+        try {
+            showMcpServerRoute("missing")
+            compose.onNodeWithText("MCP servers").assertIsDisplayed()
+        } finally {
+            state.value = original
+        }
     }
 
     @Test
@@ -187,11 +292,15 @@ class McpWorkflowPolishTest {
             compose.onNodeWithContentDescription("Docs details").performClick()
 
             compose.onNodeWithText("Test").performClick()
-            compose.onNodeWithText("Testing…").assertIsDisplayed()
+            val loading = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Loading")
+            compose.onNodeWithText("Test").assert(loading)
             compose.onNodeWithContentDescription("Remote URL")
                 .performTextReplacement("https://draft-b.example/mcp")
             compose.waitUntil(5_000) {
-                compose.onAllNodesWithText("Testing…").fetchSemanticsNodes().isEmpty()
+                compose.onAllNodesWithText("Test").fetchSemanticsNodes().none {
+                    SemanticsProperties.StateDescription in it.config &&
+                        it.config[SemanticsProperties.StateDescription] == "Loading"
+                }
             }
 
             compose.onNodeWithText("Save").assertIsNotEnabled()
@@ -230,8 +339,10 @@ class McpWorkflowPolishTest {
             compose.onNodeWithContentDescription("Docs details").performClick()
 
             compose.onNodeWithText("Test").performClick()
+            val loading = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Loading")
+            compose.onNodeWithText("Test").assert(loading)
             compose.waitUntil(5_000) {
-                compose.onAllNodesWithText("Testing…").fetchSemanticsNodes().isEmpty()
+                compose.onAllNodesWithText("I reviewed the reported tools").fetchSemanticsNodes().isNotEmpty()
             }
 
             compose.onNodeWithText("Enabled").performScrollTo().assertIsNotEnabled()

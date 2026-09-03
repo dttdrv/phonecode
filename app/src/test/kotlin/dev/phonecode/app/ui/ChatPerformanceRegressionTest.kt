@@ -12,6 +12,8 @@ import org.junit.Test
 
 class ChatPerformanceRegressionTest {
     private val chat = File("src/main/kotlin/dev/phonecode/app/ui/chat/ChatScreen.kt").readText()
+    private val status = File("src/main/kotlin/dev/phonecode/app/ui/chat/ChatStatus.kt").readText()
+    private val turns = File("src/main/kotlin/dev/phonecode/app/ui/chat/ChatTurn.kt").readText()
     private val markdown = File("src/main/kotlin/dev/phonecode/app/ui/chat/Markdown.kt").readText()
 
     @Test
@@ -21,7 +23,19 @@ class ChatPerformanceRegressionTest {
                 "state.lines.size, state.streaming.length, state.streamingReasoning.length, followOutput",
             ),
         )
-        assertTrue(chat.contains("AppendOnlyFenceParser"))
+        assertTrue(turns.contains("AppendOnlyFenceParser"))
+    }
+
+    @Test
+    fun entryEligibilityDoesNotObserveLazyLayoutDuringComposition() {
+        assertTrue(chat.contains("appendTransitions.observe("))
+        assertFalse(chat.contains("layoutInfo.visibleItemsInfo"))
+    }
+
+    @Test
+    fun tokenOnlyUpdatesDoNotInvalidateTheWholeStatusSurface() {
+        assertFalse(status.contains("state: ChatUiState"))
+        assertFalse(chat.contains("ChatStatus(\n                state = state,"))
     }
 
     @Test
@@ -34,8 +48,8 @@ class ChatPerformanceRegressionTest {
     fun chatUsesOneHazeSourceOnlyWhenAnEdgeNeedsIt() {
         assertFalse(chat.contains("phoneHazeEffect"))
         assertFalse(chat.contains("val hazeStyle = phoneHaze()"))
-        assertTrue(chat.contains("if (blurTopBand || blurBottomBand) Modifier.hazeSource(hazeState)"))
-        assertFalse(chat.contains("if (blurChrome) Modifier.hazeSource(hazeState)"))
+        assertTrue(chat.contains("StretchSyncedScrollChrome("))
+        assertFalse(chat.contains(".hazeSource("))
     }
 
     @Test

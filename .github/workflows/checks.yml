@@ -41,7 +41,7 @@ jobs:
       - name: Test and lint
         run: ./gradlew --no-daemon test lintDebug :app:verifyLegalInventory :app:verifyPrototypeRuntimeBoundary
       - name: Build optimized sideload artifact
-        run: ./gradlew --no-daemon :app:assembleSideload
+        run: ./gradlew --no-daemon :app:verifySideloadMisulApk
       - name: Verify Play release gate
         shell: bash
         run: |

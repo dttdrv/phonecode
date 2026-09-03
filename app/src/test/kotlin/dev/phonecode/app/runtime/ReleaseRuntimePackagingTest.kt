@@ -1,6 +1,8 @@
 package dev.phonecode.app.runtime
 
 import java.io.File
+import java.security.MessageDigest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,6 +11,29 @@ class ReleaseRuntimePackagingTest {
     private val root = generateSequence(
         File(requireNotNull(System.getProperty("user.dir"))).absoluteFile,
     ) { it.parentFile }.first { File(it, "settings.gradle.kts").isFile }
+
+    @Test
+    fun distributableApksContainTheLockedMisulRuntimeAndProvenance() {
+        val lock = File(root, "native-misul/sources.lock").readLines()
+            .filter(String::isNotBlank)
+            .associate { line -> line.substringBefore('=') to line.substringAfter('=') }
+        val library = File(root, "app/src/main/jniLibs/arm64-v8a/libmisul.so")
+
+        assertTrue("The distributable Misul library is missing", library.isFile)
+        assertEquals(lock.getValue("artifact_bytes").toLong(), library.length())
+        assertEquals(lock.getValue("artifact_sha256"), sha256(library))
+        listOf("MANIFEST.sha256", "SOURCE-MANIFEST.sha256", "SOURCES.lock").forEach { name ->
+            assertTrue(
+                "The distributable Misul provenance file is missing: $name",
+                File(root, "app/src/main/assets/misul-runtime/$name").isFile,
+            )
+        }
+        assertTrue(
+            "CI must verify the runtime inside the distributable APK",
+            File(root, ".github/workflows/checks.yml").readText()
+                .contains(":app:verifySideloadMisulApk"),
+        )
+    }
 
     @Test
     fun prototypeRuntimeIsDebugOnly() {
@@ -77,8 +102,8 @@ class ReleaseRuntimePackagingTest {
     fun releaseCandidateUsesVersion050EvidencePaths() {
         val build = File(root, "app/build.gradle.kts").readText()
 
-        assertTrue(build.contains("""versionCode = 54"""))
-        assertTrue(build.contains("""versionName = "0.6.0-beta""""))
+        assertTrue(build.contains("""versionCode = 55"""))
+        assertTrue(build.contains("""versionName = "0.6.0-beta.1""""))
         assertTrue(build.contains("""release-evidence/0.5.1/vm-host"""))
         assertTrue(build.contains("""release-evidence/0.5.1/guest/sources"""))
         assertTrue(build.contains("""play/0.5.1/submission-evidence.json"""))
@@ -100,4 +125,8 @@ class ReleaseRuntimePackagingTest {
             assertTrue("$relativePath does not contain the 0.5.1 release identity", text.contains("0.5.1"))
         }
     }
+
+    private fun sha256(file: File): String = MessageDigest.getInstance("SHA-256")
+        .digest(file.readBytes())
+        .joinToString("") { "%02x".format(it) }
 }

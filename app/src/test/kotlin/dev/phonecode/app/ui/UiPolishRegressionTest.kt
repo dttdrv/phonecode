@@ -51,6 +51,7 @@ class UiPolishRegressionTest {
         assertFalse(chat.contains("val topChromeHeight = Spacing.navBarHeight + 34.dp"))
         assertTrue(composer.contains("MaterialTheme.typography.bodyLarge"))
         assertTrue(composer.contains("CircleShape"))
+        assertTrue(composer.contains(".clip(ShapePill)"))
         assertTrue(composer.contains("ComposerActionTarget = 48.dp"))
         assertTrue(composer.contains("heightIn(min = ComposerHeight)"))
         assertTrue(composer.contains("maxLines = ComposerMaxLines"))
@@ -211,7 +212,7 @@ class UiPolishRegressionTest {
         assertTrue(build.contains("signingConfig = signingConfigs.getByName(\"debug\")"))
         assertTrue(build.contains("sourceSets.getByName(\"sideload\")"))
         assertTrue(build.contains("withBuildType(\"sideload\")"))
-        assertTrue(build.contains("output.versionCode.set(54)"))
-        assertTrue(build.contains("output.versionName.set(\"0.6.0-beta\")"))
+        assertTrue(build.contains("output.versionCode.set(55)"))
+        assertTrue(build.contains("output.versionName.set(\"0.6.0-beta.1\")"))
     }
 }

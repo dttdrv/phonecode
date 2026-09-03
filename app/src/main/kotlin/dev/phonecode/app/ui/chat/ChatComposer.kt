@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.phonecode.app.ui.components.MisulIconButton
 import dev.phonecode.app.ui.theme.LocalMisulAccent
+import dev.phonecode.app.ui.theme.ShapePill
 import dev.phonecode.provider.domain.MessagePart
 
 internal val ComposerHeight = 56.dp
@@ -135,7 +136,7 @@ internal fun ChatComposer(
             Box(Modifier.weight(1f)) {
                 Column(
                     Modifier.fillMaxWidth()
-                        .clip(CircleShape)
+                        .clip(ShapePill)
                         .background(colors.surfaceContainerHigh),
                 ) {
                     if (photos.isNotEmpty()) {

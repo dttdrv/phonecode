@@ -49,8 +49,8 @@ android {
         applicationId = "dev.phonecode"
         minSdk = 26
         targetSdk = 36
-        versionCode = 54
-        versionName = "0.6.0-beta"
+        versionCode = 55
+        versionName = "0.6.0-beta.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GITHUB_OAUTH_CLIENT_ID", githubOauthClientId.asBuildConfigString())
         buildConfigField("boolean", "CODEX_OAUTH_ENABLED", "false")
@@ -147,13 +147,6 @@ android {
         jniLibs.directories.add(generatedHostRuntime.resolve("jniLibs").absolutePath)
         assets.directories.add(generatedHostRuntime.resolve("assets").absolutePath)
     }
-    if (misulAndroidRuntimeDirectory.isPresent) {
-        listOf("debug", "release", "sideload").forEach { sourceSet -> sourceSets.getByName(sourceSet) {
-            val generatedMisulRuntime = misulDebugStageDirectory.get().asFile
-            jniLibs.directories.add(generatedMisulRuntime.resolve("jniLibs").absolutePath)
-            assets.directories.add(generatedMisulRuntime.resolve("assets").absolutePath)
-        } }
-    }
     sourceSets.getByName("sideload") {
         manifest.srcFile("src/debug/AndroidManifest.xml")
         kotlin.directories.add("src/debug/kotlin")
@@ -222,6 +215,7 @@ val forbiddenReleasePrototypeFiles = listOf("main", "release").flatMap { sourceS
 
 val legalVendoredFiles = files(
     fileTree("src/main/assets") { include("*.js", "*.rootfs") },
+    fileTree("src/main/assets/misul-runtime") { include("**/*") },
     fileTree("src/main/jniLibs") { include("**/*.so") },
     fileTree("src/debug/assets") { include("*.js", "*.rootfs") },
     fileTree("src/debug/jniLibs") { include("**/*.so") },
@@ -279,6 +273,40 @@ fun sha256(file: File): String {
     return digest.digest().joinToString("") { "%02x".format(it) }
 }
 
+fun verifyPackagedMisulApk(apk: File) {
+    val expected = rootProject.file("native-misul/sources.lock").readLines()
+        .single { it.startsWith("artifact_sha256=") }
+        .substringAfter('=')
+    ZipFile(apk).use { zip ->
+        val libraryEntries = zip.entries().asSequence()
+            .filter { it.name.endsWith("/libmisul.so") }
+            .toList()
+        check(libraryEntries.map { it.name } == listOf("lib/arm64-v8a/libmisul.so")) {
+            "The APK must contain exactly one arm64 Misul library: ${libraryEntries.map { it.name }}"
+        }
+        val digest = MessageDigest.getInstance("SHA-256")
+        zip.getInputStream(libraryEntries.single()).use { input ->
+            val buffer = ByteArray(8192)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        val actual = digest.digest().joinToString("") { "%02x".format(it) }
+        check(actual == expected) {
+            "The packaged Misul library changed: expected $expected, got $actual"
+        }
+        listOf(
+            "assets/misul-runtime/MANIFEST.sha256",
+            "assets/misul-runtime/SOURCE-MANIFEST.sha256",
+            "assets/misul-runtime/SOURCES.lock",
+        ).forEach { path ->
+            check(zip.getEntry(path) != null) { "The APK is missing Misul provenance: $path" }
+        }
+    }
+}
+
 val stageDebugMisulRuntime by tasks.registering(Exec::class) {
     group = "build"
     description = "Stages the separately built, authenticated Misul runtime for debug packaging."
@@ -320,47 +348,22 @@ val verifyDebugMisulRuntime by tasks.registering {
 val verifyDebugMisulApk by tasks.registering {
     group = "verification"
     description = "Verifies the debug APK contains the exact authenticated Misul runtime once."
-    dependsOn("assembleDebug", verifyDebugMisulRuntime)
+    dependsOn("assembleDebug")
     val apk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")
     inputs.file(apk)
     doLast {
-        val expected = rootProject.file("native-misul/sources.lock").readLines()
-            .single { it.startsWith("artifact_sha256=") }
-            .substringAfter('=')
-        ZipFile(apk.get().asFile).use { zip ->
-            val libraryEntries = zip.entries().asSequence()
-                .filter { it.name.endsWith("/libmisul.so") }
-                .toList()
-            check(libraryEntries.map { it.name } == listOf("lib/arm64-v8a/libmisul.so")) {
-                "The APK must contain exactly one arm64 Misul library: ${libraryEntries.map { it.name }}"
-            }
-            val digest = MessageDigest.getInstance("SHA-256")
-            zip.getInputStream(libraryEntries.single()).use { input ->
-                val buffer = ByteArray(8192)
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    digest.update(buffer, 0, count)
-                }
-            }
-            val actual = digest.digest().joinToString("") { "%02x".format(it) }
-            check(actual == expected) {
-                "The packaged Misul library changed: expected $expected, got $actual"
-            }
-            listOf(
-                "assets/misul-runtime/MANIFEST.sha256",
-                "assets/misul-runtime/SOURCE-MANIFEST.sha256",
-                "assets/misul-runtime/SOURCES.lock",
-            ).forEach { path ->
-                check(zip.getEntry(path) != null) { "The APK is missing Misul provenance: $path" }
-            }
-        }
+        verifyPackagedMisulApk(apk.get().asFile)
     }
 }
 
-if (misulAndroidRuntimeDirectory.isPresent) {
-    tasks.matching { it.name in setOf("preDebugBuild", "preReleaseBuild", "preSideloadBuild") }.configureEach {
-        dependsOn(stageDebugMisulRuntime)
+val verifySideloadMisulApk by tasks.registering {
+    group = "verification"
+    description = "Verifies the sideload APK contains the exact authenticated Misul runtime once."
+    dependsOn("assembleSideload")
+    val apk = layout.buildDirectory.file("outputs/apk/sideload/app-sideload.apk")
+    inputs.file(apk)
+    doLast {
+        verifyPackagedMisulApk(apk.get().asFile)
     }
 }
 
@@ -424,7 +427,7 @@ val verifyLegalInventory by tasks.registering {
         }
         check(
             listOf(
-                "OpenCode", "Mermaid", "JetBrains Mono", "Alpine", "PRoot", "talloc",
+                "OpenCode", "Misul Agent", "Mermaid", "JetBrains Mono", "Alpine", "PRoot", "talloc",
                 "QEMU", "GLib", "libiconv", "PCRE2", "Linux kernel", "BusyBox",
             ).all(notices::contains),
         ) {
@@ -667,8 +670,8 @@ androidComponentsExtension.onVariants(
     androidComponentsExtension.selector().withBuildType("sideload"),
 ) { variant ->
     variant.outputs.forEach { output ->
-        output.versionCode.set(54)
-        output.versionName.set("0.6.0-beta")
+        output.versionCode.set(55)
+        output.versionName.set("0.6.0-beta.1")
     }
 }
 

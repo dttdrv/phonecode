@@ -1,0 +1,9 @@
+schema=misul-android-runtime-manifest-v1
+artifact=libmisul.so
+sha256=96d1e7616e1551f3f393459826ca4ce88415f3e66a4384546195ad92b3a6c7c5
+bytes=2641872
+source_manifest_sha256=127d4e4909d4a51c928ee2a17e8f4f97208d89f6cea3be870c7711f33692161b
+zig=0.16.0
+android_ndk=28.2.13676358
+android_api=26
+abi=arm64-v8a

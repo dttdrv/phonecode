@@ -2,6 +2,7 @@ package dev.phonecode.app.ui.chat
 
 import androidx.compose.ui.unit.dp
 import dev.phonecode.provider.domain.MessagePart
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -9,6 +10,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ChatComposerTest {
+    private val root = generateSequence(
+        File(requireNotNull(System.getProperty("user.dir"))).absoluteFile,
+    ) { it.parentFile }.first { File(it, "settings.gradle.kts").isFile }
+
+    @Test
+    fun composerContainerUsesTheSharedPillShape() {
+        val source = File(root, "app/src/main/kotlin/dev/phonecode/app/ui/chat/ChatComposer.kt").readText()
+
+        assertTrue(source.contains(".clip(ShapePill)"))
+    }
+
     @Test
     fun emptyStateHasNoPrimaryAction() {
         assertEquals(

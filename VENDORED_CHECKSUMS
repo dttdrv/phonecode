@@ -1,5 +1,9 @@
 d1d1a3fae5f4d6146e9742790a47fcb116199622cfb8439f218a4d5fbe5000da  app/src/debug/assets/alpine-aarch64.rootfs
 eda3a0ad572bbe69a318c1be0163e8233dd824f3f12939e5168feba207767151  app/src/main/assets/mermaid.min.js
+b7377a9df902bf8f984af7cdc4e074e051268b50e4cb422dec2d225fed159c42  app/src/main/assets/misul-runtime/MANIFEST.sha256
+127d4e4909d4a51c928ee2a17e8f4f97208d89f6cea3be870c7711f33692161b  app/src/main/assets/misul-runtime/SOURCE-MANIFEST.sha256
+0f75c1124fd12eb804a999f116abb5a5483bb40eb9c2f4e7ccbe83383a2d4833  app/src/main/assets/misul-runtime/SOURCES.lock
+96d1e7616e1551f3f393459826ca4ce88415f3e66a4384546195ad92b3a6c7c5  app/src/main/jniLibs/arm64-v8a/libmisul.so
 42a0313a04296d913279c55eccabf9082d31d0f8caf1960079d92342c4629e0c  app/src/debug/jniLibs/arm64-v8a/libproot.so
 12d2b63e897fd91a334fce23edea5d2419cae4d5fd2a369f05d03ab75682add0  app/src/debug/jniLibs/arm64-v8a/libproot-loader.so
 d22c4f3821d725eb01210d278d95dfcfcaadc34699a06658d47c8a5cc5830ada  app/src/main/res/font/jetbrainsmono_bold.ttf

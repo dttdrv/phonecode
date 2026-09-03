@@ -34,6 +34,18 @@ are used only to describe origins and interoperability.
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
+## Misul Agent native runtime
+
+- File: `app/src/main/jniLibs/arm64-v8a/libmisul.so`
+- SHA-256: `96d1e7616e1551f3f393459826ca4ce88415f3e66a4384546195ad92b3a6c7c5`
+- Source manifest SHA-256: `127d4e4909d4a51c928ee2a17e8f4f97208d89f6cea3be870c7711f33692161b`
+- License: MIT, Copyright (c) 2026 Misul Computing
+
+The runtime is built separately from the Misul Agent source tree. `native-misul/sources.lock` pins
+its ABI, Android API, exported symbols, byte length, library digest, and source-manifest digest.
+The matching provenance files are packaged under `assets/misul-runtime/`. Replace these committed
+bytes only with output accepted by `native-misul/stage-android-arm64.sh` against that lock.
+
 ## Android and JVM runtime
 
 The release runtime graph includes the following license families. Test-only dependencies are not

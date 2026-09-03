@@ -208,7 +208,8 @@ internal fun collectSettingsState(vm: ChatViewModel): State<ChatUiState> {
     val flow = remember(vm) {
         vm.state.map(ChatUiState::settingsSnapshot).distinctUntilChanged()
     }
-    return flow.collectAsStateWithLifecycle(initialValue = vm.state.value.settingsSnapshot())
+    val initialState = remember(vm) { vm.state.value.settingsSnapshot() }
+    return flow.collectAsStateWithLifecycle(initialValue = initialState)
 }
 
 /** Settings: a home list + every sub-page, navigated with an iOS-style slide.

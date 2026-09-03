@@ -92,7 +92,8 @@ class SettingsNavigationTest {
         assertTrue(navigation.contains("fun NavGraphBuilder.settingsRouteGraph("))
         assertTrue(navigation.contains("composable<SettingsRoute.McpServer>"))
         assertTrue(navigation.contains("composable<SettingsRoute.EditSkill>"))
-        assertTrue(settings.contains("initialValue = vm.state.value.settingsSnapshot()"))
+        assertTrue(settings.contains("val initialState = remember(vm) { vm.state.value.settingsSnapshot() }"))
+        assertTrue(settings.contains("collectAsStateWithLifecycle(initialValue = initialState)"))
     }
 
     @Test

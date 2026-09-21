@@ -20,6 +20,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -57,7 +58,7 @@ private val GroupCorner = 16.dp
 private val RowInset = 16.dp
 private val RowIconSize = 24.dp
 private val RowIconGap = 12.dp
-private val OneLineRowHeight = 56.dp
+private val OneLineRowHeight = 52.dp
 private val SupportingRowHeight = 64.dp
 
 @Composable
@@ -151,9 +152,9 @@ fun MisulInlineToggle(
 fun MisulSectionLabel(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 14.dp, top = 16.dp, bottom = 6.dp)
+        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp)
             .semantics { heading() },
     )
 }
@@ -356,7 +357,7 @@ fun MisulSelectionRow(
     ) {
         RowText(label = label, supportingText = supportingText, modifier = Modifier.weight(1f))
         if (selected) {
-            Text("Selected", style = MaterialTheme.typography.labelLarge, color = LocalMisulAccent.current)
+            Icon(Icons.Filled.Check, contentDescription = null, tint = LocalMisulAccent.current, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -411,7 +412,7 @@ private fun RowShell(
         Row(
             modifier = modifier.fillMaxWidth()
                 .heightIn(min = if (supportingText == null) OneLineRowHeight else SupportingRowHeight)
-                .padding(horizontal = RowInset),
+                .padding(horizontal = RowInset, vertical = if (supportingText == null) 4.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(RowIconGap),
             content = content,
@@ -429,10 +430,10 @@ private fun RowShell(
 
 @Composable
 private fun RowText(label: String, supportingText: String?, modifier: Modifier = Modifier) {
-    Column(modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
         supportingText?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -454,7 +455,7 @@ private fun misulSwitchColors() = SwitchDefaults.colors(
     checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
     checkedTrackColor = LocalMisulAccent.current,
     checkedBorderColor = Color.Transparent,
-    uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
     uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
     uncheckedBorderColor = MaterialTheme.colorScheme.outlineVariant,
     disabledCheckedThumbColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f),

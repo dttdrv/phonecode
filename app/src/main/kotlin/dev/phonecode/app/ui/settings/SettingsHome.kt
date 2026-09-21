@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonecode.app.agent.ChatViewModel
 import dev.phonecode.app.data.SkillStatus
@@ -38,6 +39,7 @@ import dev.phonecode.app.ui.components.MisulField
 import dev.phonecode.app.ui.components.MisulGroup
 import dev.phonecode.app.ui.components.MisulIconButton
 import dev.phonecode.app.ui.components.MisulSelectionRow
+import dev.phonecode.app.ui.components.MisulSectionLabel
 import dev.phonecode.app.ui.components.MisulToggleRow
 import dev.phonecode.app.ui.theme.Spacing
 
@@ -78,12 +80,7 @@ internal fun HomePage(
 
 @Composable
 private fun SettingsRootGroup(label: String, content: @Composable () -> Unit) {
-    Text(
-        label,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = androidx.compose.ui.Modifier.padding(start = Spacing.s, top = Spacing.m, bottom = Spacing.xs),
-    )
+    MisulSectionLabel(label)
     MisulGroup(content = { content() })
 }
 
@@ -91,7 +88,7 @@ private fun SettingsRootGroup(label: String, content: @Composable () -> Unit) {
 internal fun AppearancePage(settingsVm: SettingsViewModel, onBack: () -> Unit) {
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
     SettingsPageShell("Appearance", onBack) {
-        Text("Color theme", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = androidx.compose.ui.Modifier.padding(Spacing.s))
+        MisulSectionLabel("Color theme")
         MisulGroup(androidx.compose.ui.Modifier.selectableGroup()) {
             ThemeMode.entries.forEachIndexed { index, mode ->
                 MisulSelectionRow(
@@ -118,7 +115,7 @@ internal fun PersonalPage(
 ) {
     val settings by settingsVm.settings.collectAsStateWithLifecycle()
     SettingsPageShell("Personalization", onBack) {
-        Text("Message input", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = androidx.compose.ui.Modifier.padding(Spacing.s))
+        MisulSectionLabel("Message input")
         MisulGroup {
             MisulToggleRow(
                 label = "Send on Enter",
@@ -128,7 +125,7 @@ internal fun PersonalPage(
                 showDivider = false,
             )
         }
-        Text("Custom instructions", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = androidx.compose.ui.Modifier.padding(start = Spacing.s, top = Spacing.m, bottom = Spacing.xs))
+        Spacer(Modifier.height(Spacing.l))
         MisulGroup {
             SettingsNavigationRow(
                 label = "Custom instructions",

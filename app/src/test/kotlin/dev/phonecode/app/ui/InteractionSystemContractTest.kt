@@ -59,7 +59,6 @@ class InteractionSystemContractTest {
         assertTrue("Missing action source", actions.isFile)
         val source = actions.readText()
         assertTrue(source.contains("private val ActionHeight = 48.dp"))
-        assertTrue(source.contains("private val ActionCorner = 14.dp"))
         assertTrue(source.contains("private val IconTarget = 48.dp"))
         assertTrue(source.contains("private val IconSurface = 40.dp"))
         assertTrue(source.contains("private val IconGlyph = 22.dp"))
@@ -131,7 +130,7 @@ class InteractionSystemContractTest {
         val text = actions.substringAfter("fun MisulTextAction(").substringBefore("fun Modifier.misulPressMotion(")
 
         assertTrue(action.contains(".clip(shape)\n            .background(visual.container)\n            .misulTonalFeedback"))
-        assertTrue(icon.contains("Modifier.size(IconSurface)\n                .offset(y = visualOffsetY)\n                .clip(CircleShape)\n                .background(visual.container)\n                .misulTonalFeedback"))
+        assertTrue(icon.contains("Modifier.size(visualSize)\n                .clip(CircleShape)\n                .background(visual.container)\n                .misulTonalFeedback"))
         assertTrue(icon.contains("this.selected = selected"))
         assertTrue(action.contains(".height(ActionHeight)"))
         assertTrue(action.contains("actionVisuals(role, enabled || loading"))

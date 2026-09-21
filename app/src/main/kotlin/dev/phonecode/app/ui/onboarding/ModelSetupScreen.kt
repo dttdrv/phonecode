@@ -375,7 +375,7 @@ private fun ApiKeySetup(
                 key = it
                 error = null
             },
-            placeholder = if (hasStoredKey) "New API key (optional)" else "API key",
+            placeholder = if (hasStoredKey) "New API key (optional)" else null,
             secure = true,
             contentDescription = "${provider.displayName} API key",
             label = "API key",

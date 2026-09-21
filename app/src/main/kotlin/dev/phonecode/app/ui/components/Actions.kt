@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -56,7 +55,7 @@ enum class MisulPressMotion {
 }
 
 private val ActionHeight = 48.dp
-private val ActionCorner = 14.dp
+private val ActionCorner = 24.dp
 private val IconTarget = 48.dp
 private val IconSurface = 40.dp
 private val IconGlyph = 22.dp
@@ -193,7 +192,9 @@ fun MisulIconButton(
     selected: Boolean = false,
     filled: Boolean = false,
     enabled: Boolean = true,
-    visualOffsetY: Dp = 0.dp,
+    visualSize: Dp = IconSurface,
+    iconSize: Dp = IconGlyph,
+    tint: Color? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val accent = LocalMisulAccent.current
@@ -206,7 +207,7 @@ fun MisulIconButton(
             .clip(CircleShape)
             .clickable(
                 interactionSource = interaction,
-                indication = ripple(bounded = true, radius = IconSurface / 2),
+                indication = ripple(bounded = true, radius = visualSize / 2),
                 enabled = enabled,
                 role = Role.Button,
                 onClick = onClick,
@@ -215,14 +216,13 @@ fun MisulIconButton(
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            Modifier.size(IconSurface)
-                .offset(y = visualOffsetY)
+            Modifier.size(visualSize)
                 .clip(CircleShape)
                 .background(visual.container)
                 .misulTonalFeedback(interaction, visual.content),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription, tint = visual.content, modifier = Modifier.size(IconGlyph))
+            Icon(icon, contentDescription, tint = if (enabled) tint ?: visual.content else visual.content, modifier = Modifier.size(iconSize))
         }
     }
 }

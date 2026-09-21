@@ -445,17 +445,17 @@ internal fun SkillEditorPage(
     SettingsPageShell(if (isNew) "New skill" else "Edit $name", onBack) {
         if (isNew) {
             MisulSectionLabel("Identity")
-            SettingsFieldLabel("Skill name")
             MisulField(
                 name,
                 { value ->
                     val next = value.lowercase().replace(Regex("[^a-z0-9-]"), "")
                     updateStructured(nextName = next)
                 },
-                "my-skill",
+                "Skill name",
+                placeholder = "my-skill",
                 contentDescription = "Skill name",
             )
-            MisulGroup(Modifier.selectableGroup()) {
+            MisulGroup(Modifier.padding(top = 16.dp).selectableGroup()) {
                 SettingsSelectionRow("Global", skillScope == SkillScope.GLOBAL) { skillScope = SkillScope.GLOBAL }
                 SettingsSelectionRow(
                     "Current project",
@@ -480,32 +480,34 @@ internal fun SkillEditorPage(
             SettingsErrorText("This skill changed elsewhere. Your draft is preserved; reopen the editor to load the latest file.")
         }
         if (advancedSource) {
-            MisulSectionLabel("SKILL.md source")
+            Spacer(Modifier.height(16.dp))
             MisulField(
                 content,
                 { content = it; error = null },
-                if (loading) "Loading…" else "Complete SKILL.md source",
+                "SKILL.md source",
+                placeholder = if (loading) "Loading…" else "Complete SKILL.md source",
                 singleLine = false,
                 minLines = 14,
                 contentDescription = "Skill source",
             )
             SettingsNote("Advanced source includes frontmatter and instructions. Keep the name aligned with the skill folder.")
         } else {
-            MisulSectionLabel("When to use")
-            SettingsFieldLabel("When should the agent use this skill?")
+            Spacer(Modifier.height(16.dp))
             MisulField(
                 description,
                 { updateStructured(nextDescription = it) },
-                "Describe the tasks or situations that should activate this skill",
+                "When to use",
+                placeholder = "Describe the tasks or situations that should activate this skill",
                 singleLine = false,
                 minLines = 2,
                 contentDescription = "When to use this skill",
             )
-            MisulSectionLabel("Instructions")
+            Spacer(Modifier.height(16.dp))
             MisulField(
                 instructions,
                 { updateStructured(nextInstructions = it) },
-                if (loading) "Loading…" else "Give the agent clear, actionable steps",
+                "Instructions",
+                placeholder = if (loading) "Loading…" else "Give the agent clear, actionable steps",
                 singleLine = false,
                 minLines = 10,
                 contentDescription = "Skill instructions",

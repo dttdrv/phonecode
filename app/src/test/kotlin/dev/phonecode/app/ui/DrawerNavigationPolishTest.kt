@@ -115,6 +115,29 @@ class DrawerNavigationPolishTest {
     }
 
     @Test
+    fun settingsEntersBeforeTheDrawerFinishesClosing() {
+        showFixture()
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.onNodeWithContentDescription("Settings").performClick()
+            compose.mainClock.advanceTimeBy(64)
+
+            // The closing drawer intentionally hides the destination from accessibility.
+            // Inspect its unmerged content to verify navigation has already started.
+            compose.onNodeWithText("Models & providers", useUnmergedTree = true).assertExists()
+            compose.onNodeWithContentDescription("Close navigation drawer").assertExists()
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Close navigation drawer").assertDoesNotExist()
+        compose.onNodeWithText("Models & providers").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithContentDescription("Menu").assertIsDisplayed()
+    }
+
+    @Test
     fun searchTemporarilyRevealsMatchesInsideCollapsedProjects() {
         showFixture()
         compose.onNodeWithText(project.name).performClick()

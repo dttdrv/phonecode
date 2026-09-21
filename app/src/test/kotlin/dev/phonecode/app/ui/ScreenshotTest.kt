@@ -49,7 +49,6 @@ import dev.phonecode.app.data.SessionStore
 import dev.phonecode.app.data.SkillScope
 import dev.phonecode.app.data.SkillStatus
 import dev.phonecode.app.ui.chat.ComposerActionTarget
-import dev.phonecode.app.ui.chat.ComposerActionVisual
 import dev.phonecode.app.ui.settings.SettingsNavigation
 import dev.phonecode.app.ui.settings.SettingsRoute
 import dev.phonecode.app.ui.settings.CustomProviderEditor
@@ -372,7 +371,10 @@ class ScreenshotTest {
         val target = ComposerActionTarget.value * compose.density.density
         assertEquals(target, bounds.width, 0.5f)
         assertEquals(target, bounds.height, 0.5f)
-        assertEquals(40f, ComposerActionVisual.value, 0f)
+        val composer = compose.onNodeWithTag("chat-composer").fetchSemanticsNode().boundsInRoot
+        assertTrue("$contentDescription must stay inside the composer", composer.contains(bounds.topLeft) && composer.contains(bounds.bottomRight))
+        val field = compose.onNodeWithContentDescription("Message").fetchSemanticsNode().boundsInRoot
+        assertFalse("$contentDescription must not overlap the input", bounds.overlaps(field))
         return bounds.bottom
     }
 
@@ -491,7 +493,7 @@ class ScreenshotTest {
         val original = state.value
         try {
             compose.onNodeWithContentDescription("Add attachment").assertIsDisplayed()
-            compose.onAllNodesWithContentDescription("Send").assertCountEquals(0)
+            compose.onNodeWithContentDescription("Send").assertIsNotEnabled()
             compose.onAllNodesWithContentDescription("Stop").assertCountEquals(0)
             shoot("composer-empty")
             compose.onNodeWithContentDescription("Message").performTextInput("Review the current project")
@@ -541,7 +543,7 @@ class ScreenshotTest {
             state.value = state.value.copy(isRunning = false, selected = null, draftPhotos = emptyMap())
             compose.onNodeWithContentDescription("Message").assertIsNotEnabled()
             compose.onNodeWithContentDescription("Add attachment").assertIsNotEnabled()
-            compose.onAllNodesWithContentDescription("Send").assertCountEquals(0)
+            compose.onNodeWithContentDescription("Send").assertIsNotEnabled()
             compose.onAllNodesWithContentDescription("Stop").assertCountEquals(0)
             compose.onAllNodesWithContentDescription("Queue message").assertCountEquals(0)
             assertEquals(oneLineAttachmentBottom, assertComposerActionGeometry("Add attachment"), 0.5f)

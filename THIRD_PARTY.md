@@ -87,11 +87,17 @@ and publish its complete third-party-notice inventory before release.
 
 | File | SHA-256 | License |
 | --- | --- | --- |
+| `inter_variable.ttf` | `29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031` | SIL Open Font License 1.1, Copyright 2016 The Inter Project Authors |
 | `jetbrainsmono_bold.ttf` | `d22c4f3821d725eb01210d278d95dfcfcaadc34699a06658d47c8a5cc5830ada` | SIL Open Font License 1.1, Copyright 2020 The JetBrains Mono Project Authors |
 | `jetbrainsmono_medium.ttf` | `d16e6dc99672734698d629705f617c79f6eb6040f5113efe3a145204dc988109` | SIL Open Font License 1.1, Copyright 2020 The JetBrains Mono Project Authors |
 | `jetbrainsmono_regular.ttf` | `e6fd0d7e91550b3ed2b735d4312474362c4716edc4fc0577a0f61ed782d5aed1` | SIL Open Font License 1.1, Copyright 2020 The JetBrains Mono Project Authors |
 
-All three files embed version `2.305` and match the official JetBrains Mono repository at immutable
+Inter embeds version `4.001;git-66647c0bb`. Its bytes were restored from this repository's
+Git blob `047c92f6e2212473dc436020afed689527076d44`, originally added in commit
+`1878a5970a2f2b77a4beb63b0987904133c530c4`. The complete OFL 1.1 text and Inter copyright
+are bundled at `app/src/main/assets/font-licenses/Inter-OFL-1.1.txt`.
+
+All three JetBrains Mono files embed version `2.305` and match the official JetBrains Mono repository at immutable
 revision [`02bb50b082dad9ef8a0f33ac393839202b760223`](https://github.com/JetBrains/JetBrainsMono/commit/02bb50b082dad9ef8a0f33ac393839202b760223)
 byte-for-byte. JetBrains did not publish a `v2.305` tag or release archive; the provenance therefore
 records the exact repository revision, upstream paths, Git blob IDs, and SHA-256 values without

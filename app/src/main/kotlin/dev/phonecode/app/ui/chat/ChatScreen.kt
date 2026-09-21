@@ -320,9 +320,7 @@ fun ChatScreen(
     // NOTE: no imePadding anywhere in this screen - the root container applies safeDrawing
     // (bars + IME) exactly once; adding it again here is what flung the composer off-screen.
     Box(Modifier.fillMaxSize().background(colors.background)) {
-        // v2 chrome: NOTHING pads the top or bottom - the conversation fills the whole screen and
-        // FEEDS the blur; every piece of chrome floats above it as an individually blurred pill
-        // (signed prototype: design/v2.html).
+        // The timeline softens beneath the controls with progressive scroll-edge blur.
         val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         val topChromeHeight = Spacing.navBarHeight + 20.dp
         val chromeDensity = LocalDensity.current

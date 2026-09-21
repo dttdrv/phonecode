@@ -9,7 +9,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 
 /**
  * PhoneCode's monochrome, Apple-HIG-inspired theme (design/specs/design-tokens.md): AMOLED-dark and
- * pure-white light, Inter typography, Apple-leaning rounded shapes. The new UI reads from
+ * pure-white light and rounded shapes. The UI reads from
  * MaterialTheme.colorScheme / typography / shapes; black & white are the only accent.
  */
 @Composable
@@ -18,12 +18,13 @@ fun PhoneCodeTheme(
     content: @Composable () -> Unit,
 ) {
     val overscrollFactory = rememberPlatformOverscrollFactory()
+    val colors = if (darkTheme) phoneDarkColorScheme() else phoneLightColorScheme()
     CompositionLocalProvider(
         LocalOverscrollFactory provides overscrollFactory,
-        LocalMisulAccent provides if (darkTheme) MisulCobaltDark else MisulCobaltLight,
+        LocalMisulAccent provides colors.primary,
     ) {
         MaterialTheme(
-            colorScheme = if (darkTheme) phoneDarkColorScheme() else phoneLightColorScheme(),
+            colorScheme = colors,
             typography = PhoneTypography,
             shapes = PhoneShapes,
             content = content,

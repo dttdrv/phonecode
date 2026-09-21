@@ -381,7 +381,6 @@ internal fun McpServerPage(
         }
         MisulSectionLabel("Connection")
         if (isNew) {
-            SettingsFieldLabel("Server name")
             MisulField(
                 name,
                 {
@@ -389,7 +388,8 @@ internal fun McpServerPage(
                     error = null
                     invalidateProbeReview()
                 },
-                "e.g. context7",
+                "Server name",
+                placeholder = "e.g. context7",
                 contentDescription = "Server name",
             )
             error?.takeIf {
@@ -399,7 +399,7 @@ internal fun McpServerPage(
                 SettingsErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
             }
         }
-        SettingsFieldLabel("Remote URL")
+        Spacer(Modifier.height(16.dp))
         MisulField(
             url,
             {
@@ -407,7 +407,8 @@ internal fun McpServerPage(
                 error = null
                 invalidateProbeReview()
             },
-            "e.g. https://host/mcp",
+            "Remote URL",
+            placeholder = "https://host/mcp",
             contentDescription = "Remote URL",
         )
         error?.takeIf { it.startsWith("Use HTTPS") }?.let {
@@ -426,7 +427,8 @@ internal fun McpServerPage(
                                 error = null
                                 invalidateProbeReview()
                             },
-                            "e.g. Authorization",
+                            "Header name",
+                            placeholder = "e.g. Authorization",
                             contentDescription = "Header name ${index + 1}",
                         )
                     }
@@ -468,7 +470,6 @@ internal fun McpServerPage(
         SettingsNote(
             "Header values are concealed after saving and encrypted with Android Keystore.",
         )
-        SettingsFieldLabel("Connection timeout")
         MisulField(
             timeout,
             {
@@ -476,7 +477,8 @@ internal fun McpServerPage(
                 error = null
                 invalidateProbeReview()
             },
-            "5000 milliseconds",
+            "Connection timeout (milliseconds)",
+            placeholder = "5000",
             contentDescription = "Connection timeout in milliseconds",
         )
         error?.takeIf { it.startsWith("Timeout") }?.let {

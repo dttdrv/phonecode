@@ -59,6 +59,7 @@ are tracked in the repository's `THIRD_PARTY.md` inventory.
 
 ## Fonts
 
+- Inter 4.001: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter), SIL Open Font License 1.1. The complete license is bundled in `font-licenses/Inter-OFL-1.1.txt`.
 - JetBrains Mono: Copyright 2020 The JetBrains Mono Project Authors, SIL Open Font License 1.1.
 
 ## Android and JVM libraries

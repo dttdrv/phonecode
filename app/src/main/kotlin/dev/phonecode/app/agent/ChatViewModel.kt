@@ -2076,6 +2076,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         pinnedWorkspace: File,
         credential: String,
         projectId: String?,
+        sessionId: String,
     ): MisulRuntimeSpec {
         require(preset.wireFormat == WireFormat.OPENAI_COMPAT) { "${preset.displayName} is not available in this alpha" }
         val limits = limitFor(selected)
@@ -2114,7 +2115,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     "deepseek" -> "deepseek_chat"
                     else -> "openai_chat"
                 },
-                headers = preset.extraHeaders,
+                headers = dev.phonecode.app.runtime.providerRequestHeaders(selected.providerId, sessionId, preset.extraHeaders),
             ),
             allowMutatingTools = _state.value.autoAccept,
         )
@@ -2244,7 +2245,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 ) {
                     sessionStore.setBranchInitialized(turnSessionId)
                 }
-                val runtimeSpec = misulRuntimeSpec(preset, selected, pinnedWorkspace, credential, turnProjectId)
+                val runtimeSpec = misulRuntimeSpec(preset, selected, pinnedWorkspace, credential, turnProjectId, turnSessionId)
                 importActiveSession(runtimeSpec, turnSessionId, startingHistory)
                 var promptText = text
                 while (gen == generation) {

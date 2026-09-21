@@ -300,7 +300,7 @@ internal fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: (
                 }
             }
         } else {
-            MisulSectionLabel("API key")
+            Spacer(Modifier.height(16.dp))
             MisulField(
                 key,
                 { key = it },
@@ -438,28 +438,27 @@ internal fun CustomProviderTextFields(
     modelsText: String,
     onModelsTextChange: (String) -> Unit,
 ) {
-    val colors = MaterialTheme.colorScheme
-    Text("Provider name", style = MaterialTheme.typography.labelMedium, color = colors.secondary)
     MisulField(
         name,
         onNameChange,
-        "e.g. My LM Studio",
+        "Provider name",
+        placeholder = "e.g. My LM Studio",
         contentDescription = "Provider name",
     )
-    Spacer(Modifier.height(6.dp))
-    Text("Base URL", style = MaterialTheme.typography.labelMedium, color = colors.secondary)
+    Spacer(Modifier.height(16.dp))
     MisulField(
         baseUrl,
         onBaseUrlChange,
-        "e.g. https://host/v1",
+        "Base URL",
+        placeholder = "https://host/v1",
         contentDescription = "Base URL",
     )
-    Spacer(Modifier.height(6.dp))
-    Text("Model IDs", style = MaterialTheme.typography.labelMedium, color = colors.secondary)
+    Spacer(Modifier.height(16.dp))
     MisulField(
         modelsText,
         onModelsTextChange,
-        "One model id per line",
+        "Model IDs",
+        placeholder = "One model ID per line",
         singleLine = false,
         minLines = 2,
         contentDescription = "Model IDs",

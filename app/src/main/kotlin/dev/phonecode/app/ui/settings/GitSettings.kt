@@ -244,12 +244,11 @@ internal fun GitPage(
                 ) { v -> settingsVm.update { it.copy(gitAutoBranch = v) } }
                 MisulContentRow(showDivider = true) {
                     Column(Modifier.weight(1f)) {
-                        Text("Git username", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                        Spacer(Modifier.height(6.dp))
                         MisulField(
                             manualUsername,
                             { manualUsername = it; manualError = null },
-                            "Account username",
+                            "Git username",
+                            placeholder = "Account username",
                             contentDescription = "Git username",
                             enabled = secureStorageAvailable,
                         )
@@ -257,12 +256,11 @@ internal fun GitPage(
                 }
                 MisulContentRow(showDivider = false) {
                     Column(Modifier.weight(1f)) {
-                        Text("Manual access token", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-                        Spacer(Modifier.height(6.dp))
                         MisulField(
                             manualToken,
                             { manualToken = it; manualError = null },
-                            if (hasSavedToken) "New PAT (leave blank to keep saved)" else "Fine-grained PAT",
+                            "Manual access token",
+                            placeholder = if (hasSavedToken) "Leave blank to keep saved" else "Fine-grained PAT",
                             secure = true,
                             contentDescription = "Manual Git access token",
                             enabled = secureStorageAvailable,

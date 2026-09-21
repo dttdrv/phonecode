@@ -27,6 +27,27 @@ class MisulRuntimeControllerTest {
             json.getJSONArray("provider_configs").getJSONObject(0).getString("credential_ref"),
         )
         assertFalse(json.getBoolean("allow_mutating_tools"))
+        val headers = json.getJSONArray("provider_configs").getJSONObject(0).getJSONArray("headers")
+        assertEquals("X-Title", headers.getJSONObject(0).getString("name"))
+        assertEquals("PhoneCode", headers.getJSONObject(0).getString("value"))
+    }
+
+    @Test
+    fun openCodeHeadersFollowTheConversationWithoutDuplicateNames() {
+        val configured = mapOf("X-OPENCODE-SESSION" to "stale", "X-Title" to "PhoneCode")
+        for (provider in listOf("opencode-go", "opencode-zen")) {
+            val first = providerRequestHeaders(provider, "conversation-a", configured)
+            assertEquals("conversation-a", first["x-opencode-session"])
+            assertEquals("PhoneCode", first["X-Title"])
+            assertEquals(2, first.size)
+            assertEquals(first, providerRequestHeaders(provider, "conversation-a", configured))
+            val second = providerRequestHeaders(provider, "conversation-b", configured)
+            assertEquals("conversation-b", second["x-opencode-session"])
+            val spec = fixtureSpec()
+            assertFalse(spec.copy(provider = spec.provider.copy(headers = first)).fingerprint() ==
+                spec.copy(provider = spec.provider.copy(headers = second)).fingerprint())
+        }
+        assertEquals(configured, providerRequestHeaders("openrouter", "conversation-a", configured))
     }
 
     @Test

@@ -136,12 +136,7 @@ internal fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun SettingsSection(label: String) = Text(
-    label,
-    style = MaterialTheme.typography.labelLarge,
-    color = MaterialTheme.colorScheme.onSurfaceVariant,
-    modifier = Modifier.padding(start = Spacing.s, top = Spacing.m, bottom = Spacing.xs),
-)
+private fun SettingsSection(label: String) = dev.phonecode.app.ui.components.MisulSectionLabel(label)
 
 @Composable
 private fun FolderStatusRow(label: String, detail: String, showDivider: Boolean) {

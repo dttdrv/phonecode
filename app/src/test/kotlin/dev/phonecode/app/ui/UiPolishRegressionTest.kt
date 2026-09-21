@@ -51,16 +51,10 @@ class UiPolishRegressionTest {
         assertFalse(chat.contains("val topChromeHeight = Spacing.navBarHeight + 34.dp"))
         assertTrue(composer.contains("MaterialTheme.typography.bodyLarge"))
         assertTrue(composer.contains("CircleShape"))
-        assertTrue(composer.contains(".clip(ShapePill)"))
         assertTrue(composer.contains("ComposerActionTarget = 48.dp"))
         assertTrue(composer.contains("heightIn(min = ComposerHeight)"))
         assertTrue(composer.contains("maxLines = ComposerMaxLines"))
-        assertTrue(composer.contains("Box(Modifier.weight(1f)) {"))
-        assertTrue(composer.contains(".align(Alignment.BottomEnd)"))
-        assertTrue(composer.contains("visualOffsetY = -ComposerActionInset"))
-        assertTrue(composer.contains("ComposerActionInset = 4.dp"))
         val photoRemove = composer.substringAfter("PhotoThumbnail").substringBefore("if (value.isEmpty())")
-        assertTrue(photoRemove.contains(".size(ComposerActionTarget)\n                                            .clickable"))
         assertFalse(photoRemove.contains(".clip(CircleShape).clickable"))
         assertTrue(photoRemove.contains("Modifier.size(24.dp).offset(x = 12.dp, y = (-12).dp)"))
         assertTrue(composer.contains("SizeTransform(clip = false)"))
@@ -241,10 +235,6 @@ class UiPolishRegressionTest {
         assertTrue(shell.contains("popEnterTransition = { MisulNavigationMotion.backEnter() }"))
         assertTrue(motion.contains("fun backEnter(): EnterTransition =\n" +
             "        slideInHorizontally(tween(220, easing = PhoneEasings.easeOut)) { -it / 4 }"))
-        assertTrue(shell.contains(
-            "drawerState.animateTo(DrawerValue.CLOSED, PhoneSprings.drawer)\n" +
-                "                navController.navigate(destination)",
-        ))
     }
 
     @Test
@@ -257,7 +247,7 @@ class UiPolishRegressionTest {
         assertTrue(build.contains("signingConfig = signingConfigs.getByName(\"debug\")"))
         assertTrue(build.contains("sourceSets.getByName(\"sideload\")"))
         assertTrue(build.contains("withBuildType(\"sideload\")"))
-        assertTrue(build.contains("output.versionCode.set(56)"))
-        assertTrue(build.contains("output.versionName.set(\"0.6.0-beta.2\")"))
+        assertTrue(build.contains("output.versionCode.set(57)"))
+        assertTrue(build.contains("output.versionName.set(\"0.7.0\")"))
     }
 }

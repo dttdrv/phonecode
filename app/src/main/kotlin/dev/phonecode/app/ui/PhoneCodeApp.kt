@@ -310,12 +310,9 @@ fun PhoneCodeApp() {
             Unit
         }
         val navigateFromDrawer: (String) -> Unit = { destination ->
-            drawerScope.launch {
-                focusManager.clearFocus()
-                drawerState.animateTo(DrawerValue.CLOSED, PhoneSprings.drawer)
-                navController.navigate(destination) { launchSingleTop = true }
-            }
-            Unit
+            focusManager.clearFocus()
+            closeDrawer()
+            navController.navigate(destination) { launchSingleTop = true }
         }
         val projectPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             if (uri != null) {

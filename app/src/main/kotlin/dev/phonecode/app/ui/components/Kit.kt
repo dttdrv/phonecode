@@ -134,7 +134,7 @@ fun Modifier.pressFeedback(
 /** Context-usage ring (Claude-Code style). [fraction] 0..1 of the window used. */
 @Composable
 fun ContextRing(fraction: Float, modifier: Modifier = Modifier, stroke: Float = 3.5f, color: Color = MaterialTheme.colorScheme.onBackground) {
-    val track = MaterialTheme.colorScheme.outlineVariant
+    val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.36f)
     androidx.compose.foundation.Canvas(modifier) {
         val inset = stroke.dp.toPx() / 2
         val arcSize = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2)

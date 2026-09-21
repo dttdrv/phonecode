@@ -50,7 +50,6 @@ fun MorphingMenu(
     val outlineWidth = with(density) { 1.dp.toPx() }
     val background = MaterialTheme.colorScheme.surfaceContainerHigh
     val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-    val shadow = MaterialTheme.colorScheme.scrim.copy(alpha = 0.055f)
     val positionProvider = remember(above, alignEnd, margin) {
         object : PopupPositionProvider {
             override fun calculatePosition(
@@ -92,13 +91,6 @@ fun MorphingMenu(
                     val left = if (alignEnd) size.width - width else 0f
                     val top = if (above) size.height - height else 0f
                     val radius = anchorPixels / 2f + (finalCorner - anchorPixels / 2f) * value
-                    val shadowSpread = 4 * density.density
-                    drawRoundRect(
-                        shadow,
-                        Offset(left - shadowSpread, top - shadowSpread + 2 * density.density),
-                        Size(width + shadowSpread * 2, height + shadowSpread * 2),
-                        CornerRadius(radius + shadowSpread),
-                    )
                     drawRoundRect(background, Offset(left, top), Size(width, height), CornerRadius(radius))
                     clip.reset()
                     clip.addRoundRect(RoundRect(left, top, left + width, top + height, radius, radius))

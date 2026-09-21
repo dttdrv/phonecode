@@ -18,8 +18,8 @@ private val Surface2 = Color(0xFF212121) // composer, chips, user bubble
 private val Surface3 = Color(0xFF2A2A2A) // elevated popovers/menus
 private val Surface4 = Color(0xFF333333)
 
-private val LightBg = Color(0xFFFDFDFD)
-private val LightSurf = Color(0xFFF5F5F5)
+private val LightBg = Color(0xFFFFFFFF)
+private val LightSurf = Color(0xFFF2F2F7)
 private val LightElev = Color(0xFFF8F8F8)
 private val LightInput = Color(0xFFEFEFEF)
 private val LightField = Color(0xFFE9E9E9)

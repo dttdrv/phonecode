@@ -915,8 +915,8 @@ Original instruction.
 
         compose.onNodeWithText("Git").performClick()
         compose.onNodeWithText("Advanced Git settings").performClick()
-        compose.onNodeWithText("Git username").assertIsDisplayed()
-        compose.onNodeWithText("Manual access token").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Git username").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Manual Git access token").assertIsDisplayed()
         compose.onNodeWithText("Save manual credentials").assertIsDisplayed()
     }
 
@@ -991,10 +991,10 @@ Original instruction.
 
         compose.onNodeWithText("MCP servers").performClick()
         compose.onNodeWithText("Add server").performClick()
-        compose.onNodeWithText("Server name").assertIsDisplayed()
-        compose.onNodeWithText("Remote URL").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Server name").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Remote URL").assertIsDisplayed()
         compose.onNodeWithText("HTTP headers").assertIsDisplayed()
-        compose.onNodeWithText("Connection timeout").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Connection timeout in milliseconds").assertIsDisplayed()
         compose.onNodeWithText("Test").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()

@@ -63,6 +63,7 @@ fun MisulField(
     var secureVisible by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     Column(modifier.fillMaxWidth()) {
+        TextLabel(label)
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -74,12 +75,11 @@ fun MisulField(
             visualTransformation = if (secure && !secureVisible) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = if (secure) KeyboardOptions(keyboardType = KeyboardType.Password) else KeyboardOptions.Default,
             modifier = Modifier.fillMaxWidth()
-                .heightIn(min = MisulMinimumInteractiveSize)
                 .focusRequester(focusRequester)
-                .pointerInput(focusRequester) {
+                .pointerInput(focusRequester, enabled) {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        focusRequester.requestFocus()
+                        if (enabled) focusRequester.requestFocus()
                         waitForUpOrCancellation(pass = PointerEventPass.Initial)
                     }
                 }
@@ -90,30 +90,32 @@ fun MisulField(
                     error?.let { this.error(error) }
                 },
             decorationBox = { innerTextField ->
-                Column(
-                    Modifier.padding(start = 16.dp, end = if (secure) 4.dp else 16.dp, top = 8.dp, bottom = 8.dp),
+                Row(
+                    Modifier.heightIn(min = MisulMinimumInteractiveSize)
+                        .padding(start = 16.dp, end = if (secure) 4.dp else 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextLabel(label)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                            if (value.isEmpty() && placeholder != null) {
-                                androidx.compose.material3.Text(
-                                    placeholder,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = colors.onSurfaceVariant,
-                                    modifier = Modifier.clearAndSetSemantics {},
-                                )
-                            }
-                            innerTextField()
-                        }
-                        if (secure) {
-                            MisulIconButton(
-                                icon = if (secureVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                contentDescription = if (secureVisible) "Hide $label" else "Show $label",
-                                onClick = { secureVisible = !secureVisible },
-                                enabled = enabled,
+                    Box(
+                        Modifier.weight(1f).padding(vertical = 13.dp),
+                        contentAlignment = Alignment.TopStart,
+                    ) {
+                        if (value.isEmpty() && placeholder != null) {
+                            androidx.compose.material3.Text(
+                                placeholder,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = colors.onSurfaceVariant,
+                                modifier = Modifier.clearAndSetSemantics {},
                             )
                         }
+                        innerTextField()
+                    }
+                    if (secure) {
+                        MisulIconButton(
+                            icon = if (secureVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = if (secureVisible) "Hide $label" else "Show $label",
+                            onClick = { secureVisible = !secureVisible },
+                            enabled = enabled,
+                        )
                     }
                 }
             },
@@ -122,9 +124,9 @@ fun MisulField(
         helper?.let {
             androidx.compose.material3.Text(
                 it,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
                 color = if (error != null) colors.error else colors.onSurfaceVariant,
-                modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp),
             )
         }
     }
@@ -147,7 +149,6 @@ fun MisulSearchField(
         cursorBrush = SolidColor(LocalMisulAccent.current),
         singleLine = true,
         modifier = modifier.fillMaxWidth()
-            .heightIn(min = MisulMinimumInteractiveSize)
             .focusRequester(focusRequester)
             .pointerInput(focusRequester) {
                 awaitEachGesture {
@@ -161,7 +162,7 @@ fun MisulSearchField(
             .semantics { this.contentDescription = contentDescription },
         decorationBox = { innerTextField ->
             Row(
-                Modifier.padding(horizontal = 16.dp),
+                Modifier.heightIn(min = MisulMinimumInteractiveSize).padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -181,8 +182,8 @@ fun MisulSearchField(
 private fun TextLabel(label: String) {
     androidx.compose.material3.Text(
         label,
-        style = MaterialTheme.typography.labelSmall,
+        style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.clearAndSetSemantics {},
+        modifier = Modifier.padding(start = 16.dp, bottom = 6.dp).clearAndSetSemantics {},
     )
 }

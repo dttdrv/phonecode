@@ -5,14 +5,17 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.unit.sp
 import dev.phonecode.app.R
 
-// SYSTEM font (Roboto + device variants) - the single biggest native-feel signal. Bundling Inter
-// made the app read as a web wrapper (Grok ships zero custom fonts for exactly this reason; see
-// design/specs/grok-design.md "system-font confidence"). The OS renders its own typeface with its
-// own metrics; the name stays for the dozens of existing references.
-val InterFamily = FontFamily.Default
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+val InterFamily = FontFamily(
+    Font(R.font.inter_variable, FontWeight.Normal, variationSettings = FontVariation.Settings(FontVariation.weight(400))),
+    Font(R.font.inter_variable, FontWeight.Medium, variationSettings = FontVariation.Settings(FontVariation.weight(500))),
+    Font(R.font.inter_variable, FontWeight.SemiBold, variationSettings = FontVariation.Settings(FontVariation.weight(600))),
+    Font(R.font.inter_variable, FontWeight.Bold, variationSettings = FontVariation.Settings(FontVariation.weight(700))),
+)
 
 /** JetBrains Mono - retained for code blocks / monospace. */
 val PcMono = FontFamily(
@@ -21,7 +24,7 @@ val PcMono = FontFamily(
     Font(R.font.jetbrainsmono_bold, FontWeight.Bold),
 )
 
-/** Apple Dynamic Type scale mapped onto Material3 roles, rendered in Inter. */
+/** Shared type scale; code and terminal output use PcMono separately. */
 val PhoneTypography = Typography(
     displayLarge = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.Bold, fontSize = 57.sp, lineHeight = 64.sp, letterSpacing = (-0.25).sp),
     displayMedium = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.Bold, fontSize = 45.sp, lineHeight = 52.sp, letterSpacing = (-0.25).sp),
@@ -36,6 +39,6 @@ val PhoneTypography = Typography(
     bodyMedium = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 20.sp, letterSpacing = (-0.02).sp),
     bodySmall = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 19.sp, letterSpacing = 0.sp),
     labelLarge = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp, letterSpacing = 0.sp),
-    labelMedium = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.Normal, fontSize = 13.sp, lineHeight = 16.sp, letterSpacing = 0.sp),
+    labelMedium = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.Normal, fontSize = 13.sp, lineHeight = 18.sp, letterSpacing = 0.sp),
     labelSmall = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 15.sp, letterSpacing = 0.sp),
 )

@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.error
@@ -59,55 +60,63 @@ internal fun SettingsPageShell(
     action: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    val colors = MaterialTheme.colorScheme
+    val colors = MaterialTheme.colorScheme.let {
+        if (it.background.luminance() > 0.5f) it.copy(
+            background = it.surfaceContainerLow,
+            surfaceContainerLow = it.background,
+            surfaceContainerHighest = it.background,
+        ) else it
+    }
     val scrollState = rememberScrollState()
     val scrolled = remember { derivedStateOf { scrollState.canScrollBackward } }
     val hasMoreBelow = remember { derivedStateOf { scrollState.canScrollForward } }
     val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottomInset = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
-    Box(
-        Modifier.fillMaxSize().background(colors.background)
-            .testTag("settings-page-shell"),
-    ) {
-        StretchSyncedScrollChrome(
-            modifier = Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(),
-            showTop = scrolled.value,
-            showBottom = hasMoreBelow.value,
-            topHeight = statusInset + Spacing.navBarHeight + 12.dp,
-            bottomHeight = bottomInset + 16.dp,
+    MaterialTheme(colorScheme = colors) {
+        Box(
+            Modifier.fillMaxSize().background(colors.background)
+                .testTag("settings-page-shell"),
         ) {
-            Column(
-                Modifier.fillMaxSize()
-                    .contentVerticalScroll(scrollState)
-                    .background(colors.background)
-                    .padding(
-                        start = Spacing.m,
-                        end = Spacing.m,
-                        top = statusInset + Spacing.navBarHeight + 4.dp,
-                    ),
+            StretchSyncedScrollChrome(
+                modifier = Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(),
+                showTop = scrolled.value,
+                showBottom = hasMoreBelow.value,
+                topHeight = statusInset + Spacing.navBarHeight + 12.dp,
+                bottomHeight = bottomInset + 16.dp,
             ) {
-                content()
-                Spacer(Modifier.height(Spacing.xxl + bottomInset))
+                Column(
+                    Modifier.fillMaxSize()
+                        .contentVerticalScroll(scrollState)
+                        .background(colors.background)
+                        .padding(
+                            start = Spacing.m,
+                            end = Spacing.m,
+                            top = statusInset + Spacing.navBarHeight + 4.dp,
+                        ),
+                ) {
+                    content()
+                    Spacer(Modifier.height(Spacing.xxl + bottomInset))
+                }
             }
-        }
-        Row(
-            Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth()
-                .height(statusInset + Spacing.navBarHeight)
-                .zIndex(1f)
-                .padding(start = 8.dp, top = statusInset, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            MisulIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack, enabled = backEnabled)
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                color = colors.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f).semantics { heading() },
-            )
-            if (action == null) Spacer(Modifier.width(Spacing.touchTarget)) else Box(Modifier.width(Spacing.touchTarget)) { action() }
+            Row(
+                Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth()
+                    .height(statusInset + Spacing.navBarHeight)
+                    .zIndex(1f)
+                    .padding(start = 8.dp, top = statusInset, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MisulIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack, enabled = backEnabled)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = colors.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
+                if (action == null) Spacer(Modifier.width(Spacing.touchTarget)) else Box(Modifier.width(Spacing.touchTarget)) { action() }
+            }
         }
     }
 }
@@ -167,7 +176,7 @@ internal fun SettingsNote(text: String, announce: Boolean = false) {
         Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = Spacing.xs, bottom = Spacing.xs)
             .then(if (announce) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier),
     ) {
-        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

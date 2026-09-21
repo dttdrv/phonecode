@@ -29,6 +29,18 @@ internal data class MisulProvider(
     val headers: Map<String, String> = emptyMap(),
 )
 
+internal fun providerRequestHeaders(
+    providerId: String,
+    sessionId: String,
+    extraHeaders: Map<String, String>,
+): Map<String, String> {
+    if (providerId != "opencode-go" && providerId != "opencode-zen") return extraHeaders
+    require(sessionId.isNotBlank()) { "OpenCode requests need a conversation ID" }
+    return extraHeaders.filterKeys {
+        !it.equals("x-opencode-session", ignoreCase = true)
+    } + ("x-opencode-session" to sessionId)
+}
+
 internal data class MisulRuntimeSpec(
     val workspaceRoot: File,
     val stateRoot: File,

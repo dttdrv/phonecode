@@ -22,6 +22,7 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CopyOnWriteArrayList
 
 @RunWith(AndroidJUnit4::class)
 class MisulRuntimeWorkflowTest {
@@ -30,7 +31,7 @@ class MisulRuntimeWorkflowTest {
     @Test
     fun nativeRuntimeStreamsARealProviderResponseThroughJni() = runBlocking {
         ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
-            val request = StringBuilder()
+            val requests = CopyOnWriteArrayList<String>()
             val responder = Executors.newSingleThreadExecutor()
             val responseBody = """
                 data: {"choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}
@@ -45,26 +46,30 @@ class MisulRuntimeWorkflowTest {
 
             """.trimIndent().plus("\n\n").encodeToByteArray()
             responder.submit {
-                server.accept().use { socket ->
-                    val input = socket.getInputStream().bufferedReader()
-                    var contentLength = 0
-                    while (true) {
-                        val line = input.readLine() ?: break
-                        request.append(line).append('\n')
-                        if (line.startsWith("Content-Length:", ignoreCase = true)) {
-                            contentLength = line.substringAfter(':').trim().toInt()
+                repeat(4) {
+                    val request = StringBuilder()
+                    server.accept().use { socket ->
+                        val input = socket.getInputStream().bufferedReader()
+                        var contentLength = 0
+                        while (true) {
+                            val line = input.readLine() ?: break
+                            request.append(line).append('\n')
+                            if (line.startsWith("Content-Length:", ignoreCase = true)) {
+                                contentLength = line.substringAfter(':').trim().toInt()
+                            }
+                            if (line.isEmpty()) break
                         }
-                        if (line.isEmpty()) break
-                    }
-                    repeat(contentLength) { request.append(input.read().toChar()) }
-                    socket.getOutputStream().bufferedWriter().use { output ->
-                        output.write("HTTP/1.1 200 OK\r\n")
-                        output.write("Content-Type: text/event-stream\r\n")
-                        output.write("Content-Length: ${responseBody.size}\r\n")
-                        output.write("Connection: close\r\n\r\n")
-                        output.flush()
-                        socket.getOutputStream().write(responseBody)
-                        socket.getOutputStream().flush()
+                        repeat(contentLength) { request.append(input.read().toChar()) }
+                        requests += request.toString()
+                        socket.getOutputStream().bufferedWriter().use { output ->
+                            output.write("HTTP/1.1 200 OK\r\n")
+                            output.write("Content-Type: text/event-stream\r\n")
+                            output.write("Content-Length: ${responseBody.size}\r\n")
+                            output.write("Connection: close\r\n\r\n")
+                            output.flush()
+                            socket.getOutputStream().write(responseBody)
+                            socket.getOutputStream().flush()
+                        }
                     }
                 }
             }
@@ -76,7 +81,10 @@ class MisulRuntimeWorkflowTest {
             val controller = MisulRuntimeController()
             try {
                 val events = mutableListOf<MisulRuntimeEvent>()
-                val runtimeSpec = spec(root, server.localPort)
+                val baseSpec = spec(root, server.localPort)
+                val runtimeSpec = baseSpec.copy(provider = baseSpec.provider.copy(
+                    headers = providerRequestHeaders("opencode-go", "session-phonecode-workflow", emptyMap()),
+                ))
                 val legacy = PersistedSession(
                     id = "session-phonecode-workflow",
                     title = "Restored chat",
@@ -97,11 +105,31 @@ class MisulRuntimeWorkflowTest {
                 assertEquals("completed", result.status)
                 assertEquals("native alpha", result.content)
                 assertTrue(events.any { it == MisulRuntimeEvent.Text("native alpha") })
+                val request = requests.first()
                 assertTrue(request.startsWith("POST /v1/chat/completions HTTP/1.1"))
                 assertTrue(request.contains("Authorization: Bearer fixture-token", ignoreCase = true))
                 assertTrue("\"model\":\"phonecode-test-model\"" in request)
                 assertTrue("legacy question" in request)
                 assertTrue("legacy answer" in request)
+                for (session in listOf("session-phonecode-workflow", "session-phonecode-next", "session-phonecode-workflow")) {
+                    val nextSpec = baseSpec.copy(provider = baseSpec.provider.copy(
+                        headers = providerRequestHeaders("opencode-go", session, emptyMap()),
+                    ))
+                    val next = controller.prompt(nextSpec, session, "hello again", onEvent = {})
+                    assertEquals("completed", next.status)
+                    assertEquals("native alpha", next.content)
+                }
+                assertTrue("native alpha" in requests[1])
+                assertTrue("legacy question" !in requests[2])
+                assertTrue("native alpha" in requests[3])
+                assertTrue("legacy question" in requests[3])
+                val headerLines = requests.flatMap { it.lines() }
+                assertEquals(
+                    listOf("session-phonecode-workflow", "session-phonecode-workflow", "session-phonecode-next", "session-phonecode-workflow"),
+                    headerLines.filter { it.startsWith("x-opencode-session:", ignoreCase = true) }
+                        .map { it.substringAfter(':').trim() },
+                )
+                assertEquals(4, headerLines.count { it.startsWith("User-Agent:", ignoreCase = true) })
             } finally {
                 controller.close()
                 responder.shutdownNow()

@@ -222,23 +222,10 @@ private fun formatCompletionDate(value: Long) = SimpleDateFormat("HH:mm · d MMM
 @Composable
 internal fun UserBubble(text: String, images: List<MessagePart.Image>) {
     val colors = MaterialTheme.colorScheme
-    val clipboard = LocalClipboardManager.current
-    var copied by remember(text) { mutableStateOf(false) }
-    LaunchedEffect(copied) {
-        if (copied) {
-            kotlinx.coroutines.delay(1800)
-            copied = false
-        }
-    }
-    fun copyMessage() {
-        clipboard.setText(AnnotatedString(text))
-        copied = true
-    }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Column(horizontalAlignment = Alignment.End) {
             Box(
                 Modifier.widthIn(max = 300.dp)
-                    // Uniform large radius (Grok rounded-4xl) - short messages read as full pills.
                     .clip(RoundedCornerShape(24.dp))
                     .background(colors.surfaceContainerHigh)
                     .padding(horizontal = 8.dp, vertical = 8.dp),
@@ -246,27 +233,15 @@ internal fun UserBubble(text: String, images: List<MessagePart.Image>) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     images.forEach { PhotoThumbnail(it, Modifier.fillMaxWidth().height(180.dp)) }
                     if (text.isNotEmpty()) {
-                        Text(
-                            text,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.onBackground,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                        )
+                        SelectionContainer {
+                            Text(
+                                text,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = colors.onBackground,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                            )
+                        }
                     }
-                }
-            }
-            if (text.isNotEmpty()) {
-                Box(
-                    Modifier.semantics(mergeDescendants = true) {
-                        liveRegion = LiveRegionMode.Polite
-                        stateDescription = if (copied) "Copied" else "Ready to copy"
-                    },
-                ) {
-                    ActionIcon(
-                        if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
-                        if (copied) "Copied" else "Copy message",
-                        ::copyMessage,
-                    )
                 }
             }
         }
@@ -351,7 +326,7 @@ internal fun AssistantTurn(
         }
 
         AnimatedVisibility(visible = showActions || showReport, enter = fadeIn(PhoneTweens.popEnter), exit = fadeOut(PhoneTweens.popExit)) {
-            Row(Modifier.padding(top = 11.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (showActions) {
                     var copied by remember { mutableStateOf(false) }
                     LaunchedEffect(copied) { if (copied) { kotlinx.coroutines.delay(1800); copied = false } }
@@ -393,7 +368,7 @@ private fun ThinkingDot(active: Boolean, open: Boolean) {
 
 @Composable
 private fun ActionIcon(icon: ImageVector, desc: String, onClick: () -> Unit) {
-    MisulIconButton(icon, desc, onClick = onClick)
+    MisulIconButton(icon, desc, onClick = onClick, iconSize = 18.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 internal data class Seg(val text: String, val isCode: Boolean, val lang: String)
@@ -797,7 +772,7 @@ internal fun ChatTurn(
             reasoning = line.text,
             streaming = false,
             showActions = false,
-            showReport = !isRunning,
+            showReport = false,
             completedAt = null,
             onCopy = {},
             onRedo = {},

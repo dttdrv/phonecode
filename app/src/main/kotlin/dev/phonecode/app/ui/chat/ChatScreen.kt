@@ -756,7 +756,7 @@ private fun EmptyState(
     val accent = LocalMisulAccent.current
     // Misul identity stays at the edge of the work: one cobalt mark, then quiet text-first actions.
     Column(modifier.padding(Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(painter = painterResource(R.drawable.ic_misul_mark), contentDescription = null, tint = accent, modifier = Modifier.size(48.dp))
+        Icon(painter = painterResource(R.drawable.ic_phonecode_mark), contentDescription = null, tint = accent, modifier = Modifier.size(48.dp))
         Spacer(Modifier.height(14.dp))
         if (!modelConfigured) {
             Text(

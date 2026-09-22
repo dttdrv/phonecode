@@ -139,14 +139,14 @@ private fun Welcome(onNext: () -> Unit) {
             ) {
                 Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_misul_mark),
+                        painter = painterResource(R.drawable.ic_phonecode_mark),
                         contentDescription = null,
                         tint = accent,
                         modifier = Modifier.size(36.dp),
                     )
                 }
                 Text(
-                    "Misul Agent",
+                    "PhoneCode",
                     style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.onBackground,
                 )
@@ -161,7 +161,7 @@ private fun Welcome(onNext: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                "Run Misul Agent in a private local workspace, with the models and tools you trust and access to phone folders you choose.",
+                "Run PhoneCode in a private local workspace, with the models and tools you trust and access to phone folders you choose.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
                 textAlign = TextAlign.Center,

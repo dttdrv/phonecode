@@ -1621,7 +1621,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 source = when {
                     tool.name in remoteTools -> "MCP"
                     tool.name == "skill" -> "Skills"
-                    else -> "Misul Agent"
+                    else -> "PhoneCode"
                 },
                 access = when {
                     tool.name == "external_directory" ||
@@ -2102,7 +2102,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }?.takeIf { supportsReasoning(selected) }
         val instructions = loadProjectInstructions(pinnedWorkspace, appSettings.load())
         val systemPrompt = buildString {
-            append("You are Misul Agent, a coding agent running directly on the user's Android phone. ")
+            append("You are PhoneCode, a coding agent running directly on the user's Android phone. ")
             append("Work in the provided workspace, use tools when they improve correctness, preserve user data, and report results plainly.")
             if (instructions.isNotEmpty()) append("\n\n").append(instructions.joinToString("\n\n"))
         }
@@ -2780,7 +2780,7 @@ internal fun repairInterruptedHistory(
                 content = if (it.id in stoppedApprovalCallIds) {
                     USER_STOPPED_BEFORE_APPROVAL_RESULT
                 } else {
-                    "Interrupted before Misul Agent recorded the result. Review workspace changes before retrying."
+                    "Interrupted before PhoneCode recorded the result. Review workspace changes before retrying."
                 },
                 isError = true,
             )

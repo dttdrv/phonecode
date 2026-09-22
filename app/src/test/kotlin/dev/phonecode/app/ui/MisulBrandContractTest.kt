@@ -8,7 +8,6 @@ import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.hypot
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
@@ -18,26 +17,6 @@ class MisulBrandContractTest {
     fun cobaltTokensPreserveMisulOklchCoordinates() {
         assertOklch(MisulCobaltDark, lightness = 0.720f, chroma = 0.190f, hueDegrees = 255f)
         assertOklch(MisulCobaltLight, lightness = 0.500f, chroma = 0.220f, hueDegrees = 255f)
-    }
-
-    @Test
-    fun userFacingSurfacesUseMisulAgentName() {
-        val surfaces = listOf(
-            "app/src/main/kotlin/dev/phonecode/app/ui/onboarding/ModelSetupScreen.kt",
-            "app/src/main/kotlin/dev/phonecode/app/ui/chat/ChatScreen.kt",
-            "app/src/main/kotlin/dev/phonecode/app/ui/settings/SettingsScreen.kt",
-            "app/src/main/kotlin/dev/phonecode/app/agent/ChatViewModel.kt",
-            "app/src/main/kotlin/dev/phonecode/app/agent/ExtensionConfigTools.kt",
-            "app/src/main/kotlin/dev/phonecode/app/agent/ProjectInstructions.kt",
-            "app/src/main/kotlin/dev/phonecode/app/agent/TurnService.kt",
-            "app/src/main/kotlin/dev/phonecode/app/auth/CodexAuth.kt",
-        )
-        val staleName = Regex("\"[^\n\"]*PhoneCode[^\n\"]*\"")
-        val matches = surfaces.flatMap { path ->
-            staleName.findAll(source(path)).map { "$path: ${it.value}" }.toList()
-        }.filterNot { it.endsWith(": \"PhoneCode:turn\"") }
-
-        assertTrue(matches.joinToString("\n"), matches.isEmpty())
     }
 
     @Test

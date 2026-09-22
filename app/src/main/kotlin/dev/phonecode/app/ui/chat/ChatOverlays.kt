@@ -354,7 +354,7 @@ private fun AiReportFlow(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Thank you. Your feedback will be used to improve Misul Agent's safeguards.",
+                        "Thank you. Your feedback will be used to improve PhoneCode's safeguards.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.secondary,
                     )
@@ -457,7 +457,7 @@ private fun ReportReview(
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Text(
-                "Choose what went wrong. Misul Agent sends only this category, your optional note, and basic app information.",
+                "Choose what went wrong. PhoneCode sends only this category, your optional note, and basic app information.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.secondary,
             )
@@ -1095,7 +1095,7 @@ private fun approvalPresentation(tool: String): ApprovalPresentation {
             ApprovalPresentation(
                 action = "Read outside linked folders",
                 risk = "External file access",
-                guidance = "This reads the exact file or folder path shown above. Misul Agent always asks for this access.",
+                guidance = "This reads the exact file or folder path shown above. PhoneCode always asks for this access.",
             )
         normalized.startsWith("mcp_") ->
             ApprovalPresentation(
@@ -1133,7 +1133,7 @@ private fun approvalPresentation(tool: String): ApprovalPresentation {
             ApprovalPresentation(
                 action = tool.replace('_', ' ').replaceFirstChar { it.uppercase() },
                 risk = "Approval required",
-                guidance = "Only approve actions that match what you asked Misul Agent to do.",
+                guidance = "Only approve actions that match what you asked PhoneCode to do.",
             )
     }
 }

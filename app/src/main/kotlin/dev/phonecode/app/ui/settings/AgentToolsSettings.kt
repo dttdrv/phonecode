@@ -208,7 +208,7 @@ internal fun AgentToolsCategoryPage(
             SettingsNote(if (query.isBlank()) "No tools in this category." else "No tools match “${query.trim()}”.")
         } else {
             tools.groupBy { it.source }.toList()
-                .sortedBy { (source, _) -> listOf("Misul Agent", "Skills", "MCP").indexOf(source).let { if (it < 0) Int.MAX_VALUE else it } }
+                .sortedBy { (source, _) -> listOf("PhoneCode", "Skills", "MCP").indexOf(source).let { if (it < 0) Int.MAX_VALUE else it } }
                 .forEach { (source, entries) ->
                     MisulSectionLabel(if (source == "MCP") "Plugins" else source)
                     MisulGroup {

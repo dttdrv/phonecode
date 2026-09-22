@@ -620,7 +620,7 @@ internal fun McpServerPage(
                         connectedSnapshot.capabilities.sorted().joinToString().ifBlank { "None" },
                     )
                     McpValueRow(
-                        "Available in Misul Agent",
+                        "Available in PhoneCode",
                         if (connectedSnapshot.tools.isEmpty()) "No tool calls" else "Tool calls",
                         showDivider = false,
                     )

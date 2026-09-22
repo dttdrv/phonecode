@@ -117,7 +117,7 @@ internal fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
         val projects = state.projects.count { it.folderId == folderId }
         ConfirmActionDialog(
             title = "Remove folder access?",
-            message = if (projects == 0) "Misul Agent will lose access to ${folder?.name ?: "this folder"}. The phone folder itself is not deleted." else "Misul Agent will unlink ${folder?.name ?: "this folder"}, move $projects project${if (projects == 1) "" else "s"} and their chats to Unsorted, and keep private workspace files under Recovered projects. The phone folder itself is not deleted.",
+            message = if (projects == 0) "PhoneCode will lose access to ${folder?.name ?: "this folder"}. The phone folder itself is not deleted." else "PhoneCode will unlink ${folder?.name ?: "this folder"}, move $projects project${if (projects == 1) "" else "s"} and their chats to Unsorted, and keep private workspace files under Recovered projects. The phone folder itself is not deleted.",
             action = "Remove access",
             onDismiss = { pendingUnlinkId = null },
         ) { vm.unlinkSharedFolder(folderId); pendingUnlinkId = null }
@@ -125,7 +125,7 @@ internal fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
     if (confirmAutomaticApproval) {
         ConfirmActionDialog(
             title = "Enable automatic approval?",
-            message = "Misul Agent will run writes in the private workspace and linked phone folders, commands, Git operations, and mutating MCP actions without asking each time. Reads outside linked locations will still ask.",
+            message = "PhoneCode will run writes in the private workspace and linked phone folders, commands, Git operations, and mutating MCP actions without asking each time. Reads outside linked locations will still ask.",
             action = "Enable automatic approval",
             progressAction = "Enabling…",
             inProgress = enablingAutomaticApproval,

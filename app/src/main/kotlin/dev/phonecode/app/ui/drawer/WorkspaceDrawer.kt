@@ -420,7 +420,7 @@ internal fun WorkspaceDrawer(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_misul_mark),
+                    painter = painterResource(R.drawable.ic_phonecode_mark),
                     contentDescription = null,
                     tint = accent,
                     modifier = Modifier.size(24.dp),
@@ -495,7 +495,7 @@ private fun DrawerTitleSearch(
             exit = fadeOut(tween(100, easing = PhoneEasings.easeOut)),
         ) {
             Text(
-                "Misul Agent",
+                "PhoneCode",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.onBackground,
             )

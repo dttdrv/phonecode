@@ -94,7 +94,7 @@ class OnboardingFlowTest {
     fun onboardingUsesFocusedModelSetupAndSkipLeadsToHonestChat() {
         UiTestSecureKeyStore.clear()
         val app = ApplicationProvider.getApplicationContext<PhoneCodeApplication>()
-        assertEquals("Misul Agent", app.getString(R.string.app_name))
+        assertEquals("PhoneCode", app.getString(R.string.app_name))
         compose.setContent {
             PhoneCodeTheme(darkTheme = false) {
                 OnboardingFlowHost(app.chatViewModel)
@@ -219,11 +219,11 @@ class OnboardingFlowTest {
     @Test
     fun providerSetupFailureCopyDistinguishesStorageFromActivation() {
         assertEquals(
-            "Misul Agent could not save this API key in secure storage.",
+            "PhoneCode could not save this API key in secure storage.",
             providerSetupFailureMessage(keySaved = false),
         )
         assertEquals(
-            "API key saved, but Misul Agent could not activate an available model for this provider.",
+            "API key saved, but PhoneCode could not activate an available model for this provider.",
             providerSetupFailureMessage(keySaved = true),
         )
     }

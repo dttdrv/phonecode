@@ -132,13 +132,13 @@ internal fun AboutPage(vm: ChatViewModel, onOpenDoc: (String) -> Unit, onBack: (
     val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "0.1" }
     SettingsPageShell("About", onBack) {
         Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(painterResource(R.drawable.ic_misul_mark), null, tint = LocalMisulAccent.current, modifier = Modifier.height(64.dp))
+            Icon(painterResource(R.drawable.ic_phonecode_mark), null, tint = LocalMisulAccent.current, modifier = Modifier.height(64.dp))
             Spacer(Modifier.height(14.dp))
-            Text("Misul Agent", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text("PhoneCode", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
             Text("version $version", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         MisulGroup {
-            SettingsNavigationRow("Website", "misul.org", onClick = { browserError = openExternalUrl(context, "https://misul.org") })
+            SettingsNavigationRow("Website", "dttdrv.xyz/phonecode", onClick = { browserError = openExternalUrl(context, "https://dttdrv.xyz/phonecode") })
             MisulContentRow {
                 Column(Modifier.weight(1f)) {
                     Text("Config directory", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)

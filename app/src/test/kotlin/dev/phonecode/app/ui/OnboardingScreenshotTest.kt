@@ -55,7 +55,7 @@ class OnboardingScreenshotTest {
             }
         }
         compose.waitForIdle()
-        compose.onNodeWithText("Misul Agent").assertIsDisplayed()
+        compose.onNodeWithText("PhoneCode").assertIsDisplayed()
         compose.onNodeWithText("Get started").assertIsDisplayed()
         compose.onNodeWithText("Private project workspaces").assertHasNoClickAction()
         compose.onAllNodesWithTag("misul-row-divider-content").assertCountEquals(2)

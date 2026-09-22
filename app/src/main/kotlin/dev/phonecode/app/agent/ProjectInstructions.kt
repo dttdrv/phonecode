@@ -26,7 +26,7 @@ internal fun loadProjectInstructions(workspace: File, settings: AppSettings): Li
 
 internal fun loadProjectInstructions(workspace: File, custom: String = "", profile: String = ""): List<String> = buildList {
     profile.trim().takeIf { it.isNotEmpty() }?.let { add("User profile and response preferences:\n${it.take(MAX_INSTRUCTION_CHARS)}") }
-    custom.trim().takeIf { it.isNotEmpty() }?.let { add("Misul Agent preferences:\n${it.take(MAX_INSTRUCTION_CHARS)}") }
+    custom.trim().takeIf { it.isNotEmpty() }?.let { add("PhoneCode preferences:\n${it.take(MAX_INSTRUCTION_CHARS)}") }
     val root = runCatching { workspace.canonicalFile }.getOrNull() ?: return@buildList
     INSTRUCTION_FILES.forEach { name ->
         val file = runCatching { File(root, name).canonicalFile }.getOrNull() ?: return@forEach

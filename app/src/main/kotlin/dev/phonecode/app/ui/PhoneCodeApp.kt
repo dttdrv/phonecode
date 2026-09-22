@@ -548,11 +548,11 @@ fun PhoneCodeApp() {
             if (!settingsLoaded) {
                 Box(
                     Modifier.fillMaxSize().background(colors.background)
-                        .clearAndSetSemantics { contentDescription = "Loading Misul Agent" },
+                        .clearAndSetSemantics { contentDescription = "Loading PhoneCode" },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_misul_mark),
+                        painter = painterResource(R.drawable.ic_phonecode_mark),
                         contentDescription = null,
                         tint = accent,
                         modifier = Modifier.size(48.dp),

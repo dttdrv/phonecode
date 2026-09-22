@@ -187,7 +187,7 @@ internal fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, 
         MisulSectionLabel("Providers")
         if (vm.secureStorageUnavailable()) {
             SettingsErrorText(
-                "Secure storage is unavailable on this device. Misul Agent will not save API keys or sign-in credentials.",
+                "Secure storage is unavailable on this device. PhoneCode will not save API keys or sign-in credentials.",
                 modifier = Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
             )
         }
@@ -317,7 +317,7 @@ internal fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: (
                 },
             )
             if (!secureStorageAvailable) {
-                SettingsErrorText("Secure storage is unavailable on this device, so Misul Agent cannot change this key.")
+                SettingsErrorText("Secure storage is unavailable on this device, so PhoneCode cannot change this key.")
             }
             keyError?.let { SettingsErrorText(it, modifier = Modifier.padding(top = Spacing.xs)) }
             Spacer(Modifier.height(Spacing.xs))
@@ -340,7 +340,7 @@ internal fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: (
         val models = state.models.filter { it.providerId == providerId }
         MisulSectionLabel("Models · ${models.size}")
         if (models.isEmpty()) {
-            SettingsNote("No models loaded for this provider yet. Models refresh automatically when Misul Agent opens.")
+            SettingsNote("No models loaded for this provider yet. Models refresh automatically when PhoneCode opens.")
         } else {
             // Search + bulk visibility (device feedback): long provider lists need both.
             var modelQuery by remember(providerId) { mutableStateOf("") }

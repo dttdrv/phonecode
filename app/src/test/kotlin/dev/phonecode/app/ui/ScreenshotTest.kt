@@ -922,7 +922,7 @@ class ScreenshotTest {
             compose.waitForIdle()
             show(SettingsRoute.Mcp)
             compose.onNodeWithText(matrixServer).assertIsDisplayed()
-            compose.onNodeWithText("Connected · 1 reported tools").assertIsDisplayed()
+            compose.onNodeWithText("Connected · 1 reported tool").assertIsDisplayed()
             shootFullPage("44-task10-mcp-clean-connected", "MCP servers")
             state.value = state.value.copy(mcpOperationError = "Could not reconnect Matrix MCP.")
             compose.waitForIdle()

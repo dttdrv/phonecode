@@ -177,7 +177,7 @@ internal fun McpPage(
                 onClick = { onOpenServer("") },
             )
         }
-        SettingsNote("$connected connected · ${state.mcpToolCount} tools available")
+        SettingsNote("$connected connected · ${state.mcpToolCount} ${if (state.mcpToolCount == 1) "tool" else "tools"} available")
         state.mcpConfigError?.let {
             SettingsErrorText(it)
             SettingsNote("The existing opencode.json has been preserved. Fix it before changing MCP servers here.")
@@ -201,7 +201,7 @@ internal fun McpPage(
                     val status = when {
                         !server.enabled -> "Off · Test to enable"
                         name in state.mcpConnecting -> "Connecting"
-                        snapshot?.connected == true -> "Connected · ${snapshot.tools.size} reported tools"
+                        snapshot?.connected == true -> "Connected · ${snapshot.tools.size} reported ${if (snapshot.tools.size == 1) "tool" else "tools"}"
                         snapshot?.error?.isNotBlank() == true -> "Needs attention · ${snapshot.error}"
                         else -> "Not tested"
                     }

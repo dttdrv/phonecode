@@ -102,8 +102,8 @@ class ReleaseRuntimePackagingTest {
     fun sideloadVersionPreservesPlayEvidenceGates() {
         val build = File(root, "app/build.gradle.kts").readText()
 
-        assertTrue(build.contains("""versionCode = 57"""))
-        assertTrue(build.contains("""versionName = "0.7.0""""))
+        assertTrue(build.contains("""versionCode = 58"""))
+        assertTrue(build.contains("""versionName = "0.8.0""""))
         assertTrue(build.contains("""release-evidence/0.5.1/vm-host"""))
         assertTrue(build.contains("""release-evidence/0.5.1/guest/sources"""))
         assertTrue(build.contains("""play/0.5.1/submission-evidence.json"""))

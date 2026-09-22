@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -569,11 +570,14 @@ class SettingsReliabilityTest {
             .performTextReplacement("2000")
         compose.onNodeWithText("Save").performClick()
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("secret-server").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("Add server").fetchSemanticsNodes().isNotEmpty()
         }
         assertTrue(repo.loadMcpConfig().mcp.getValue("secret-server").headers["Authorization"] == "Bearer top-secret")
 
         compose.onNodeWithText("secret-server").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithContentDescription("Header value 1").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithContentDescription("Header value 1")
             .performTextReplacement("Bearer replacement")
         compose.onNodeWithText("Save").performClick()

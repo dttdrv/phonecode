@@ -124,6 +124,11 @@ class SettingsUsabilityTest {
         return field.get(app().chatViewModel) as MutableStateFlow<ChatUiState>
     }
 
+    private fun settledSkillsStateFlow(): MutableStateFlow<ChatUiState> =
+        stateFlow().also { state ->
+            compose.waitUntil(10_000) { state.value.skillInventoryLoaded }
+        }
+
     private fun contextWithoutBrowser(): Context = object : ContextWrapper(compose.activity) {
         override fun startActivity(intent: Intent) {
             throw ActivityNotFoundException("No browser installed")
@@ -298,10 +303,7 @@ class SettingsUsabilityTest {
 
     @Test
     fun skillInventoryRowsNavigateWithoutDuplicatingTheEnableSwitch() {
-        val vm = app().chatViewModel
-        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
-        @Suppress("UNCHECKED_CAST")
-        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val state = settledSkillsStateFlow()
         val original = state.value
         state.value = original.copy(skills = listOf(skill("release-pilot")))
 
@@ -320,7 +322,7 @@ class SettingsUsabilityTest {
 
     @Test
     fun restoredSkillRouteWaitsForItsInventoryThenRendersThePersistedSkill() {
-        val state = stateFlow()
+        val state = settledSkillsStateFlow()
         val original = state.value
         state.value = original.copy(
             skillInventoryLoaded = false,
@@ -342,7 +344,7 @@ class SettingsUsabilityTest {
 
     @Test
     fun loadedMissingSkillRoutePopsToTheSkillsInventory() {
-        val state = stateFlow()
+        val state = settledSkillsStateFlow()
         val original = state.value
         state.value = original.copy(
             skillInventoryLoaded = true,
@@ -358,10 +360,7 @@ class SettingsUsabilityTest {
 
     @Test
     fun invalidSkillExplainsItsIssueInTheInventory() {
-        val vm = app().chatViewModel
-        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
-        @Suppress("UNCHECKED_CAST")
-        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val state = settledSkillsStateFlow()
         val original = state.value
         state.value = original.copy(
             skills = listOf(
@@ -386,10 +385,7 @@ class SettingsUsabilityTest {
 
     @Test
     fun emptySkillInventoryOffersAUsefulCreateAction() {
-        val vm = app().chatViewModel
-        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
-        @Suppress("UNCHECKED_CAST")
-        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val state = settledSkillsStateFlow()
         val original = state.value
         state.value = original.copy(skills = emptyList())
 
@@ -406,10 +402,7 @@ class SettingsUsabilityTest {
 
     @Test
     fun skillSearchAppearsAtTheTwelveSkillThreshold() {
-        val vm = app().chatViewModel
-        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
-        @Suppress("UNCHECKED_CAST")
-        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val state = settledSkillsStateFlow()
         val original = state.value
         state.value = original.copy(
             skillInventoryLoaded = true,
@@ -429,10 +422,7 @@ class SettingsUsabilityTest {
 
     @Test
     fun skillDetailKeepsEditProminentAndEditorSemanticallyIsolated() {
-        val vm = app().chatViewModel
-        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
-        @Suppress("UNCHECKED_CAST")
-        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val state = settledSkillsStateFlow()
         val original = state.value
         state.value = original.copy(skills = listOf(skill("release-pilot")))
 
@@ -456,9 +446,7 @@ class SettingsUsabilityTest {
     @Test
     fun structuredSkillEditorGeneratesAValidSkillFile() {
         val vm = app().chatViewModel
-        val stateField = vm.javaClass.getDeclaredField("_state").apply { isAccessible = true }
-        @Suppress("UNCHECKED_CAST")
-        val state = stateField.get(vm) as MutableStateFlow<ChatUiState>
+        val state = settledSkillsStateFlow()
         val original = state.value
         val skillDir = java.io.File(app().filesDir, "config/skills/release-guardian")
         skillDir.deleteRecursively()

@@ -221,6 +221,8 @@ import java.util.Locale
 internal fun ChatStatus(
     error: String?,
     turnOutcome: TurnOutcome?,
+    failedTurnRetryable: Boolean,
+    hasPartialOutput: Boolean,
     queued: List<String>,
     interruptedTurn: Boolean,
     retry: dev.phonecode.app.agent.RetryState?,
@@ -238,8 +240,8 @@ internal fun ChatStatus(
     Column(modifier.fillMaxWidth()) {
         error?.let { message ->
             ErrorBanner(
-                text = if (turnOutcome == TurnOutcome.FAILED) "$message Partial output may be incomplete." else message,
-                actionLabel = if (queued.isEmpty() && (interruptedTurn || turnOutcome == TurnOutcome.FAILED)) "Retry" else null,
+                text = if (turnOutcome == TurnOutcome.FAILED && hasPartialOutput) "$message Partial output may be incomplete." else message,
+                actionLabel = if (queued.isEmpty() && (interruptedTurn || turnOutcome == TurnOutcome.FAILED) && failedTurnRetryable) "Retry" else null,
                 onAction = onRetry,
                 onDismiss = onDismissError,
             )
@@ -253,7 +255,8 @@ internal fun ChatStatus(
             turnOutcome?.let { outcome ->
                 TurnOutcomeBanner(
                     outcome = outcome,
-                    canRetry = outcome == TurnOutcome.FAILED && queued.isEmpty(),
+                    hasPartialOutput = hasPartialOutput,
+                    canRetry = outcome == TurnOutcome.FAILED && queued.isEmpty() && failedTurnRetryable,
                     onRetry = onRetry,
                 )
             }
@@ -355,13 +358,14 @@ internal fun NoticeBanner(text: String) {
 @Composable
 internal fun TurnOutcomeBanner(
     outcome: TurnOutcome,
+    hasPartialOutput: Boolean,
     canRetry: Boolean,
     onRetry: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val text = when (outcome) {
         TurnOutcome.STOPPED -> "Turn stopped · Partial output may be incomplete."
-        TurnOutcome.FAILED -> "Turn failed · Partial output may be incomplete."
+        TurnOutcome.FAILED -> if (hasPartialOutput) "Turn failed · Partial output may be incomplete." else "Turn failed."
     }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)

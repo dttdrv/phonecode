@@ -107,6 +107,7 @@ import androidx.compose.material3.ripple
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.phonecode.app.agent.TurnOutcome
 import dev.phonecode.app.agent.ChatViewModel
 import dev.phonecode.app.agent.ChatUiState
 import dev.phonecode.app.agent.mcpDeleteOperationKey
@@ -216,6 +217,9 @@ internal fun collectSettingsState(vm: ChatViewModel): State<ChatUiState> {
  *  [initialPage] lets callers (onboarding) deep-link straight to a sub-page. */
 @Composable
 fun SettingsScreen(vm: ChatViewModel, settingsVm: SettingsViewModel, onBack: () -> Unit, initialPage: String = "home") {
+    LaunchedEffect(vm) {
+        if (vm.state.value.turnOutcome == TurnOutcome.FAILED && vm.state.value.error != null) vm.clearError()
+    }
     val errorMessage by remember(vm) {
         vm.state.map { it.error }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = null)

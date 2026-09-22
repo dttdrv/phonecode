@@ -41,6 +41,7 @@ import dev.phonecode.app.runtime.MisulRuntimeEvent
 import dev.phonecode.app.runtime.MisulRuntimeSpec
 import dev.phonecode.app.runtime.toBoundedMisulImportSession
 import dev.phonecode.app.runtime.userFacingFailure
+import dev.phonecode.app.runtime.isRetryableFailure
 import dev.phonecode.provider.catalog.Catalog
 import dev.phonecode.provider.catalog.CatalogLoader
 import dev.phonecode.provider.domain.ChatMessage
@@ -217,6 +218,7 @@ data class ChatUiState(
     val error: String? = null,
     val interruptedTurn: Boolean = false,
     val turnOutcome: TurnOutcome? = null,
+    val failedTurnRetryable: Boolean = false,
     val draftPhotos: Map<String, List<MessagePart.Image>> = emptyMap(),
     val reportSubmitting: Boolean = false,
     val reportSubmission: AiReportSubmission? = null,
@@ -442,6 +444,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             currentProjectId = activeProjectId,
                             error = if (interrupted) TURN_INTERRUPTED_MESSAGE else it.error,
                             interruptedTurn = interrupted,
+                            failedTurnRetryable = interrupted,
                             turnOutcome = latest.turnOutcome?.let { saved ->
                                 runCatching { TurnOutcome.valueOf(saved) }.getOrNull()
                             },
@@ -1011,6 +1014,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 error = null,
                 interruptedTurn = false,
                 turnOutcome = null,
+                failedTurnRetryable = true,
                 sessionLoading = false,
                 currentSessionId = sessionId,
                 currentProjectId = activeProjectId,
@@ -1087,6 +1091,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         usageOutput = 0,
                         error = if (interrupted) TURN_INTERRUPTED_MESSAGE else null,
                         interruptedTurn = interrupted,
+                        failedTurnRetryable = interrupted,
                         turnOutcome = loaded.turnOutcome?.let { saved ->
                             runCatching { TurnOutcome.valueOf(saved) }.getOrNull()
                         },
@@ -2193,6 +2198,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 error = null,
                 interruptedTurn = false,
                 turnOutcome = null,
+                failedTurnRetryable = true,
             )
         }
         // Foreground lease for the whole turn: without it the OS suspends the process shortly
@@ -2333,6 +2339,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                 isRunning = false,
                                 interruptedTurn = false,
                                 turnOutcome = TurnOutcome.FAILED,
+                                failedTurnRetryable = settlement.isRetryableFailure(),
                                 error = settlement.userFacingFailure(),
                             )
                         }

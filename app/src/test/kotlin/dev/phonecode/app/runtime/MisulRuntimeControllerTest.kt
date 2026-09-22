@@ -85,8 +85,49 @@ class MisulRuntimeControllerTest {
             terminal.settlement?.providerFailure,
         )
         assertEquals(
-            "The provider rejected this API key. Check it in Settings > Providers. (401, invalid_api_key, request req-safe)",
+            "The provider rejected this API key. Check it in Settings > Providers. (401)",
             requireNotNull(terminal.settlement).userFacingFailure(),
+        )
+        assertFalse(requireNotNull(terminal.settlement).isRetryableFailure())
+    }
+
+    @Test
+    fun openCodeGoSubscriptionFailureExplainsTheAccountRequirement() {
+        val result = MisulPromptResult(
+            status = "failed",
+            content = "",
+            failure = "provider",
+            providerFailure = MisulProviderFailure(
+                category = "permission",
+                httpStatus = 403,
+                message = "Upstream request failed: An active OpenCode Go subscription is required to use Go models.",
+            ),
+        )
+
+        assertEquals(
+            "OpenCode Go requires an active subscription. Check your plan or choose another provider. (403)",
+            result.userFacingFailure(),
+        )
+        assertFalse(result.isRetryableFailure())
+    }
+
+    @Test
+    fun authenticationFailureDoesNotRepeatTheSameStatusCode() {
+        val result = MisulPromptResult(
+            status = "failed",
+            content = "",
+            failure = "provider",
+            providerFailure = MisulProviderFailure(
+                category = "authentication",
+                httpStatus = 401,
+                providerCode = "401",
+                message = "Invalid key",
+            ),
+        )
+
+        assertEquals(
+            "The provider rejected this API key. Check it in Settings > Providers. (401)",
+            result.userFacingFailure(),
         )
     }
 

@@ -132,6 +132,10 @@ internal data class MisulProviderFailure(
     val retryAfterMillis: Long? = null,
 )
 
+internal fun MisulPromptResult.isRetryableFailure(): Boolean = providerFailure?.category !in setOf(
+    "authentication", "permission", "invalid_request", "unsupported",
+)
+
 internal fun MisulPromptResult.userFacingFailure(): String {
     val detail = providerFailure ?: return when (failure) {
         "provider" -> "The provider request failed. Check your connection and provider settings, then try again."
@@ -141,6 +145,9 @@ internal fun MisulPromptResult.userFacingFailure(): String {
     }
     val summary = when (detail.category) {
         "authentication" -> "The provider rejected this API key. Check it in Settings > Providers."
+        "permission" -> if (detail.httpStatus == 403 && detail.message.contains("active OpenCode Go subscription", ignoreCase = true)) {
+            "OpenCode Go requires an active subscription. Check your plan or choose another provider."
+        } else detail.message.ifBlank { "The provider denied access to this model." }
         "rate_limited" -> "The provider rate limited this request. Wait a moment, then try again."
         "timeout" -> "The provider request timed out. Check your connection and try again."
         "connection" -> "Misul could not connect to the provider. Check your connection and try again."
@@ -151,10 +158,12 @@ internal fun MisulPromptResult.userFacingFailure(): String {
     }
     val references = buildList {
         detail.httpStatus?.let { add(it.toString()) }
-        detail.providerCode?.takeIf(String::isNotBlank)?.let(::add)
-        detail.requestId?.takeIf(String::isNotBlank)?.let { add("request $it") }
+        if (isRetryableFailure()) {
+            detail.providerCode?.takeIf(String::isNotBlank)?.let(::add)
+            detail.requestId?.takeIf(String::isNotBlank)?.let { add("request $it") }
+        }
     }
-    return if (references.isEmpty()) summary else "$summary (${references.joinToString()})"
+    return if (references.isEmpty()) summary else "$summary (${references.distinct().joinToString()})"
 }
 
 internal data class ParsedMisulRecord(

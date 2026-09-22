@@ -258,6 +258,10 @@ fun ChatScreen(
         followOutput = followOutput,
     )
     val empty = state.lines.isEmpty() && state.streaming.isEmpty() && state.streamingReasoning.isEmpty()
+    val hasPartialOutput = remember(state.lines) {
+        state.lines.drop(state.lines.indexOfLast { it is ChatLine.User } + 1)
+            .any { it is ChatLine.Assistant || it is ChatLine.Reasoning }
+    }
     val blurTopBand = !empty && listState.canScrollBackward
     val blurBottomBand = !empty && listState.canScrollForward
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
@@ -545,6 +549,8 @@ fun ChatScreen(
             ChatStatus(
                 error = state.error,
                 turnOutcome = state.turnOutcome,
+                failedTurnRetryable = state.failedTurnRetryable,
+                hasPartialOutput = hasPartialOutput,
                 queued = state.queued,
                 interruptedTurn = state.interruptedTurn,
                 retry = state.retry,

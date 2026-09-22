@@ -26,6 +26,7 @@ import androidx.navigation.compose.rememberNavController
 import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.agent.ChatUiState
+import dev.phonecode.app.agent.TurnOutcome
 import dev.phonecode.app.data.ManagedSkill
 import dev.phonecode.app.data.SkillScope
 import dev.phonecode.app.data.SkillStatus
@@ -149,6 +150,24 @@ class SettingsUsabilityTest {
         status = status,
         issue = issue,
     )
+
+    @Test
+    fun openingSettingsDismissesThePreviousChatFailure() {
+        val state = stateFlow()
+        val original = state.value
+        state.value = original.copy(
+            error = "The provider rejected this API key.",
+            turnOutcome = TurnOutcome.FAILED,
+        )
+
+        try {
+            showSettings("providers")
+            assertFalse(compose.onAllNodesWithText("The provider rejected this API key.").fetchSemanticsNodes().isNotEmpty())
+            assertFalse(state.value.error != null)
+        } finally {
+            state.value = original
+        }
+    }
 
     @Test
     fun addCustomProviderIsAvailableBeforeTheProviderCatalog() {

@@ -513,9 +513,54 @@ Original instruction.
             error = "The connection failed.",
             interruptedTurn = false,
             turnOutcome = TurnOutcome.FAILED,
+            failedTurnRetryable = true,
         )
 
         compose.onNodeWithText("Retry").assertIsDisplayed()
+    }
+
+    @Test
+    fun restoredFailureDoesNotAssumeItCanBeRetried() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            lines = listOf(ChatLine.User("Try the request")),
+            error = null,
+            turnOutcome = TurnOutcome.FAILED,
+            failedTurnRetryable = ChatUiState().failedTurnRetryable,
+        )
+
+        compose.onNodeWithText("Turn failed.").assertIsDisplayed()
+        compose.onAllNodesWithText("Retry").assertCountEquals(0)
+    }
+
+    @Test
+    fun rejectedCredentialsDoNotOfferARepeatRequest() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        state.value = state.value.copy(
+            lines = listOf(ChatLine.User("Try the request")),
+            error = "The provider rejected this API key. Check it in Settings > Providers. (401)",
+            turnOutcome = TurnOutcome.FAILED,
+            failedTurnRetryable = false,
+        )
+
+        compose.onAllNodesWithText("Retry").assertCountEquals(0)
+        compose.onNodeWithContentDescription("Dismiss").performClick()
+        compose.onNodeWithText("Turn failed.").assertIsDisplayed()
+        compose.onAllNodesWithText("Retry").assertCountEquals(0)
     }
 
     @Test
@@ -561,6 +606,37 @@ Original instruction.
         assertEquals(listOf("Do not lose this"), state.value.queued)
         compose.onNodeWithText("Turn stopped · Partial output may be incomplete.").assertIsDisplayed()
         compose.onNodeWithText("1 unsent follow-up").assertIsDisplayed()
+    }
+
+    @Test
+    fun providerFailureBeforeAnyAnswerDoesNotClaimPartialOutput() {
+        dismissOnboardingIfPresent()
+        val app = androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<PhoneCodeApplication>()
+        val stateField = app.chatViewModel.javaClass.getDeclaredField("_state").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val state = stateField.get(app.chatViewModel) as MutableStateFlow<ChatUiState>
+        val original = state.value
+        state.value = original.copy(
+            lines = listOf(ChatLine.User("Reply with OK.")),
+            streaming = "",
+            streamingReasoning = "",
+            isRunning = false,
+            error = "The provider rejected this API key.",
+            turnOutcome = TurnOutcome.FAILED,
+        )
+
+        try {
+            compose.waitForIdle()
+            compose.onNodeWithText("The provider rejected this API key.").assertIsDisplayed()
+            assertTrue(compose.onAllNodesWithText("The provider rejected this API key. Partial output may be incomplete.").fetchSemanticsNodes().isEmpty())
+            compose.onNodeWithContentDescription("Dismiss").performClick()
+            compose.onNodeWithText("Turn failed.").assertIsDisplayed()
+        } finally {
+            state.value = original
+        }
     }
 
     @Test

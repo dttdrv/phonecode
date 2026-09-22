@@ -1,0 +1,81 @@
+--- a/src/openai_compatible.zig
++++ b/src/openai_compatible.zig
+@@ -1068,6 +1068,25 @@
+         if (choices == .array and choices.array.items.len == 0 and pending_usage != null) {
+             try emitUsage(decoder, pending_usage.?);
+             return;
++        }
++        // OpenRouter also documents a final usage chunk that repeats the completed
++        // choice with an empty delta. Accept only that inert shape: any new text,
++        // tool call, changed finish reason, or missing usage is still invalid.
++        if (decoder.dialect == .openrouter_chat and pending_usage != null and choices == .array and choices.array.items.len == 1) {
++            const repeated = choices.array.items[0];
++            if (repeated == .object) {
++                const index = repeated.object.get("index");
++                const reason = repeated.object.get("finish_reason");
++                const delta = repeated.object.get("delta");
++                if ((index == null or (uintField(index.?) orelse std.math.maxInt(u64)) == 0) and
++                    reason != null and reason.? == .string and
++                    mapStopReason(reason.?.string) == decoder.finish_reason and
++                    delta != null and delta.? == .object and delta.?.object.count() == 0)
++                {
++                    try emitUsage(decoder, pending_usage.?);
++                    return;
++                }
++            }
+         }
+         return decoder.fail(.malformed_response, "provider sent choices after finish reason");
+     }
+@@ -2678,8 +2697,41 @@
+     try decoderEvent(&decoder, .{ .event = "message", .data = "{\"usage\":null,\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}" });
+     try decoderEvent(&decoder, .{ .event = "message", .data = "{\"usage\":null,\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}" });
+     try decoderEvent(&decoder, .{ .event = "message", .data = "{\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3},\"choices\":[]}" });
++    try decoderEvent(&decoder, .{ .event = "message", .data = "[DONE]" });
++    try decoder.finish();
++    try std.testing.expectEqual(@as(usize, 1), capture.usage);
++    try std.testing.expectEqual(@as(usize, 1), capture.done);
++    try std.testing.expectEqual(@as(usize, 0), capture.failed);
++}
++
++test "OpenRouter repeated final choice carries usage without duplicating output" {
++    const Capture = struct {
++        text: usize = 0,
++        usage: usize = 0,
++        done: usize = 0,
++        failed: usize = 0,
++        fn receive(raw: *anyopaque, event: protocol.StreamEvent) !void {
++            const capture: *@This() = @ptrCast(@alignCast(raw));
++            switch (event) {
++                .text_delta => capture.text += 1,
++                .usage => capture.usage += 1,
++                .done => capture.done += 1,
++                .failed => capture.failed += 1,
++                else => {},
++            }
++        }
++    };
++    const model = protocol.Model{ .id = "m", .api = "openrouter-chat", .provider = "p", .context_window = 4096, .max_tokens = 256 };
++    var capture = Capture{};
++    var callback_attempted = false;
++    var decoder = StreamDecoder.init(std.testing.allocator, &model, "openrouter-chat", .openrouter_chat, 4096, 64 * 1024, 200, null, "secret", &.{}, &capture, Capture.receive, &callback_attempted);
++    defer decoder.deinit();
++    try decoderEvent(&decoder, .{ .event = "message", .data = "{\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"}}]}" });
++    try decoderEvent(&decoder, .{ .event = "message", .data = "{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}" });
++    try decoderEvent(&decoder, .{ .event = "message", .data = "{\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3},\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}" });
+     try decoderEvent(&decoder, .{ .event = "message", .data = "[DONE]" });
+     try decoder.finish();
++    try std.testing.expectEqual(@as(usize, 1), capture.text);
+     try std.testing.expectEqual(@as(usize, 1), capture.usage);
+     try std.testing.expectEqual(@as(usize, 1), capture.done);
+     try std.testing.expectEqual(@as(usize, 0), capture.failed);
+--- a/tests/runtime_integration/runtime_provider_integration.zig
++++ b/tests/runtime_integration/runtime_provider_integration.zig
+@@ -312,7 +312,7 @@
+ test "production Runtime routes configured OpenAI OpenRouter and DeepSeek providers with exact wire metadata" {
+     const allocator = std.testing.allocator;
+     const openai_body = "data:{\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"choices\":[{\"delta\":{\"content\":\"openai-ok\"},\"finish_reason\":\"stop\"}]}\n\ndata:{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12},\"choices\":[]}\n\ndata:[DONE]\n\n";
+-    const router_body = "data:{\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"choices\":[{\"delta\":{\"content\":\"router-ok\"},\"finish_reason\":\"stop\"}]}\n\ndata:{\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":3,\"total_tokens\":14},\"choices\":[]}\n\ndata:[DONE]\n\n";
++    const router_body = "data:{\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"choices\":[{\"delta\":{\"content\":\"router-ok\"},\"finish_reason\":\"stop\"}]}\n\ndata:{\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":3,\"total_tokens\":14},\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata:[DONE]\n\n";
+     const deepseek_body = "data:{\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":4,\"prompt_cache_hit_tokens\":5,\"prompt_cache_miss_tokens\":7,\"total_tokens\":16},\"choices\":[{\"delta\":{\"content\":\"deepseek-ok\"},\"finish_reason\":\"stop\"}]}\n\ndata:[DONE]\n\n";
+     const openai_response = try response(allocator, openai_body);
+     defer allocator.free(openai_response);

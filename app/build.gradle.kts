@@ -49,8 +49,8 @@ android {
         applicationId = "dev.phonecode"
         minSdk = 26
         targetSdk = 36
-        versionCode = 58
-        versionName = "0.8.0"
+        versionCode = 59
+        versionName = "0.8.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GITHUB_OAUTH_CLIENT_ID", githubOauthClientId.asBuildConfigString())
         buildConfigField("boolean", "CODEX_OAUTH_ENABLED", "false")
@@ -670,8 +670,8 @@ androidComponentsExtension.onVariants(
     androidComponentsExtension.selector().withBuildType("sideload"),
 ) { variant ->
     variant.outputs.forEach { output ->
-        output.versionCode.set(58)
-        output.versionName.set("0.8.0")
+        output.versionCode.set(59)
+        output.versionName.set("0.8.1")
     }
 }
 

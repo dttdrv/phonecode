@@ -29,6 +29,69 @@ class MisulRuntimeWorkflowTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Test
+    fun nativeOpenRouterAcceptsRepeatedFinalUsageChoice() = runBlocking {
+        ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
+            val responder = Executors.newSingleThreadExecutor()
+            val body = """
+                data: {"choices":[{"index":0,"delta":{"content":"Hello"}}]}
+
+                data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+                data: {"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3},"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+                data: [DONE]
+
+            """.trimIndent().plus("\n\n").encodeToByteArray()
+            responder.submit {
+                server.accept().use { socket ->
+                    val input = socket.getInputStream().bufferedReader()
+                    var contentLength = 0
+                    while (true) {
+                        val line = input.readLine() ?: break
+                        if (line.startsWith("Content-Length:", ignoreCase = true)) {
+                            contentLength = line.substringAfter(':').trim().toInt()
+                        }
+                        if (line.isEmpty()) break
+                    }
+                    repeat(contentLength) { input.read() }
+                    socket.getOutputStream().bufferedWriter().use { output ->
+                        output.write("HTTP/1.1 200 OK\r\n")
+                        output.write("Content-Type: text/event-stream\r\n")
+                        output.write("Content-Length: ${body.size}\r\n")
+                        output.write("Connection: close\r\n\r\n")
+                        output.flush()
+                        socket.getOutputStream().write(body)
+                        socket.getOutputStream().flush()
+                    }
+                }
+            }
+            val root = File(context.cacheDir, "misul-openrouter-final-usage").apply {
+                deleteRecursively()
+                mkdirs()
+            }
+            val controller = MisulRuntimeController()
+            try {
+                val events = mutableListOf<MisulRuntimeEvent>()
+                val baseSpec = spec(root, server.localPort)
+                val result = controller.prompt(
+                    spec = baseSpec.copy(provider = baseSpec.provider.copy(dialect = "openrouter_chat")),
+                    sessionId = "session-openrouter-usage",
+                    prompt = "Hi",
+                    onEvent = events::add,
+                )
+                assertEquals("completed", result.status)
+                assertEquals("Hello", result.content)
+                assertEquals(null, result.providerFailure)
+                assertTrue(events.any { it == MisulRuntimeEvent.Text("Hello") })
+            } finally {
+                controller.close()
+                responder.shutdownNow()
+                responder.awaitTermination(5, TimeUnit.SECONDS)
+            }
+        }
+    }
+
+    @Test
     fun nativeRuntimeStreamsARealProviderResponseThroughJni() = runBlocking {
         ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
             val requests = CopyOnWriteArrayList<String>()

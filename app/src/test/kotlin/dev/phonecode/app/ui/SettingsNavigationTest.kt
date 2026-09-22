@@ -100,6 +100,7 @@ class SettingsNavigationTest {
     fun legacyDeepLinksMapToTypedRoutesWithTheSameParents() {
         assertEquals(SettingsRoute.Home, SettingsRoute.fromLegacyPage("home"))
         assertEquals(SettingsRoute.Personalization, SettingsRoute.fromLegacyPage("personal"))
+        assertEquals(SettingsRoute.Personalization, SettingsRoute.Profile.parent())
         assertEquals(SettingsRoute.Data, SettingsRoute.fromLegacyPage("export"))
         assertEquals(SettingsRoute.Provider("openai"), SettingsRoute.fromLegacyPage("provider:openai"))
         assertEquals(SettingsRoute.Document("privacy"), SettingsRoute.fromLegacyPage("doc:privacy"))

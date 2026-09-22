@@ -27,6 +27,7 @@ import dev.phonecode.app.MainActivity
 import dev.phonecode.app.PhoneCodeApplication
 import dev.phonecode.app.agent.ChatUiState
 import dev.phonecode.app.agent.TurnOutcome
+import dev.phonecode.app.data.AppSettingsStore
 import dev.phonecode.app.data.ManagedSkill
 import dev.phonecode.app.data.SkillScope
 import dev.phonecode.app.data.SkillStatus
@@ -39,6 +40,7 @@ import dev.phonecode.app.ui.theme.PhoneCodeTheme
 import dev.phonecode.tools.skills.SkillManifest
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -215,6 +217,36 @@ class SettingsUsabilityTest {
             compose.onAllNodesWithText("Configured").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("Configured").assertIsDisplayed()
+    }
+
+    @Test
+    fun localProfileSavesOnlyAfterReviewingItsFields() {
+        showSettings("personal")
+        compose.onNodeWithText("Your profile").performClick()
+        compose.onNodeWithContentDescription("Save profile").assertIsNotEnabled()
+
+        compose.onNodeWithContentDescription("Preferred name").performTextReplacement("Alex")
+        compose.onNodeWithContentDescription("Occupation").performTextReplacement("Designer")
+        compose.onNodeWithContentDescription("More about you").performTextReplacement("I build mobile apps.")
+        compose.onNodeWithContentDescription("Save profile").performClick()
+
+        val store = AppSettingsStore(java.io.File(app().filesDir, "app_settings.json"))
+        compose.waitUntil(5_000) { store.load().preferredName == "Alex" }
+        assertEquals("Designer", store.load().occupation)
+        assertEquals("I build mobile apps.", store.load().aboutYou)
+    }
+
+    @Test
+    fun personalizationStyleAndUseTogglePersistLocally() {
+        showSettings("personal")
+        compose.onNodeWithText("Concise").performClick()
+        compose.onNodeWithText("Use personalization").performClick()
+
+        val store = AppSettingsStore(java.io.File(app().filesDir, "app_settings.json"))
+        compose.waitUntil(5_000) {
+            store.load().responseStyleName == "CONCISE" && !store.load().usePersonalization
+        }
+        compose.onNodeWithText("Your choices stay on this phone", substring = true).assertIsDisplayed()
     }
 
     @Test

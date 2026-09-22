@@ -76,9 +76,15 @@ internal fun SettingsNavigation(
                 SettingsRoute.Personalization -> PersonalPage(
                     settingsVm = settingsVm,
                     onBack = ::popOrExit,
+                    onOpenProfile = { navController.navigate(SettingsRoute.Profile) },
                     onOpenCustomInstructions = {
                         navController.navigate(SettingsRoute.CustomInstructions)
                     },
+                )
+
+                SettingsRoute.Profile -> ProfileDestination(
+                    settingsVm = settingsVm,
+                    onBack = ::popOrExit,
                 )
 
                 SettingsRoute.CustomInstructions -> CustomInstructionsDestination(
@@ -289,6 +295,7 @@ internal fun NavGraphBuilder.settingsRouteGraph(
     composable<SettingsRoute.Files> { destination(SettingsRoute.Files) }
     composable<SettingsRoute.Appearance> { destination(SettingsRoute.Appearance) }
     composable<SettingsRoute.Personalization> { destination(SettingsRoute.Personalization) }
+    composable<SettingsRoute.Profile> { destination(SettingsRoute.Profile) }
     composable<SettingsRoute.CustomInstructions> { destination(SettingsRoute.CustomInstructions) }
     composable<SettingsRoute.Providers> { destination(SettingsRoute.Providers) }
     composable<SettingsRoute.Provider> { entry -> destination(entry.toRoute<SettingsRoute.Provider>()) }
@@ -304,6 +311,29 @@ internal fun NavGraphBuilder.settingsRouteGraph(
     composable<SettingsRoute.Data> { destination(SettingsRoute.Data) }
     composable<SettingsRoute.About> { destination(SettingsRoute.About) }
     composable<SettingsRoute.Document> { entry -> destination(entry.toRoute<SettingsRoute.Document>()) }
+}
+
+@Composable
+private fun ProfileDestination(
+    settingsVm: SettingsViewModel,
+    onBack: () -> Unit,
+) {
+    var dirty by rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    DiscardChangesBackHandler(
+        dirty = dirty,
+        message = "Your profile has unsaved changes.",
+        onDiscard = onBack,
+    ) { requestBack ->
+        ProfilePage(
+            settingsVm = settingsVm,
+            onBack = requestBack,
+            onDirtyChange = { dirty = it },
+            onSaved = {
+                dirty = false
+                onBack()
+            },
+        )
+    }
 }
 
 @Composable

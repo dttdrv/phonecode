@@ -12,6 +12,7 @@ sealed interface SettingsRoute {
     @Serializable data object Files : SettingsRoute
     @Serializable data object Appearance : SettingsRoute
     @Serializable data object Personalization : SettingsRoute
+    @Serializable data object Profile : SettingsRoute
     @Serializable data object CustomInstructions : SettingsRoute
     @Serializable data object Providers : SettingsRoute
     @Serializable data object Plugins : SettingsRoute
@@ -44,6 +45,7 @@ internal fun SettingsRoute.parent(): SettingsRoute? = when (this) {
     SettingsRoute.Data,
     SettingsRoute.About -> SettingsRoute.Home
     is SettingsRoute.AgentToolsCategory -> SettingsRoute.AgentTools
+    SettingsRoute.Profile,
     SettingsRoute.CustomInstructions -> SettingsRoute.Personalization
     is SettingsRoute.Provider -> SettingsRoute.Providers
     SettingsRoute.Mcp -> SettingsRoute.Plugins

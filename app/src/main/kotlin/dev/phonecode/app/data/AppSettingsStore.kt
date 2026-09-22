@@ -6,10 +6,22 @@ import java.io.File
 /** Light / Dark follow the explicit choice; System tracks the device setting. */
 enum class ThemeMode { LIGHT, DARK, SYSTEM }
 
+enum class ResponseStyle(val label: String, val description: String, val instruction: String?) {
+    DEFAULT("Default", "Clear, neutral responses", null),
+    CONCISE("Concise", "Direct answers with little preamble", "Be concise and direct. Avoid unnecessary preamble."),
+    EXPLANATORY("Explanatory", "Explain steps and tradeoffs", "Explain conclusions, steps, and practical tradeoffs when they help the user decide."),
+    PROFESSIONAL("Professional", "Measured, polished wording", "Use a measured, professional tone without unnecessary enthusiasm."),
+}
+
 @Serializable
 data class AppSettings(
     val themeMode: String = "SYSTEM",
     val customInstructions: String = "",
+    val preferredName: String = "",
+    val occupation: String = "",
+    val aboutYou: String = "",
+    val responseStyleName: String = "DEFAULT",
+    val usePersonalization: Boolean = true,
     val autoAccept: Boolean = false,
     val sendOnEnter: Boolean = true,
     val gitAutoBranch: Boolean = false,
@@ -18,6 +30,7 @@ data class AppSettings(
     val activeSessionId: String? = null,
 ) {
     val mode: ThemeMode get() = runCatching { ThemeMode.valueOf(themeMode) }.getOrDefault(ThemeMode.SYSTEM)
+    val responseStyle: ResponseStyle get() = runCatching { ResponseStyle.valueOf(responseStyleName) }.getOrDefault(ResponseStyle.DEFAULT)
 }
 
 /** Restoring a backup must never silently elevate the authority granted to the agent. */

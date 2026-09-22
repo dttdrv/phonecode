@@ -7,6 +7,7 @@ import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -32,6 +33,44 @@ class SettingsViewModelTest {
             assertEquals("session-new", store.load().activeSessionId)
         } finally {
             file.delete()
+        }
+    }
+
+    @Test
+    fun awaitedProfileSaveReturnsOnlyAfterLocalPersistence() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val file = File(app.filesDir, "app_settings.json")
+        file.delete()
+        val vm = SettingsViewModel(app)
+        try {
+            waitUntil { vm.loaded.value }
+
+            val result = vm.updateAndWait { it.copy(preferredName = "Alex", occupation = "Designer") }
+
+            assertTrue(result.isSuccess)
+            assertEquals("Alex", AppSettingsStore(file).load().preferredName)
+            assertEquals("Designer", vm.settings.value.occupation)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun failedProfileSaveLeavesDraftUnsaved() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val file = File(app.filesDir, "app_settings.json")
+        file.deleteRecursively()
+        file.mkdir()
+        val vm = SettingsViewModel(app)
+        try {
+            waitUntil { vm.loaded.value }
+
+            val result = vm.updateAndWait { it.copy(preferredName = "Alex") }
+
+            assertTrue(result.isFailure)
+            assertEquals("", vm.settings.value.preferredName)
+        } finally {
+            file.deleteRecursively()
         }
     }
 

@@ -55,6 +55,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Saves an editor's draft before its screen reports success and closes. */
+    suspend fun updateAndWait(transform: (AppSettings) -> AppSettings): Result<AppSettings> =
+        updateMutex.withLock {
+            withContext(Dispatchers.IO) { runCatching { store.update(transform) } }
+                .onSuccess { _settings.value = it }
+        }
+
     /** Re-reads settings from disk - called after a backup import overwrites app_settings.json. */
     fun reload() {
         viewModelScope.launch(Dispatchers.IO) { _settings.value = store.load() }

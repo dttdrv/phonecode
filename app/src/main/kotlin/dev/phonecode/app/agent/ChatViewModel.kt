@@ -2100,7 +2100,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             ReasoningEffort.ULTRA, ReasoningEffort.MAX -> "max"
             else -> _state.value.effort.wireValue
         }?.takeIf { supportsReasoning(selected) }
-        val instructions = loadProjectInstructions(pinnedWorkspace, appSettings.load().customInstructions)
+        val instructions = loadProjectInstructions(pinnedWorkspace, appSettings.load())
         val systemPrompt = buildString {
             append("You are Misul Agent, a coding agent running directly on the user's Android phone. ")
             append("Work in the provided workspace, use tools when they improve correctness, preserve user data, and report results plainly.")

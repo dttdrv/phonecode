@@ -142,7 +142,7 @@ class UiPolishRegressionTest {
     @Test
     fun personalizationUsesAFocusedCustomInstructionsEditor() {
         val settings = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/SettingsHome.kt")
-        val personal = settings.substringAfter("internal fun PersonalPage").substringBefore("internal fun CustomInstructionsPage")
+        val personal = settings.substringAfter("internal fun PersonalPage").substringBefore("internal fun ProfilePage")
 
         assertTrue(personal.contains("SettingsNavigationRow("))
         assertFalse(personal.contains("MisulField("))

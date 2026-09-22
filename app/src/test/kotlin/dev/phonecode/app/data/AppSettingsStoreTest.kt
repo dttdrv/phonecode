@@ -23,11 +23,26 @@ class AppSettingsStoreTest {
             assertEquals(ThemeMode.SYSTEM, store.load().mode)
             assertTrue(store.load().sendOnEnter)
 
-            store.update { it.copy(themeMode = "DARK", customInstructions = "be terse", autoAccept = true, activeSessionId = "session-a") }
+            store.update {
+                it.copy(
+                    themeMode = "DARK",
+                    customInstructions = "be terse",
+                    preferredName = "Alex",
+                    occupation = "Designer",
+                    aboutYou = "I work on mobile apps.",
+                    responseStyleName = "CONCISE",
+                    autoAccept = true,
+                    activeSessionId = "session-a",
+                )
+            }
 
             val reloaded = AppSettingsStore(File(dir, "settings.json")).load()
             assertEquals(ThemeMode.DARK, reloaded.mode)
             assertEquals("be terse", reloaded.customInstructions)
+            assertEquals("Alex", reloaded.preferredName)
+            assertEquals("Designer", reloaded.occupation)
+            assertEquals("I work on mobile apps.", reloaded.aboutYou)
+            assertEquals(ResponseStyle.CONCISE, reloaded.responseStyle)
             assertTrue(reloaded.autoAccept)
             assertEquals("session-a", reloaded.activeSessionId)
         } finally {
@@ -44,5 +59,9 @@ class AppSettingsStoreTest {
         } finally {
             dir.deleteRecursively()
         }
+    }
+
+    @Test fun unknownResponseStyleFallsBackToDefault() {
+        assertEquals(ResponseStyle.DEFAULT, AppSettings(responseStyleName = "GARBAGE").responseStyle)
     }
 }

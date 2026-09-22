@@ -228,7 +228,7 @@ Original instruction.
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onAllNodesWithContentDescription("Message").assertCountEquals(0)
         compose.onNodeWithText("Skills").assertIsDisplayed()
-        compose.onNodeWithText("MCP").assertIsDisplayed()
+        compose.onNodeWithText("Plugins").assertIsDisplayed()
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithText("Models & providers").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
@@ -268,6 +268,7 @@ Original instruction.
         dismissOnboardingIfPresent()
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("Plugins").performClick()
         compose.onNodeWithText("MCP servers").performClick()
         compose.onNodeWithText("Add server").performClick()
         compose.onNodeWithContentDescription("Server name").performTextInput("draft-server")
@@ -278,6 +279,26 @@ Original instruction.
 
         compose.onNodeWithContentDescription("Server name").assertTextEquals("draft-server")
         compose.onNodeWithContentDescription("Remote URL").assertTextEquals("https://example.com/mcp")
+    }
+
+    @Test
+    fun pluginCatalogKeepsUnverifiedServicesUnavailableAndPrefillsTheVerifiedOne() {
+        dismissOnboardingIfPresent()
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("Plugins").performClick()
+
+        compose.onNodeWithText("Vercel").assertIsDisplayed()
+        compose.onNodeWithText("Gmail").assertIsDisplayed()
+        compose.onNodeWithText("Requires supported OAuth client access").assertIsDisplayed()
+        compose.onNodeWithText("Cloudflare Agents docs").performClick()
+        compose.onNodeWithText("Test connection").assertIsDisplayed()
+        compose.onAllNodesWithText("Add plugin").onFirst().assertIsNotEnabled()
+
+        compose.onNodeWithText("Connection details").performClick()
+        compose.onNodeWithContentDescription("Server name").assertTextEquals("Cloudflare Agents docs")
+        compose.onNodeWithContentDescription("Remote URL")
+            .assertTextEquals("https://agents.cloudflare.com/mcp")
     }
 
     @Test
@@ -322,7 +343,7 @@ Original instruction.
             "Personalization",
             "Models & providers",
             "Agent tools",
-            "MCP servers",
+            "Plugins",
             "Skills",
             "Files & permissions",
             "Git",
@@ -976,6 +997,7 @@ Original instruction.
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
 
+        compose.onNodeWithText("Plugins").performClick()
         compose.onNodeWithText("MCP servers").performClick()
         compose.onNodeWithText("Add server").performClick()
         compose.onNodeWithText("Save").assertIsNotEnabled()
@@ -1065,6 +1087,7 @@ Original instruction.
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
 
+        compose.onNodeWithText("Plugins").performClick()
         compose.onNodeWithText("MCP servers").performClick()
         compose.onNodeWithText("Add server").performClick()
         compose.onNodeWithContentDescription("Server name").assertIsDisplayed()
@@ -1072,6 +1095,7 @@ Original instruction.
         compose.onNodeWithText("HTTP headers").assertIsDisplayed()
         compose.onNodeWithContentDescription("Connection timeout in milliseconds").assertIsDisplayed()
         compose.onNodeWithText("Test").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
 

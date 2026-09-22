@@ -66,6 +66,7 @@ import dev.phonecode.tools.interaction.QuestionTool
 import dev.phonecode.tools.patch.ApplyPatchTool
 import dev.phonecode.tools.mcp.McpServerSnapshot
 import dev.phonecode.tools.mcp.McpServerConfig
+import dev.phonecode.tools.mcp.McpTool
 import dev.phonecode.tools.mcp.connectMcpServersDetailed
 import dev.phonecode.tools.mcp.probeMcpServer
 import dev.phonecode.tools.skills.SkillManifest
@@ -134,7 +135,13 @@ data class QuestionRequest(val questions: List<UserQuestion>)
 data class RetryState(val attempt: Int, val message: String)
 data class AiReportSubmission(val accepted: Boolean, val reference: String? = null, val error: String? = null)
 data class SettingsOperation(val running: Boolean = false, val error: String? = null)
-data class AgentToolInfo(val name: String, val description: String, val source: String, val access: String)
+data class AgentToolInfo(
+    val name: String,
+    val description: String,
+    val source: String,
+    val access: String,
+    val displayName: String = name,
+)
 
 internal fun providerDeleteOperationKey(id: String) = "provider-delete:$id"
 internal fun mcpDeleteOperationKey(name: String) = "mcp-delete:$name"
@@ -1605,13 +1612,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun configDirPath(): String = configDir.absolutePath
     fun availableTools(): List<AgentToolInfo> {
-        val remoteNames = mcpTools.mapTo(mutableSetOf()) { it.name }
+        val remoteTools = mcpTools.filterIsInstance<McpTool>().associateBy { it.name }
         return tools.all().sortedBy { it.name }.map { tool ->
             AgentToolInfo(
                 name = tool.name,
                 description = tool.description,
+                displayName = remoteTools[tool.name]?.let { "${it.serverName} · ${it.displayName}" } ?: tool.name,
                 source = when {
-                    tool.name in remoteNames -> "MCP"
+                    tool.name in remoteTools -> "MCP"
                     tool.name == "skill" -> "Skills"
                     else -> "Misul Agent"
                 },

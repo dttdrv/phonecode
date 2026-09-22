@@ -35,6 +35,7 @@ internal fun filterAgentTools(
     return tools.filter { tool ->
         val matchesQuery = normalizedQuery.isEmpty() ||
             tool.name.contains(normalizedQuery, ignoreCase = true) ||
+            tool.displayName.contains(normalizedQuery, ignoreCase = true) ||
             tool.description.contains(normalizedQuery, ignoreCase = true) ||
             tool.source.contains(normalizedQuery, ignoreCase = true) ||
             tool.access.contains(normalizedQuery, ignoreCase = true)

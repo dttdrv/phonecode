@@ -684,10 +684,12 @@ class ScreenshotTest {
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
 
+        compose.onNodeWithText("Plugins").performClick()
         compose.onNodeWithText("MCP servers").performClick()
         compose.onNodeWithText("Add server").performClick()
         compose.onNodeWithText("Test").performClick()
         shootFullPage("23-mcp-validation", "Add MCP server")
+        compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
 
@@ -1161,6 +1163,7 @@ class ScreenshotTest {
             compose.waitForIdle()
             compose.onNodeWithContentDescription("Menu").performClick()
             compose.onNodeWithContentDescription("Settings").performClick()
+            compose.onNodeWithText("Plugins").performClick()
             compose.onNodeWithText("MCP servers").performClick()
 
             compose.onNodeWithText("Workspace Index").assertIsDisplayed()
@@ -1181,6 +1184,9 @@ class ScreenshotTest {
             compose.waitForIdle()
             shootPage("33-mcp-connected-tools", "Workspace Index")
 
+            compose.onNodeWithContentDescription("Back").performClick()
+            compose.mainClock.advanceTimeBy(300)
+            compose.waitForIdle()
             compose.onNodeWithContentDescription("Back").performClick()
             compose.mainClock.advanceTimeBy(300)
             compose.waitForIdle()

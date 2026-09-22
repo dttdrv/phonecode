@@ -20,8 +20,9 @@ internal fun mcpToolName(serverName: String, toolName: String): String {
 }
 
 /** Adapts a remote MCP tool into a PhoneCode [Tool], namespaced as sanitize(server)_sanitize(tool). */
-class McpTool(serverName: String, private val def: McpToolDef, private val client: McpClient) : Tool {
+class McpTool(val serverName: String, private val def: McpToolDef, private val client: McpClient) : Tool {
     override val name: String = mcpToolName(serverName, def.name)
+    val displayName: String = def.title.ifBlank { def.name }.replace('_', ' ').replace('-', ' ')
     override val description: String = def.description.ifBlank { def.title.ifBlank { def.name } }
     override val parameters: JsonObject = def.inputSchema
     override val mutating: Boolean = true // MCP tools may have side effects; gate through permission

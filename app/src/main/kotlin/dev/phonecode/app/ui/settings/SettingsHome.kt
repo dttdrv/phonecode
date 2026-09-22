@@ -59,7 +59,7 @@ internal fun HomePage(
         }
         SettingsRootGroup("Capabilities") {
             SettingsNavigationRow("Agent tools", vm.availableTools().size.toString(), Icons.Outlined.Build) { onOpen(SettingsRoute.AgentTools) }
-            SettingsNavigationRow("MCP servers", state.mcpServers.size.toString(), Icons.Outlined.Extension) { onOpen(SettingsRoute.Mcp) }
+            SettingsNavigationRow("Plugins", state.mcpServers.size.toString(), Icons.Outlined.Extension) { onOpen(SettingsRoute.Plugins) }
             SettingsNavigationRow("Skills", state.skills.count { it.status == SkillStatus.ACTIVE }.toString(), Icons.Outlined.AutoAwesome, showDivider = false) { onOpen(SettingsRoute.Skills) }
         }
         SettingsRootGroup("Workspace") {

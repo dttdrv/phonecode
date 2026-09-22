@@ -420,7 +420,7 @@ fun PhoneCodeApp() {
                             SettingsScreen(vm, settingsVm, onBack = { navController.popBackStack() }, initialPage = "skills")
                         }
                         composable("mcp") {
-                            SettingsScreen(vm, settingsVm, onBack = { navController.popBackStack() }, initialPage = "mcp")
+                            SettingsScreen(vm, settingsVm, onBack = { navController.popBackStack() }, initialPage = "plugins")
                         }
                         composable(
                             route = "model-setup",

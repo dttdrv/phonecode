@@ -98,6 +98,20 @@ internal fun SettingsNavigation(
                     onBack = ::popOrExit,
                 )
 
+                SettingsRoute.Plugins -> PluginsPage(
+                    vm = vm,
+                    onBack = ::popOrExit,
+                    onOpenPlugin = { navController.navigate(SettingsRoute.PluginTemplate(it)) },
+                    onOpenServer = { navController.navigate(SettingsRoute.McpServer(it)) },
+                    onOpenAdvanced = { navController.navigate(SettingsRoute.Mcp) },
+                )
+
+                is SettingsRoute.PluginTemplate -> PluginTemplateDestination(
+                    vm = vm,
+                    id = route.id,
+                    onBack = ::popOrExit,
+                )
+
                 SettingsRoute.Mcp -> McpPage(
                     vm = vm,
                     onBack = ::popOrExit,
@@ -278,6 +292,8 @@ internal fun NavGraphBuilder.settingsRouteGraph(
     composable<SettingsRoute.CustomInstructions> { destination(SettingsRoute.CustomInstructions) }
     composable<SettingsRoute.Providers> { destination(SettingsRoute.Providers) }
     composable<SettingsRoute.Provider> { entry -> destination(entry.toRoute<SettingsRoute.Provider>()) }
+    composable<SettingsRoute.Plugins> { destination(SettingsRoute.Plugins) }
+    composable<SettingsRoute.PluginTemplate> { entry -> destination(entry.toRoute<SettingsRoute.PluginTemplate>()) }
     composable<SettingsRoute.Mcp> { destination(SettingsRoute.Mcp) }
     composable<SettingsRoute.McpServer> { entry -> destination(entry.toRoute<SettingsRoute.McpServer>()) }
     composable<SettingsRoute.Skills> { destination(SettingsRoute.Skills) }

@@ -14,6 +14,8 @@ sealed interface SettingsRoute {
     @Serializable data object Personalization : SettingsRoute
     @Serializable data object CustomInstructions : SettingsRoute
     @Serializable data object Providers : SettingsRoute
+    @Serializable data object Plugins : SettingsRoute
+    @Serializable data class PluginTemplate(val id: String) : SettingsRoute
     @Serializable data object Mcp : SettingsRoute
     @Serializable data object Skills : SettingsRoute
     @Serializable data object Git : SettingsRoute
@@ -36,7 +38,7 @@ internal fun SettingsRoute.parent(): SettingsRoute? = when (this) {
     SettingsRoute.Appearance,
     SettingsRoute.Personalization,
     SettingsRoute.Providers,
-    SettingsRoute.Mcp,
+    SettingsRoute.Plugins,
     SettingsRoute.Skills,
     SettingsRoute.Git,
     SettingsRoute.Data,
@@ -44,6 +46,8 @@ internal fun SettingsRoute.parent(): SettingsRoute? = when (this) {
     is SettingsRoute.AgentToolsCategory -> SettingsRoute.AgentTools
     SettingsRoute.CustomInstructions -> SettingsRoute.Personalization
     is SettingsRoute.Provider -> SettingsRoute.Providers
+    SettingsRoute.Mcp -> SettingsRoute.Plugins
+    is SettingsRoute.PluginTemplate -> SettingsRoute.Plugins
     is SettingsRoute.McpServer -> SettingsRoute.Mcp
     is SettingsRoute.Skill -> SettingsRoute.Skills
     SettingsRoute.NewSkill -> SettingsRoute.Skills
@@ -65,6 +69,7 @@ internal fun SettingsRoute.Companion.fromLegacyPage(page: String): SettingsRoute
         "appearance" -> SettingsRoute.Appearance
         "personal" -> SettingsRoute.Personalization
         "providers" -> SettingsRoute.Providers
+        "plugins" -> SettingsRoute.Plugins
         "mcp" -> SettingsRoute.Mcp
         "skills" -> SettingsRoute.Skills
         "git" -> SettingsRoute.Git

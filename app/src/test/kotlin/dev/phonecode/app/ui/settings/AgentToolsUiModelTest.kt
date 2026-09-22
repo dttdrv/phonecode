@@ -9,7 +9,7 @@ class AgentToolsUiModelTest {
         AgentToolInfo("read_file", "Read a workspace file", "Misul Agent", "Read only"),
         AgentToolInfo("write_file", "Change a workspace file", "Misul Agent", "Approval required"),
         AgentToolInfo("process", "Run a command", "Misul Agent", "Depends on action"),
-        AgentToolInfo("remote_search", "Search a connected service", "MCP", "Approval required"),
+        AgentToolInfo("remote_search", "Search a connected service", "MCP", "Approval required", "Cloudflare Agents docs · Search agent docs"),
     )
 
     @Test
@@ -35,6 +35,10 @@ class AgentToolsUiModelTest {
         assertEquals(
             listOf("remote_search"),
             filterAgentTools(tools, "connected", AgentToolAccessFilter.ALL).map { it.name },
+        )
+        assertEquals(
+            listOf("remote_search"),
+            filterAgentTools(tools, "Cloudflare", AgentToolAccessFilter.ALL).map { it.name },
         )
         assertEquals(
             listOf("read_file"),

@@ -91,6 +91,7 @@ class SettingsReliabilityTest {
         dismissOnboardingIfPresent()
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
+        if (page == "MCP servers") compose.onNodeWithText("Plugins").performClick()
         compose.onNodeWithText(page).performClick()
     }
 
@@ -155,6 +156,7 @@ class SettingsReliabilityTest {
         try {
             compose.onNodeWithContentDescription("Menu").performClick()
             compose.onNodeWithContentDescription("Settings").performClick()
+            compose.onNodeWithText("Plugins").performClick()
             compose.onNodeWithText("MCP servers").performClick()
             compose.onNodeWithText("fragile-server").performClick()
             compose.onNodeWithText("Delete server").performClick()
@@ -186,6 +188,7 @@ class SettingsReliabilityTest {
 
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("Plugins").performClick()
         compose.onNodeWithText("MCP servers").performClick()
         compose.onNodeWithText("temporary-server").performClick()
         compose.onNodeWithText("Delete server").performClick()

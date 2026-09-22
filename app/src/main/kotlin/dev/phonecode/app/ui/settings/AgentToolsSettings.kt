@@ -163,6 +163,11 @@ internal fun AgentToolsPage(
         MisulSectionLabel("Access")
         MisulGroup {
             SettingsNavigationRow(
+                label = "All tools",
+                value = summary.total.toString(),
+                onClick = { onOpenCategory(AgentToolAccessFilter.ALL) },
+            )
+            SettingsNavigationRow(
                 label = "Read only",
                 value = summary.readOnly.toString(),
                 onClick = { onOpenCategory(AgentToolAccessFilter.READ_ONLY) },
@@ -179,8 +184,8 @@ internal fun AgentToolsPage(
                 onClick = { onOpenCategory(AgentToolAccessFilter.CONTEXTUAL) },
             )
         }
-        SettingsNote("Access follows Files & permissions. Misul asks before tools that can change data.")
-        if (summary.remote > 0) SettingsNote("${summary.remote} tools come from connected MCP servers.")
+        SettingsNote("Access follows Files & permissions. The agent asks before tools that can change data.")
+        if (summary.remote > 0) SettingsNote("${summary.remote} ${if (summary.remote == 1) "tool comes" else "tools come"} from connected plugins.")
     }
 }
 
@@ -205,24 +210,31 @@ internal fun AgentToolsCategoryPage(
             tools.groupBy { it.source }.toList()
                 .sortedBy { (source, _) -> listOf("Misul Agent", "Skills", "MCP").indexOf(source).let { if (it < 0) Int.MAX_VALUE else it } }
                 .forEach { (source, entries) ->
-                    MisulSectionLabel(source)
+                    MisulSectionLabel(if (source == "MCP") "Plugins" else source)
                     MisulGroup {
                         entries.forEachIndexed { index, tool ->
-                            MisulContentRow(showDivider = index != entries.lastIndex) {
+                            var expanded by rememberSaveable(tool.source, tool.name) { mutableStateOf(false) }
+                            MisulContentRow(
+                                onClick = { expanded = !expanded },
+                                showDivider = index != entries.lastIndex,
+                            ) {
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        tool.name,
-                                        style = MaterialTheme.typography.bodyLarge.copy(fontFamily = PcMono),
+                                        tool.displayName.replace('_', ' ').replaceFirstChar { it.uppercase() },
+                                        style = MaterialTheme.typography.bodyLarge,
                                         color = colors.onBackground,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
                                     )
                                     Text(
                                         tool.description,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = colors.onSurfaceVariant,
-                                        maxLines = 1,
+                                        maxLines = if (expanded) Int.MAX_VALUE else 2,
                                         overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (expanded) Text(
+                                        if (tool.source == "MCP") tool.access else "${tool.name} · ${tool.access}",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = PcMono),
+                                        color = colors.onSurfaceVariant,
                                     )
                                 }
                             }
@@ -241,7 +253,7 @@ private fun AgentToolAccessFilter.pageTitle() = when (this) {
 }
 
 private fun AgentToolAccessFilter.explanation() = when (this) {
-    AgentToolAccessFilter.ALL -> "All tools available to Misul Agent."
+    AgentToolAccessFilter.ALL -> "All tools available to the agent."
     AgentToolAccessFilter.READ_ONLY -> "These tools inspect information without changing it."
     AgentToolAccessFilter.NEEDS_APPROVAL -> "Misul asks before these tools can make a change."
     AgentToolAccessFilter.CONTEXTUAL -> "Approval depends on the specific action and its target."

@@ -192,11 +192,11 @@ internal fun SkillsPage(
                 filtered.forEachIndexed { index, skill ->
                     SettingsNavigationRow(
                         label = skill.name,
-                        supportingText = if (skill.status == SkillStatus.ACTIVE) {
-                            skill.scope.label()
-                        } else {
-                            "${skill.scope.label()} · ${skill.status.label()}"
-                        },
+                        supportingText = listOfNotNull(
+                            skill.status.takeUnless { it == SkillStatus.ACTIVE }?.label(),
+                            skill.manifest?.description?.takeIf { it.isNotBlank() }?.skillListSummary()
+                                ?: skill.scope.label(),
+                        ).joinToString(" · "),
                         showDivider = index != filtered.lastIndex,
                         onClick = { onOpenSkill(skill.id) },
                     )
@@ -204,6 +204,11 @@ internal fun SkillsPage(
             }
         }
     }
+}
+
+private fun String.skillListSummary(): String {
+    val firstSentence = trim().replace(Regex("\\s+"), " ").substringBefore(". ")
+    return if (firstSentence.length <= 96) firstSentence else firstSentence.take(95).trimEnd() + "…"
 }
 
 @Composable

@@ -243,6 +243,8 @@ internal fun McpPage(
 internal fun McpServerPage(
     vm: ChatViewModel,
     initialName: String,
+    suggestedName: String = "",
+    introduction: String? = null,
     initial: McpServerConfig,
     existingNames: Set<String>,
     snapshot: McpServerSnapshot?,
@@ -257,7 +259,7 @@ internal fun McpServerPage(
     var baseline by remember(initialName) { mutableStateOf(initial) }
     val currentRevision = remember(initial) { revisionOf(initial) }
     var acceptedRevision by rememberSaveable(initialName) { mutableStateOf(currentRevision) }
-    var name by rememberSaveable(initialName) { mutableStateOf(initialName) }
+    var name by rememberSaveable(initialName, suggestedName) { mutableStateOf(if (isNew) suggestedName else initialName) }
     var url by rememberSaveable(initialName) { mutableStateOf(initial.url) }
     var headers by rememberSaveable(initialName) { mutableStateOf(headersForEditor(initial.headers)) }
     var timeout by rememberSaveable(initialName) { mutableStateOf(initial.timeout.toString()) }
@@ -270,6 +272,7 @@ internal fun McpServerPage(
     var toolQuery by rememberSaveable(initialName) { mutableStateOf("") }
     var showAllTools by rememberSaveable(initialName) { mutableStateOf(false) }
     var confirmDelete by rememberSaveable(initialName) { mutableStateOf(false) }
+    var showAdvanced by rememberSaveable(initialName, suggestedName) { mutableStateOf(introduction == null) }
     val deleteOperationKey = mcpDeleteOperationKey(initialName)
     val deleteOperation = state.settingsOperations[deleteOperationKey]
     val externalChange = !isNew && currentRevision != acceptedRevision
@@ -351,13 +354,20 @@ internal fun McpServerPage(
     val canTest = !testing && !saving && !externalChange
     val enabledDraftNeedsReview = enabled && (isNew || !baseline.enabled || connectionChanged)
     val canSave =
-        canTest && changed && validationError == null && (!enabledDraftNeedsReview || reviewedCurrentDraft)
+        canTest && changed && validationError == null && (!enabledDraftNeedsReview || reviewedCurrentDraft) &&
+            (introduction == null || (enabled && reviewedCurrentDraft))
     // Turning a server off is always available. Turning one on requires a successful probe for
     // this exact draft, including servers that were previously saved in the Off state.
     val canEnable = enabled || reviewedCurrentDraft
     LaunchedEffect(changed) { onDirtyChange(changed) }
     val shownSnapshot = currentTestResult?.snapshot ?: snapshot.takeUnless { changed }
-    SettingsPageShell(if (isNew) "Add MCP server" else initialName, onBack) {
+    val pageTitle = when {
+        !isNew -> initialName
+        introduction != null -> "Add plugin"
+        else -> "Add MCP server"
+    }
+    SettingsPageShell(pageTitle, onBack) {
+        introduction?.let { SettingsNote(it) }
         if (externalChange) {
             SettingsErrorText("This server changed elsewhere. Reload before saving.")
             Spacer(Modifier.height(Spacing.xs))
@@ -380,7 +390,8 @@ internal fun McpServerPage(
             !isNew && !changed -> SettingsNote(if (enabled) "Not tested" else "Off")
         }
         MisulSectionLabel("Connection")
-        if (isNew) {
+        if (introduction != null) SettingsNote("Official service endpoint. Open connection details to inspect or change it.")
+        if (isNew && (introduction == null || showAdvanced)) {
             MisulField(
                 name,
                 {
@@ -399,128 +410,143 @@ internal fun McpServerPage(
                 SettingsErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
             }
         }
-        Spacer(Modifier.height(16.dp))
-        MisulField(
-            url,
-            {
-                url = it
-                error = null
-                invalidateProbeReview()
-            },
-            "Remote URL",
-            placeholder = "https://host/mcp",
-            contentDescription = "Remote URL",
-        )
-        error?.takeIf { it.startsWith("Use HTTPS") }?.let {
-            SettingsErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
+        if (introduction == null || showAdvanced) {
+            Spacer(Modifier.height(16.dp))
+            MisulField(
+                url,
+                {
+                    url = it
+                    error = null
+                    invalidateProbeReview()
+                },
+                "Remote URL",
+                placeholder = "https://host/mcp",
+                contentDescription = "Remote URL",
+            )
+            error?.takeIf { it.startsWith("Use HTTPS") }?.let {
+                SettingsErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
+            }
         }
-        SettingsFieldLabel("HTTP headers")
-        val headerRows = headerRowsFromEditor(headers)
-        headerRows.forEachIndexed { index, header ->
-            MisulGroup(Modifier.padding(bottom = Spacing.xs)) {
-                MisulContentRow {
-                    Box(Modifier.weight(1f)) {
-                        MisulField(
-                            header.first,
-                            {
-                                headers = updateHeaderRow(headers, index, name = it)
+        if (introduction != null) {
+            MisulGroup {
+                SettingsNavigationRow(
+                    label = if (showAdvanced) "Hide connection details" else "Connection details",
+                    supportingText = "Server name, URL, headers and timeout",
+                    showDivider = false,
+                    onClick = { showAdvanced = !showAdvanced },
+                )
+            }
+        }
+        if (showAdvanced) {
+            SettingsFieldLabel("HTTP headers")
+            val headerRows = headerRowsFromEditor(headers)
+            headerRows.forEachIndexed { index, header ->
+                MisulGroup(Modifier.padding(bottom = Spacing.xs)) {
+                    MisulContentRow {
+                        Box(Modifier.weight(1f)) {
+                            MisulField(
+                                header.first,
+                                {
+                                    headers = updateHeaderRow(headers, index, name = it)
+                                    error = null
+                                    invalidateProbeReview()
+                                },
+                                "Header name",
+                                placeholder = "e.g. Authorization",
+                                contentDescription = "Header name ${index + 1}",
+                            )
+                        }
+                        MisulIconButton(
+                            Icons.Filled.Delete,
+                        "Remove header ${index + 1}",
+                        onClick = {
+                                headers = removeHeaderRow(headers, index)
                                 error = null
                                 invalidateProbeReview()
                             },
-                            "Header name",
-                            placeholder = "e.g. Authorization",
-                            contentDescription = "Header name ${index + 1}",
                         )
                     }
-                    MisulIconButton(
-                        Icons.Filled.Delete,
-                        "Remove header ${index + 1}",
-                        onClick = {
-                        headers = removeHeaderRow(headers, index)
-                        error = null
-                        invalidateProbeReview()
-                    },
-                )
-                }
-                MisulContentRow(showDivider = false) {
-                    MisulField(
-                        header.second,
-                        {
-                            headers = updateHeaderRow(headers, index, value = it)
-                            error = null
-                            invalidateProbeReview()
-                        },
-                        "Secret value",
-                        secure = true,
-                        contentDescription = "Header value ${index + 1}",
-                    )
+                    MisulContentRow(showDivider = false) {
+                        MisulField(
+                            header.second,
+                            {
+                                headers = updateHeaderRow(headers, index, value = it)
+                                error = null
+                                invalidateProbeReview()
+                            },
+                            "Secret value",
+                            secure = true,
+                            contentDescription = "Header value ${index + 1}",
+                        )
+                    }
                 }
             }
-        }
-        MisulActionButton("Add header", role = ActionRole.QUIET, icon = Icons.Filled.Add) {
-            headers = addHeaderRow(headers)
-            error = null
-            invalidateProbeReview()
-        }
-        error?.takeIf {
-            it.startsWith("Each header") || it.startsWith("Use no more")
-        }?.let {
-            SettingsErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
-        }
-        SettingsNote(
-            "Header values are concealed after saving and encrypted with Android Keystore.",
-        )
-        MisulField(
-            timeout,
-            {
-                timeout = it.filter(Char::isDigit)
+            MisulActionButton("Add header", role = ActionRole.QUIET, icon = Icons.Filled.Add) {
+                headers = addHeaderRow(headers)
                 error = null
                 invalidateProbeReview()
-            },
-            "Connection timeout (milliseconds)",
-            placeholder = "5000",
-            contentDescription = "Connection timeout in milliseconds",
-        )
-        error?.takeIf { it.startsWith("Timeout") }?.let {
-            SettingsErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
-        }
-        Spacer(Modifier.height(Spacing.xs))
-        MisulGroup {
-            SettingsToggleRow(
-                "Enabled",
-                sub = if (!canEnable) "Test successfully before enabling" else null,
-                checked = enabled,
-                enabled = canEnable,
-                showDivider = false,
-            ) {
-                enabled = it
-                error = null
+            }
+            error?.takeIf {
+                it.startsWith("Each header") || it.startsWith("Use no more")
+            }?.let {
+                SettingsErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
+            }
+            SettingsNote(
+                "Header values are concealed after saving and encrypted with Android Keystore.",
+            )
+            MisulField(
+                timeout,
+                {
+                    timeout = it.filter(Char::isDigit)
+                    error = null
+                    invalidateProbeReview()
+                },
+                "Connection timeout (milliseconds)",
+                placeholder = "5000",
+                contentDescription = "Connection timeout in milliseconds",
+            )
+            error?.takeIf { it.startsWith("Timeout") }?.let {
+                SettingsErrorText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = Spacing.xs))
             }
         }
-        if (enabledDraftNeedsReview && !reviewedCurrentDraft) {
-            SettingsNote(
-                "Test this changed configuration and review its reported tools before saving it enabled.",
-            )
-        }
-        if (isNew) {
-            SettingsNote(
-                "MCP servers receive tool inputs from the agent. Review the reported tools before " +
-                    "enabling; mutating actions follow your approval setting.",
-            )
-        }
-        error?.takeUnless { message ->
-            message == "Name is required" || message.startsWith("A server named ") ||
-                message.startsWith("Use HTTPS") || message.startsWith("Each header") ||
-                message.startsWith("Timeout")
-        }?.let { message ->
-            SettingsErrorText(
-                message,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = Spacing.xs),
-            )
-        }
-        Spacer(Modifier.height(Spacing.s))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs, Alignment.End)) {
+        if (introduction == null) {
+            Spacer(Modifier.height(Spacing.xs))
+            MisulGroup {
+                SettingsToggleRow(
+                    "Enabled",
+                    sub = if (!canEnable) "Test successfully before enabling" else null,
+                    checked = enabled,
+                    enabled = canEnable,
+                    showDivider = false,
+                ) {
+                    enabled = it
+                    error = null
+                }
+            }
+            if (enabledDraftNeedsReview && !reviewedCurrentDraft) {
+                SettingsNote(
+                    "Test this changed configuration and review its reported tools before saving it enabled.",
+                )
+            }
+            if (isNew) {
+                SettingsNote(
+                    "MCP servers receive tool inputs from the agent. Review the reported tools before " +
+                        "enabling; mutating actions follow your approval setting.",
+                )
+            }
+            error?.takeUnless { message ->
+                message == "Name is required" || message.startsWith("A server named ") ||
+                    message.startsWith("Use HTTPS") || message.startsWith("Each header") ||
+                    message.startsWith("Timeout")
+            }?.let { message ->
+                SettingsErrorText(
+                    message,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = Spacing.xs),
+                )
+            }
+            Spacer(Modifier.height(Spacing.s))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs, Alignment.End)) {
                 MisulActionButton(
                     "Test",
                     role = ActionRole.SECONDARY,
@@ -557,22 +583,48 @@ internal fun McpServerPage(
                         }
                     }
                 }
+            }
+        }
+        if (introduction != null) {
+            Spacer(Modifier.height(Spacing.s))
+            MisulActionButton(
+                "Test connection",
+                role = ActionRole.SECONDARY,
+                loading = testing,
+                enabled = canTest,
+            ) {
+                draft()?.let { (draftName, server) ->
+                    scope.launch {
+                        val testedRevision = mcpConnectionDraftRevision(draftName, server)
+                        testing = true
+                        invalidateProbeReview()
+                        val result = vm.testMcpServer(draftName, server)
+                        if (latestDraftRevision == testedRevision) {
+                            testResult = TestedMcpDraft(testedRevision, result)
+                        }
+                        testing = false
+                    }
+                }
+            }
+            error?.let { SettingsErrorText(it) }
         }
         shownSnapshot?.takeIf { it.connected }?.let { connectedSnapshot ->
-            MisulSectionLabel("Server")
-            MisulGroup {
-                McpValueRow("Name", connectedSnapshot.serverTitle.ifBlank { connectedSnapshot.serverName }.ifBlank { name })
-                McpValueRow("Version", connectedSnapshot.serverVersion.ifBlank { "Unknown" })
-                McpValueRow("Protocol", connectedSnapshot.protocolVersion)
-                McpValueRow(
-                    "Advertised capabilities",
-                    connectedSnapshot.capabilities.sorted().joinToString().ifBlank { "None" },
-                )
-                McpValueRow(
-                    "Available in Misul Agent",
-                    if (connectedSnapshot.tools.isEmpty()) "No tool calls" else "Tool calls",
-                    showDivider = false,
-                )
+            if (introduction == null) {
+                MisulSectionLabel("Server")
+                MisulGroup {
+                    McpValueRow("Name", connectedSnapshot.serverTitle.ifBlank { connectedSnapshot.serverName }.ifBlank { name })
+                    McpValueRow("Version", connectedSnapshot.serverVersion.ifBlank { "Unknown" })
+                    McpValueRow("Protocol", connectedSnapshot.protocolVersion)
+                    McpValueRow(
+                        "Advertised capabilities",
+                        connectedSnapshot.capabilities.sorted().joinToString().ifBlank { "None" },
+                    )
+                    McpValueRow(
+                        "Available in Misul Agent",
+                        if (connectedSnapshot.tools.isEmpty()) "No tool calls" else "Tool calls",
+                        showDivider = false,
+                    )
+                }
             }
             if (connectedSnapshot.instructions.isNotBlank()) {
                 MisulSectionLabel("Instructions")
@@ -654,6 +706,40 @@ internal fun McpServerPage(
                     ) { reviewed ->
                         reviewedDraftRevision =
                             if (reviewed) currentDraftRevision else null
+                    }
+                }
+            }
+        }
+        if (introduction != null) {
+            MisulSectionLabel("Enable")
+            MisulGroup {
+                SettingsToggleRow(
+                    "Enabled",
+                    sub = if (canEnable) "The agent may call the reviewed tools" else "Test and review tools first",
+                    checked = enabled,
+                    enabled = canEnable,
+                    showDivider = false,
+                ) {
+                    enabled = it
+                    error = null
+                }
+            }
+            SettingsNote("Tool calls that change data follow your approval setting.")
+            Spacer(Modifier.height(Spacing.s))
+            MisulActionButton(
+                "Add plugin",
+                role = ActionRole.PRIMARY,
+                loading = saving,
+                enabled = canSave,
+            ) {
+                draft()?.let { (draftName, server) ->
+                    scope.launch {
+                        saving = true
+                        vm.saveMcpServerAndWait(draftName, server, baseline.takeUnless { isNew }).fold(
+                            onSuccess = { withContext(Dispatchers.Main.immediate) { onSaved() } },
+                            onFailure = { error = it.message ?: "Plugin could not be added" },
+                        )
+                        saving = false
                     }
                 }
             }

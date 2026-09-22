@@ -384,7 +384,7 @@ internal fun WorkspaceDrawer(
             item(key = "mcp") {
                 DrawerDestination(
                     icon = Icons.Outlined.Extension,
-                    label = "MCP",
+                    label = "Plugins",
                     value = state.mcpServerCount.toString(),
                     onClick = onOpenMcp,
                 )

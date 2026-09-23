@@ -1,0 +1,421 @@
+diff --git a/src/openai_compatible.zig b/src/openai_compatible.zig
+index 376cf7a..0ee9fbd 100644
+--- a/src/openai_compatible.zig
++++ b/src/openai_compatible.zig
+@@ -1163,51 +1163,38 @@ fn decoderEvent(raw: *anyopaque, event: SseEvent) !void {
+         if (usage != .null) {
+             if (usage != .object) return decoder.fail(.malformed_response, "provider usage was not an object");
+             const parsed_usage = parseUsage(decoder.dialect, usage.object) catch return decoder.fail(.malformed_response, "provider usage was invalid");
+-            if (decoder.usage_seen) {
+-                if (!usageEqual(decoder.usage, parsed_usage)) return decoder.fail(.malformed_response, "provider usage changed after emission");
+-            } else {
+-                pending_usage = parsed_usage;
+-            }
++            // Usage events replace earlier reports rather than accumulate, so a provider that
++            // repeats usage (identical: skipped) or refines it (different: latest wins) cannot
++            // corrupt accounting and must not fail an otherwise complete response.
++            if (!decoder.usage_seen or !usageEqual(decoder.usage, parsed_usage)) pending_usage = parsed_usage;
+         }
+     }
+-    const choices = value.object.get("choices") orelse {
+-        if (pending_usage != null) return decoder.fail(.malformed_response, "provider usage was missing choices");
+-        if (decoder.finish_reason != null) return decoder.fail(.malformed_response, "provider sent data after finish reason");
++    const raw_choices = value.object.get("choices");
++    if (raw_choices == null or raw_choices.? == .null) {
++        // Usage-only and metadata-only chunks carry no output. Emit any usage they report and
++        // ignore the rest, before or after the finish reason.
++        if (pending_usage) |usage| try emitUsage(decoder, usage);
+         return;
+-    };
+-    if (decoder.finish_reason != null) {
+-        if (choices == .array and choices.array.items.len == 0 and pending_usage != null) {
+-            try emitUsage(decoder, pending_usage.?);
+-            return;
+-        }
+-        // OpenRouter also documents a final usage chunk that repeats the completed
+-        // choice with an empty delta. Accept only that inert shape: any new text,
+-        // tool call, changed finish reason, or missing usage is still invalid.
+-        if (decoder.dialect == .openrouter_chat and pending_usage != null and choices == .array and choices.array.items.len == 1) {
+-            const repeated = choices.array.items[0];
+-            if (repeated == .object) {
+-                const index = repeated.object.get("index");
+-                const reason = repeated.object.get("finish_reason");
+-                const delta = repeated.object.get("delta");
+-                if ((index == null or (uintField(index.?) orelse std.math.maxInt(u64)) == 0) and
+-                    reason != null and reason.? == .string and
+-                    mapStopReason(reason.?.string) == decoder.finish_reason and
+-                    delta != null and delta.? == .object and delta.?.object.count() == 0)
+-                {
+-                    try emitUsage(decoder, pending_usage.?);
+-                    return;
+-                }
+-            }
+-        }
+-        return decoder.fail(.malformed_response, "provider sent choices after finish reason");
+     }
++    const choices = raw_choices.?;
+     if (choices != .array) return decoder.fail(.malformed_response, "provider choice count was invalid");
++    if (decoder.finish_reason) |finish_reason| {
++        // OpenAI-compatible providers (OpenRouter in particular) may repeat the finished choice,
++        // with a content-free delta, on the final usage chunk or as a bare duplicate. Accept only
++        // inert tails: new text, reasoning, tool calls, or a changed finish reason still fail.
++        if (choices.array.items.len > 1) return decoder.fail(.malformed_response, "provider sent choices after finish reason");
++        if (choices.array.items.len == 1) switch (classifyTailChoice(choices.array.items[0], finish_reason)) {
++            .inert => {},
++            .error_finish => return decoder.fail(.provider, provider_error_finish_message),
++            .changed_finish => return decoder.fail(.malformed_response, "provider finish reason changed"),
++            .active => return decoder.fail(.malformed_response, "provider sent choices after finish reason"),
++        };
++        if (pending_usage) |usage| try emitUsage(decoder, usage);
++        return;
++    }
+     if (choices.array.items.len == 0) {
+-        if (pending_usage) |usage| {
+-            try emitUsage(decoder, usage);
+-            return;
+-        }
+-        return decoder.fail(.malformed_response, "provider choice count was invalid");
++        if (pending_usage) |usage| try emitUsage(decoder, usage);
++        return;
+     }
+     if (choices.array.items.len != 1) return decoder.fail(.malformed_response, "provider choice count was invalid");
+     const choice = choices.array.items[0];
+@@ -1220,6 +1207,7 @@ fn decoderEvent(raw: *anyopaque, event: SseEvent) !void {
+         if (reason == .null) {} else if (reason == .string) {
+             if (decoder.dialect == .deepseek_chat and std.mem.eql(u8, reason.string, "insufficient_system_resource")) return decoder.fail(.transient_provider, "provider inference resources were insufficient");
+             if (std.mem.eql(u8, reason.string, "content_filter")) return decoder.fail(.provider, "provider content filter blocked output");
++            if (std.mem.eql(u8, reason.string, "error")) return decoder.fail(.provider, provider_error_finish_message);
+             const finish = mapStopReason(reason.string) orelse return decoder.fail(.malformed_response, "provider finish reason was invalid");
+             if (decoder.finish_reason) |previous| if (previous != finish) return decoder.fail(.malformed_response, "provider finish reason changed");
+             decoder.finish_reason = finish;
+@@ -1273,6 +1261,40 @@ fn decoderEvent(raw: *anyopaque, event: SseEvent) !void {
+         for (calls.array.items) |call| try emitToolDelta(decoder, call);
+     }
+ }
++const provider_error_finish_message = "The provider ended the response with an error. Try again or choose another model.";
++const TailChoice = enum { inert, active, changed_finish, error_finish };
++fn classifyTailChoice(choice: std.json.Value, finish_reason: protocol.StopReason) TailChoice {
++    if (choice != .object) return .active;
++    if (choice.object.get("index")) |index| if ((uintField(index) orelse return .active) != 0) return .active;
++    if (choice.object.get("error")) |wire_error| if (wire_error != .null) return .error_finish;
++    if (choice.object.get("finish_reason")) |reason| switch (reason) {
++        .null => {},
++        .string => |text| {
++            if (std.mem.eql(u8, text, "error")) return .error_finish;
++            if ((mapStopReason(text) orelse return .changed_finish) != finish_reason) return .changed_finish;
++        },
++        else => return .active,
++    };
++    const delta = choice.object.get("delta") orelse return .inert;
++    if (delta == .null) return .inert;
++    if (delta != .object) return .active;
++    if (delta.object.get("role")) |role| switch (role) {
++        .null => {},
++        .string => |text| if (!std.mem.eql(u8, text, "assistant")) return .active,
++        else => return .active,
++    };
++    inline for (.{ "content", "reasoning", "reasoning_content", "refusal" }) |key| if (delta.object.get(key)) |field| switch (field) {
++        .null => {},
++        .string => |text| if (text.len != 0) return .active,
++        else => return .active,
++    };
++    inline for (.{ "tool_calls", "reasoning_details" }) |key| if (delta.object.get(key)) |field| switch (field) {
++        .null => {},
++        .array => |items| if (items.items.len != 0) return .active,
++        else => return .active,
++    };
++    return .inert;
++}
+ fn emitUsage(decoder: *StreamDecoder, usage: protocol.Usage) !void {
+     decoder.usage = usage;
+     decoder.usage_seen = true;
+@@ -1360,14 +1382,22 @@ fn parseUsage(dialect: Dialect, object: std.json.ObjectMap) !protocol.Usage {
+     var usage = protocol.Usage{
+         .input = try usageField(object, "prompt_tokens"),
+         .output = try usageField(object, "completion_tokens"),
+-        .total_tokens = try usageField(object, "total_tokens"),
+     };
+-    if (usage.input > std.math.maxInt(u64) - usage.output or usage.input + usage.output != usage.total_tokens) return error.InvalidUsage;
++    if (usage.input > std.math.maxInt(u64) - usage.output) return error.InvalidUsage;
++    // Routed providers do not always report total_tokens as prompt + completion. Keep the
++    // counters that drive accounting and derive a consistent total; a non-numeric total is
++    // still malformed.
++    if (object.get("total_tokens")) |total| if (total != .null) {
++        _ = uintField(total) orelse return error.InvalidUsage;
++    };
++    usage.total_tokens = usage.input + usage.output;
+     var openai_cache_read: ?u64 = null;
+-    if (object.get("prompt_tokens_details")) |details| {
++    if (object.get("prompt_tokens_details")) |details| if (details != .null) {
+         if (details != .object) return error.InvalidUsage;
+-        if (details.object.get("cached_tokens")) |cached_tokens| openai_cache_read = uintField(cached_tokens) orelse return error.InvalidUsage;
+-    }
++        if (details.object.get("cached_tokens")) |cached_tokens| if (cached_tokens != .null) {
++            openai_cache_read = uintField(cached_tokens) orelse return error.InvalidUsage;
++        };
++    };
+     switch (dialect) {
+         .deepseek_chat => {
+             const deepseek_cache_read = uintField(object.get("prompt_cache_hit_tokens") orelse return error.InvalidUsage) orelse return error.InvalidUsage;
+@@ -2125,6 +2155,9 @@ test "decoder rejects conflicting usage and malformed tool fields" {
+     defer decoder.deinit();
+     try decoderEvent(&decoder, .{ .event = "message", .data = "{\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}" });
+     try decoderEvent(&decoder, .{ .event = "message", .data = "{\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":2,\"total_tokens\":11}}" });
++    try std.testing.expect(!decoder.failed);
++    try std.testing.expectEqual(@as(u64, 9), decoder.usage.input);
++    try decoderEvent(&decoder, .{ .event = "message", .data = "{\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":\"2\",\"total_tokens\":11}}" });
+     try std.testing.expect(decoder.failed);
+ 
+     var malformed = StreamDecoder.init(std.testing.allocator, &model, "openrouter-chat", .openrouter_chat, 4096, 64 * 1024, 200, null, "secret", &.{}, undefined, sink, &callback_attempted);
+@@ -2893,10 +2926,10 @@ test "usage objects require coherent required provider counters" {
+     const Case = struct { dialect: Dialect, source: []const u8 };
+     inline for (.{
+         Case{ .dialect = .openai_chat, .source = "{}" },
+-        Case{ .dialect = .openrouter_chat, .source = "{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":3}" },
++        Case{ .dialect = .openrouter_chat, .source = "{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":-3}" },
+         Case{ .dialect = .deepseek_chat, .source = "{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}" },
+         Case{ .dialect = .deepseek_chat, .source = "{\"prompt_tokens\":10,\"completion_tokens\":2,\"prompt_cache_hit_tokens\":7,\"prompt_cache_miss_tokens\":999,\"total_tokens\":12}" },
+-        Case{ .dialect = .deepseek_chat, .source = "{\"prompt_tokens\":10,\"completion_tokens\":2,\"prompt_cache_hit_tokens\":7,\"prompt_cache_miss_tokens\":3,\"total_tokens\":99}" },
++        Case{ .dialect = .deepseek_chat, .source = "{\"prompt_tokens\":10,\"completion_tokens\":2,\"prompt_cache_hit_tokens\":7,\"prompt_cache_miss_tokens\":3,\"total_tokens\":1.5}" },
+     }) |case| {
+         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+         defer arena.deinit();
+@@ -3356,3 +3389,196 @@ test "literal OpenAI OpenRouter and DeepSeek request snapshots pin exact bytes a
+         try std.testing.expectEqualSlices(u8, &expected_request_hash, &request_hash);
+     }
+ }
++
++const TailCapture = struct {
++    text: std.ArrayList(u8) = .empty,
++    thinking: std.ArrayList(u8) = .empty,
++    usage_events: usize = 0,
++    done: usize = 0,
++    failed: usize = 0,
++    category: ?protocol.ProviderFailureCategory = null,
++    message: [256]u8 = undefined,
++    message_len: usize = 0,
++    usage: protocol.Usage = .{},
++    stop: ?protocol.StopReason = null,
++    fn deinit(self: *@This()) void {
++        self.text.deinit(std.testing.allocator);
++        self.thinking.deinit(std.testing.allocator);
++    }
++    fn receive(raw: *anyopaque, event: protocol.StreamEvent) !void {
++        const capture: *@This() = @ptrCast(@alignCast(raw));
++        switch (event) {
++            .text_delta => |delta| try capture.text.appendSlice(std.testing.allocator, delta.delta),
++            .thinking_delta => |delta| try capture.thinking.appendSlice(std.testing.allocator, delta.delta),
++            .usage => capture.usage_events += 1,
++            .done => |done| {
++                capture.done += 1;
++                capture.usage = done.usage;
++                capture.stop = done.stop_reason;
++            },
++            .failed => |failure| {
++                capture.failed += 1;
++                capture.category = failure.provider_failure.?.category;
++                const message = failure.provider_failure.?.redacted_message;
++                capture.message_len = copyBounded(&capture.message, message);
++            },
++            else => {},
++        }
++    }
++};
++
++fn runTailFixture(dialect: Dialect, fixture: []const u8, capture: *TailCapture) !void {
++    const api = apiName(dialect);
++    const model = protocol.Model{ .id = "m", .api = api, .provider = "p", .context_window = 4096, .max_tokens = 256, .reasoning = true };
++    var callback_attempted = false;
++    var decoder = StreamDecoder.init(std.testing.allocator, &model, api, dialect, 64 * 1024, 64 * 1024, 200, null, "secret", &.{}, capture, TailCapture.receive, &callback_attempted);
++    defer decoder.deinit();
++    var parser = SseParser.init(std.testing.allocator, 64 * 1024, &decoder, decoderEvent);
++    defer parser.deinit();
++    try parser.feed(fixture);
++    try parser.finish();
++    try decoder.finish();
++}
++
++// Shape captured from OpenRouter's documented streaming contract (final usage chunk repeats a
++// content-free choice with the finish reason) and from real OpenRouter SSE bodies, which carry
++// processing comments, `reasoning`/`reasoning_details`, `native_finish_reason`, `logprobs`, and
++// usage cost fields on every tail chunk.
++const openrouter_free_router_stream =
++    ": OPENROUTER PROCESSING\n\n" ++
++    ": OPENROUTER PROCESSING\n\n" ++
++    "data: {\"id\":\"gen-1\",\"provider\":\"Chutes\",\"model\":\"deepseek/deepseek-r1-0528:free\",\"object\":\"chat.completion.chunk\",\"created\":1,\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning\":\"Let me think.\",\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\"Let me think.\",\"format\":\"unknown\",\"index\":0}]},\"finish_reason\":null,\"native_finish_reason\":null,\"logprobs\":null}]}\n\n" ++
++    "data: {\"id\":\"gen-1\",\"provider\":\"Chutes\",\"model\":\"deepseek/deepseek-r1-0528:free\",\"object\":\"chat.completion.chunk\",\"created\":1,\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hello\",\"reasoning\":null,\"reasoning_details\":[]},\"finish_reason\":null,\"native_finish_reason\":null,\"logprobs\":null}]}\n\n" ++
++    ": OPENROUTER PROCESSING\n\n" ++
++    "data: {\"id\":\"gen-1\",\"provider\":\"Chutes\",\"model\":\"deepseek/deepseek-r1-0528:free\",\"object\":\"chat.completion.chunk\",\"created\":1,\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\" world\",\"reasoning\":null,\"reasoning_details\":[]},\"finish_reason\":null,\"native_finish_reason\":null,\"logprobs\":null}]}\n\n" ++
++    "data: {\"id\":\"gen-1\",\"provider\":\"Chutes\",\"model\":\"deepseek/deepseek-r1-0528:free\",\"object\":\"chat.completion.chunk\",\"created\":1,\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning\":null,\"reasoning_details\":[]},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\",\"logprobs\":null}]}\n\n" ++
++    "data: {\"id\":\"gen-1\",\"provider\":\"Chutes\",\"model\":\"deepseek/deepseek-r1-0528:free\",\"object\":\"chat.completion.chunk\",\"created\":1,\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning\":null,\"reasoning_details\":[]},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\",\"logprobs\":null}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":20,\"total_tokens\":32,\"cost\":0,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":null,\"upstream_inference_prompt_cost\":0,\"upstream_inference_completion_cost\":0},\"completion_tokens_details\":{\"reasoning_tokens\":8,\"image_tokens\":0}}}\n\n" ++
++    "data: [DONE]\n\n";
++
++test "OpenRouter free router tail with role and empty content completes with usage" {
++    var capture = TailCapture{};
++    defer capture.deinit();
++    try runTailFixture(.openrouter_chat, openrouter_free_router_stream, &capture);
++    try std.testing.expectEqual(@as(usize, 0), capture.failed);
++    try std.testing.expectEqual(@as(usize, 1), capture.done);
++    try std.testing.expectEqualStrings("Hello world", capture.text.items);
++    try std.testing.expectEqualStrings("Let me think.", capture.thinking.items);
++    try std.testing.expectEqual(@as(usize, 1), capture.usage_events);
++    try std.testing.expectEqual(@as(u64, 12), capture.usage.input);
++    try std.testing.expectEqual(@as(u64, 20), capture.usage.output);
++    try std.testing.expectEqual(@as(u64, 32), capture.usage.total_tokens);
++    try std.testing.expectEqual(protocol.StopReason.stop, capture.stop.?);
++}
++
++test "inert post-finish chunks are accepted for every OpenAI-compatible dialect" {
++    const prefix = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n";
++    const deepseek_usage = "{\"prompt_tokens\":3,\"completion_tokens\":2,\"prompt_cache_hit_tokens\":1,\"prompt_cache_miss_tokens\":2,\"total_tokens\":5}";
++    const plain_usage = "{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}";
++    const tails = [_][]const u8{
++        // Repeated finish without usage, then the usage chunk with a content-free role delta.
++        "data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"stop\"}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null,\"reasoning\":null,\"reasoning_content\":null,\"reasoning_details\":null,\"tool_calls\":[],\"refusal\":null},\"finish_reason\":\"stop\",\"native_finish_reason\":\"STOP\",\"logprobs\":null}],\"usage\":USAGE}\n\ndata: [DONE]\n\n",
++        // Choice without a delta and without an index, finish reason null.
++        "data: {\"choices\":[{\"finish_reason\":null}],\"usage\":USAGE}\n\ndata: [DONE]\n\n",
++        // Usage-only chunk with no choices key, then a metadata-only chunk.
++        "data: {\"id\":\"gen-1\",\"usage\":USAGE}\n\ndata: {\"id\":\"gen-1\",\"provider\":\"x\"}\n\ndata: [DONE]\n\n",
++        // Empty choices plus usage, followed by an identical duplicate.
++        "data: {\"choices\":[],\"usage\":USAGE}\n\ndata: {\"choices\":[],\"usage\":USAGE}\n\ndata: [DONE]\n\n",
++    };
++    inline for (.{ Dialect.openai_chat, Dialect.openrouter_chat, Dialect.deepseek_chat }) |dialect| {
++        const usage = if (dialect == .deepseek_chat) deepseek_usage else plain_usage;
++        for (tails) |tail| {
++            const expanded = try std.mem.replaceOwned(u8, std.testing.allocator, tail, "USAGE", usage);
++            defer std.testing.allocator.free(expanded);
++            const fixture = try std.mem.concat(std.testing.allocator, u8, &.{ prefix, expanded });
++            defer std.testing.allocator.free(fixture);
++            var capture = TailCapture{};
++            defer capture.deinit();
++            try runTailFixture(dialect, fixture, &capture);
++            try std.testing.expectEqual(@as(usize, 0), capture.failed);
++            try std.testing.expectEqual(@as(usize, 1), capture.done);
++            try std.testing.expectEqualStrings("ok", capture.text.items);
++            try std.testing.expectEqual(@as(usize, 1), capture.usage_events);
++            try std.testing.expectEqual(@as(u64, 3), capture.usage.input);
++            try std.testing.expectEqual(@as(u64, 2), capture.usage.output);
++            try std.testing.expectEqual(@as(u64, 5), capture.usage.total_tokens);
++        }
++    }
++}
++
++test "post-finish chunks that carry new output or a changed finish reason stay malformed" {
++    const prefix = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n";
++    const usage = ",\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}";
++    const tails = [_][]const u8{
++        "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"smuggled\"},\"finish_reason\":\"stop\"}]" ++ usage ++ "}\n\ndata: [DONE]\n\n",
++        "data: {\"choices\":[{\"index\":0,\"delta\":{\"reasoning\":\"late\"}}]}\n\ndata: [DONE]\n\n",
++        "data: {\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"late\"}}]}\n\ndata: [DONE]\n\n",
++        "data: {\"choices\":[{\"index\":0,\"delta\":{\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\"late\"}]}}]}\n\ndata: [DONE]\n\n",
++        "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"t\",\"function\":{\"name\":\"n\",\"arguments\":\"{}\"}}]}}]}\n\ndata: [DONE]\n\n",
++        "data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"user\"}}]}\n\ndata: [DONE]\n\n",
++        "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"length\"}]" ++ usage ++ "}\n\ndata: [DONE]\n\n",
++        "data: {\"choices\":[{\"index\":1,\"delta\":{},\"finish_reason\":\"stop\"}]" ++ usage ++ "}\n\ndata: [DONE]\n\n",
++        "data: {\"choices\":[{\"index\":0,\"delta\":{}},{\"index\":0,\"delta\":{}}]}\n\ndata: [DONE]\n\n",
++        "data: {\"choices\":[{\"index\":0,\"delta\":\"text\"}]}\n\ndata: [DONE]\n\n",
++        "data: {\"choices\":{}}\n\ndata: [DONE]\n\n",
++    };
++    inline for (.{ Dialect.openai_chat, Dialect.openrouter_chat, Dialect.deepseek_chat }) |dialect| {
++        for (tails) |tail| {
++            const fixture = try std.mem.concat(std.testing.allocator, u8, &.{ prefix, tail });
++            defer std.testing.allocator.free(fixture);
++            var capture = TailCapture{};
++            defer capture.deinit();
++            try runTailFixture(dialect, fixture, &capture);
++            try std.testing.expectEqual(@as(usize, 1), capture.failed);
++            try std.testing.expectEqual(protocol.ProviderFailureCategory.malformed_response, capture.category.?);
++            try std.testing.expectEqual(@as(usize, 0), capture.done);
++            try std.testing.expectEqualStrings("ok", capture.text.items);
++        }
++    }
++}
++
++test "error finish reasons surface as provider failures instead of unreadable responses" {
++    const streams = [_][]const u8{
++        // Normalized OpenRouter finish reason without a top-level error object.
++        "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"finish_reason\":\"error\",\"native_finish_reason\":\"error\"}]}\n\ndata: [DONE]\n\n",
++        // Error reported only in the post-finish tail.
++        "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"},\"finish_reason\":\"stop\"}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"finish_reason\":\"error\"}]}\n\ndata: [DONE]\n\n",
++    };
++    inline for (.{ Dialect.openai_chat, Dialect.openrouter_chat, Dialect.deepseek_chat }) |dialect| {
++        for (streams) |stream| {
++            var capture = TailCapture{};
++            defer capture.deinit();
++            try runTailFixture(dialect, stream, &capture);
++            try std.testing.expectEqual(@as(usize, 1), capture.failed);
++            try std.testing.expectEqual(protocol.ProviderFailureCategory.provider, capture.category.?);
++            try std.testing.expectEqual(@as(usize, 0), capture.done);
++            try std.testing.expect(std.mem.indexOf(u8, capture.message[0..capture.message_len], "ended the response with an error") != null);
++        }
++    }
++}
++
++test "usage totals and later usage reports follow the provider instead of failing" {
++    const stream =
++        "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"}}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":1,\"total_tokens\":99}}\n\n" ++
++        "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" ++
++        "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":4,\"prompt_tokens_details\":null}}\n\n" ++
++        "data: [DONE]\n\n";
++    var capture = TailCapture{};
++    defer capture.deinit();
++    try runTailFixture(.openrouter_chat, stream, &capture);
++    try std.testing.expectEqual(@as(usize, 0), capture.failed);
++    try std.testing.expectEqual(@as(usize, 2), capture.usage_events);
++    try std.testing.expectEqual(@as(u64, 3), capture.usage.input);
++    try std.testing.expectEqual(@as(u64, 4), capture.usage.output);
++    try std.testing.expectEqual(@as(u64, 7), capture.usage.total_tokens);
++
++    inline for (.{
++        "{\"prompt_tokens\":\"3\",\"completion_tokens\":1,\"total_tokens\":4}",
++        "{\"prompt_tokens\":3,\"completion_tokens\":1,\"total_tokens\":\"4\"}",
++        "{\"prompt_tokens\":3,\"total_tokens\":4}",
++    }) |source| {
++        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
++        defer arena.deinit();
++        const value = try std.json.parseFromSliceLeaky(std.json.Value, arena.allocator(), source, .{});
++        try std.testing.expectError(error.InvalidUsage, parseUsage(.openrouter_chat, value.object));
++    }
++}
+diff --git a/tests/runtime_integration/runtime_provider_integration.zig b/tests/runtime_integration/runtime_provider_integration.zig
+index c44ef0d..e5acc10 100644
+--- a/tests/runtime_integration/runtime_provider_integration.zig
++++ b/tests/runtime_integration/runtime_provider_integration.zig
+@@ -312,7 +312,16 @@ fn rootPath(tmp: *std.testing.TmpDir, buffer: []u8) ![]const u8 {
+ test "production Runtime routes configured OpenAI OpenRouter and DeepSeek providers with exact wire metadata" {
+     const allocator = std.testing.allocator;
+     const openai_body = "data:{\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"choices\":[{\"delta\":{\"content\":\"openai-ok\"},\"finish_reason\":\"stop\"}]}\n\ndata:{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12},\"choices\":[]}\n\ndata:[DONE]\n\n";
+-    const router_body = "data:{\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"choices\":[{\"delta\":{\"content\":\"router-ok\"},\"finish_reason\":\"stop\"}]}\n\ndata:{\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":3,\"total_tokens\":14},\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata:[DONE]\n\n";
++    // Realistic OpenRouter free-router stream: processing comments, reasoning deltas that also
++    // carry an empty content string, and a finish chunk repeated on the final usage chunk with a
++    // role/content-free delta, native_finish_reason, logprobs, and cost fields.
++    const router_body = ": OPENROUTER PROCESSING\n\n" ++
++        "data: {\"id\":\"gen-1\",\"provider\":\"Chutes\",\"model\":\"router-model\",\"object\":\"chat.completion.chunk\",\"created\":1,\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning\":\"route\",\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\"route\",\"format\":\"unknown\",\"index\":0}]},\"finish_reason\":null,\"native_finish_reason\":null,\"logprobs\":null}]}\n\n" ++
++        ": OPENROUTER PROCESSING\n\n" ++
++        "data: {\"id\":\"gen-1\",\"provider\":\"Chutes\",\"model\":\"router-model\",\"object\":\"chat.completion.chunk\",\"created\":1,\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"router-ok\",\"reasoning\":null,\"reasoning_details\":[]},\"finish_reason\":null,\"native_finish_reason\":null,\"logprobs\":null}]}\n\n" ++
++        "data: {\"id\":\"gen-1\",\"provider\":\"Chutes\",\"model\":\"router-model\",\"object\":\"chat.completion.chunk\",\"created\":1,\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning\":null,\"reasoning_details\":[]},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\",\"logprobs\":null}]}\n\n" ++
++        "data: {\"id\":\"gen-1\",\"provider\":\"Chutes\",\"model\":\"router-model\",\"object\":\"chat.completion.chunk\",\"created\":1,\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning\":null,\"reasoning_details\":[]},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\",\"logprobs\":null}],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":3,\"total_tokens\":14,\"cost\":0,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":null,\"upstream_inference_prompt_cost\":0,\"upstream_inference_completion_cost\":0},\"completion_tokens_details\":{\"reasoning_tokens\":1,\"image_tokens\":0}}}\n\n" ++
++        "data: [DONE]\n\n";
+     const deepseek_body = "data:{\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":4,\"prompt_cache_hit_tokens\":5,\"prompt_cache_miss_tokens\":7,\"total_tokens\":16},\"choices\":[{\"delta\":{\"content\":\"deepseek-ok\"},\"finish_reason\":\"stop\"}]}\n\ndata:[DONE]\n\n";
+     const openai_response = try response(allocator, openai_body);
+     defer allocator.free(openai_response);
+@@ -401,6 +410,19 @@ test "production Runtime routes configured OpenAI OpenRouter and DeepSeek provid
+     try std.testing.expectEqualStrings("openrouter-chat", router_messages.messages[1].assistant.api);
+     try std.testing.expectEqualStrings("provider-router", router_messages.messages[1].assistant.provider);
+     try std.testing.expectEqualStrings("router-model", router_messages.messages[1].assistant.model);
++    const router_assistant = router_messages.messages[1].assistant;
++    var router_text: ?[]const u8 = null;
++    var router_thinking: ?[]const u8 = null;
++    for (router_assistant.content) |block| switch (block) {
++        .text => |text| router_text = text.text,
++        .thinking => |thinking| router_thinking = thinking.thinking,
++        else => {},
++    };
++    try std.testing.expectEqualStrings("router-ok", router_text.?);
++    try std.testing.expectEqualStrings("route", router_thinking.?);
++    try std.testing.expectEqual(@as(u64, 11), router_assistant.usage.input);
++    try std.testing.expectEqual(@as(u64, 3), router_assistant.usage.output);
++    try std.testing.expectEqual(@as(u64, 14), router_assistant.usage.total_tokens);
+     try std.testing.expectEqualStrings("deepseek-chat", deepseek_messages.messages[1].assistant.api);
+     try std.testing.expectEqualStrings("provider-deepseek", deepseek_messages.messages[1].assistant.provider);
+     try std.testing.expectEqualStrings("deepseek-model", deepseek_messages.messages[1].assistant.model);

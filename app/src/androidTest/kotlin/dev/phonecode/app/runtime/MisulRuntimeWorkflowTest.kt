@@ -92,6 +92,96 @@ class MisulRuntimeWorkflowTest {
     }
 
     @Test
+    fun nativeOpenRouterFreeRouterTailCompletesWithUsage() = runBlocking {
+        // Realistic openrouter/free stream: processing comments, reasoning deltas that also carry
+        // an empty content string, the finish chunk repeated on the usage chunk with a role/content
+        // delta, native_finish_reason, logprobs, cost fields, and a total that is not prompt + completion.
+        val chunk = """{"id":"gen-1","provider":"Chutes","model":"deepseek/deepseek-r1-0528:free","object":"chat.completion.chunk","created":1,"choices":[{"index":0,"delta":%s,"finish_reason":%s,"native_finish_reason":%s,"logprobs":null}]%s}"""
+        val tail = """{"role":"assistant","content":"","reasoning":null,"reasoning_details":[]}"""
+        val usage = ""","usage":{"prompt_tokens":12,"completion_tokens":20,"total_tokens":35,"cost":0,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"cost_details":{"upstream_inference_cost":null,"upstream_inference_prompt_cost":0,"upstream_inference_completion_cost":0},"completion_tokens_details":{"reasoning_tokens":8,"image_tokens":0}}"""
+        val body = buildString {
+            append(": OPENROUTER PROCESSING\n\n: OPENROUTER PROCESSING\n\n")
+            append("data: ").append(chunk.format("""{"role":"assistant","content":"","reasoning":"Let me think.","reasoning_details":[{"type":"reasoning.text","text":"Let me think.","format":"unknown","index":0}]}""", "null", "null", "")).append("\n\n")
+            append("data: ").append(chunk.format("""{"role":"assistant","content":"Hello","reasoning":null,"reasoning_details":[]}""", "null", "null", "")).append("\n\n")
+            append(": OPENROUTER PROCESSING\n\n")
+            append("data: ").append(chunk.format("""{"role":"assistant","content":" world","reasoning":null,"reasoning_details":[]}""", "null", "null", "")).append("\n\n")
+            append("data: ").append(chunk.format(tail, "\"stop\"", "\"stop\"", "")).append("\n\n")
+            append("data: ").append(chunk.format(tail, "\"stop\"", "\"stop\"", usage)).append("\n\n")
+            append("data: [DONE]\n\n")
+        }
+        val (result, events) = promptOpenRouterFixture(body, "misul-openrouter-free-tail")
+        assertEquals(null, result.providerFailure)
+        assertEquals("completed", result.status)
+        assertEquals("Hello world", result.content)
+        assertTrue(events.any { it == MisulRuntimeEvent.Reasoning("Let me think.") })
+        assertEquals("Hello world", events.filterIsInstance<MisulRuntimeEvent.Text>().joinToString("") { it.delta })
+    }
+
+    @Test
+    fun nativeOpenRouterErrorFinishIsAProviderFailure() = runBlocking {
+        val body = """
+            data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"partial"}}]}
+
+            data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"error","native_finish_reason":"error"}]}
+
+            data: [DONE]
+
+        """.trimIndent().plus("\n\n")
+        val (result, _) = promptOpenRouterFixture(body, "misul-openrouter-error-finish")
+        assertTrue(result.status != "completed")
+        assertEquals("provider", result.providerFailure?.category)
+        assertEquals(200, result.providerFailure?.httpStatus)
+        assertTrue(result.userFacingFailure().contains("ended the response with an error"))
+    }
+
+    private suspend fun promptOpenRouterFixture(body: String, name: String): Pair<MisulPromptResult, List<MisulRuntimeEvent>> =
+        ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
+            val bytes = body.encodeToByteArray()
+            val responder = Executors.newSingleThreadExecutor()
+            responder.submit {
+                server.accept().use { socket ->
+                    val input = socket.getInputStream().bufferedReader()
+                    var contentLength = 0
+                    while (true) {
+                        val line = input.readLine() ?: break
+                        if (line.startsWith("Content-Length:", ignoreCase = true)) {
+                            contentLength = line.substringAfter(':').trim().toInt()
+                        }
+                        if (line.isEmpty()) break
+                    }
+                    repeat(contentLength) { input.read() }
+                    val output = socket.getOutputStream()
+                    output.write(
+                        ("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n" +
+                            "Content-Length: ${bytes.size}\r\nConnection: close\r\n\r\n").encodeToByteArray(),
+                    )
+                    output.write(bytes)
+                    output.flush()
+                }
+            }
+            val root = File(context.cacheDir, name).apply {
+                deleteRecursively()
+                mkdirs()
+            }
+            val controller = MisulRuntimeController()
+            try {
+                val events = CopyOnWriteArrayList<MisulRuntimeEvent>()
+                val baseSpec = spec(root, server.localPort)
+                val result = controller.prompt(
+                    spec = baseSpec.copy(provider = baseSpec.provider.copy(dialect = "openrouter_chat")),
+                    sessionId = "session-$name",
+                    prompt = "Hi",
+                    onEvent = events::add,
+                )
+                result to events.toList()
+            } finally {
+                controller.close()
+                responder.shutdownNow()
+                responder.awaitTermination(5, TimeUnit.SECONDS)
+            }
+        }
+
+    @Test
     fun nativeRuntimeStreamsARealProviderResponseThroughJni() = runBlocking {
         ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
             val requests = CopyOnWriteArrayList<String>()

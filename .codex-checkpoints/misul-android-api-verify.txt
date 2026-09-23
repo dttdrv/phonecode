@@ -1,0 +1,14 @@
+verified_at=2026-09-02T17:40:10+03:00
+abi_version=1
+max_record_bytes=1048576
+focused_tests=248/248
+full_tests=292/292
+focused_result=android-api-contract-ok
+
+Verified behavior:
+- A real runtime handle completes `rpc/handshake` and `model/list` through `rpc_server.Server`.
+- Null, empty, oversized, invalid UTF-8, and malformed inputs are bounded.
+- Returned buffers require the owning handle and exact recorded length.
+- Buffer release and handle close are idempotent after the caller-owned value is cleared.
+- Unsupported event and host-response operations report unsupported without simulated output.
+- Allocation failure is preserved at the adapter boundary.

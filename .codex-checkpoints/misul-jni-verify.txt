@@ -1,0 +1,23 @@
+Misul JNI verification, 2026-09-02
+
+Target: phonecode AVD, Android 14, arm64-v8a
+Artifact SHA-256: 678c40a5f67bab42e5588776faf2431c52e2d690fd6aa824f81fa1dfa49c6742
+
+Initial expected failure:
+- MisulNativeHandshakeTest did not compile because MisulNative did not exist.
+
+Packaging:
+- :app:verifyDebugMisulApk passed.
+- The APK contained exactly lib/arm64-v8a/libmisul.so.
+- The packaged library SHA-256 matched the staged artifact.
+- All three provenance records were packaged.
+- An ordinary debug build without MISUL_ANDROID_RUNTIME_DIR passed and contained no libmisul.so.
+
+Connected runtime:
+- MisulNativeHandshakeTest passed twice in separate instrumentation runs.
+- Each run loaded ABI version 1, opened the real runtime, completed rpc/handshake, received model/list, rejected a record larger than 1 MiB, closed, and reopened cleanly.
+- adb shell ps -A contained no Misul child process after the second run.
+
+Harness repair:
+- The first instrumentation attempt ran zero tests because AndroidJUnitRunner was absent from debugAndroidTestRuntimeClasspath.
+- androidx.test:runner:1.6.1 was added, matching the monitor 1.7.1 line already used by androidx.test.ext:junit:1.2.1.

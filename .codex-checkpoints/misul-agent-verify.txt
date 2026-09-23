@@ -1,0 +1,14 @@
+verified_at=2026-09-02T17:26:02+03:00
+checkpoint=/Users/dttdrv/.codex/tmp/misul-agent-android.wpQAzM/MisulAgent
+checkpoint_files=75
+manifest_sha256=28cbc393a8378ceb5669e034b40de8d25d6071a455993a65c65c58e10e588fe5
+zig_version=0.16.0
+zig_archive_sha256=b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489
+zig_tests=289/289
+result=verify-ok
+
+Baseline repair notes:
+- `scripts/verify.sh` did not provide the test model profile required by its provider fixtures.
+- `scripts/test-openai-cli.sh` and `scripts/test-native-tools.sh` still emitted buffered JSON after the runtime switched to streamed provider events.
+- The dependency scan treated ordinary Zig variables named `node` as Node.js.
+- The repaired fixtures and full verification passed before Android ABI work began.

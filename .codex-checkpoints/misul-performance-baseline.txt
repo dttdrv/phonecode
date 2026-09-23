@@ -1,0 +1,52 @@
+Misul Android phase-1 performance baseline, 2026-09-02
+
+Scope: local emulator baseline only. These measurements do not establish physical-device or universal performance.
+Build: PhoneCode debug APK with the locked Misul arm64-v8a artifact
+Device: phonecode AVD, sdk_gphone64_arm64
+Android: 14, API 34
+Thermal status: 0 in all runs
+Artifact SHA-256: 678c40a5f67bab42e5588776faf2431c52e2d690fd6aa824f81fa1dfa49c6742
+Library size: 2,565,368 bytes
+Compressed APK contribution: 1,131,977 bytes
+Debug APK size: 30,436,975 bytes
+
+Method:
+- 20 independent instrumentation runs, each preceded by am force-stop dev.phonecode.
+- Cold total measures first System.loadLibrary/dlsym, runtime open, and rpc/handshake.
+- Each process records five warm model/list calls, for 100 warm samples total.
+- Idle CPU is process CPU consumed during one second with an open, inactive runtime.
+- PSS includes the full debug app and Android test harness, not only Misul.
+
+Results:
+- Cold total: median 2.414917 ms, p95 4.286125 ms
+- Library load and symbol resolution: median 0.405959 ms, p95 0.584333 ms
+- Runtime open: median 1.648875 ms, p95 3.542500 ms
+- Handshake: median 0.351833 ms, p95 0.436250 ms
+- Warm model/list: median 0.097042 ms, p95 0.117458 ms
+- Idle CPU: median 0 ms/s, p95 0 ms/s at the measurement resolution
+- Idle PSS: median 168,018 KiB, p95 168,113 KiB
+- App process count: 1 in all runs
+- Production startup references to MisulNative: none. Native initialization is not on PhoneCode startup or first-frame paths in phase 1.
+
+Raw JSONL:
+{"load_ns":584333,"open_ns":2234417,"handshake_ns":395333,"cold_total_ns":3214083,"warm_model_list_ns":[105334,97542,97042,94125,93416],"idle_cpu_ms_per_second":0,"idle_pss_kb":168019,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":396167,"open_ns":1617583,"handshake_ns":324208,"cold_total_ns":2337958,"warm_model_list_ns":[98250,92208,93375,102875,93250],"idle_cpu_ms_per_second":0,"idle_pss_kb":168070,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":671916,"open_ns":1933709,"handshake_ns":361208,"cold_total_ns":2966833,"warm_model_list_ns":[104000,94000,95334,92125,93042],"idle_cpu_ms_per_second":0,"idle_pss_kb":168018,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":380458,"open_ns":1648875,"handshake_ns":322167,"cold_total_ns":2351500,"warm_model_list_ns":[101125,110750,102292,93250,115042],"idle_cpu_ms_per_second":0,"idle_pss_kb":168056,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":407375,"open_ns":1801375,"handshake_ns":317750,"cold_total_ns":2526500,"warm_model_list_ns":[103541,92250,92125,90542,92167],"idle_cpu_ms_per_second":0,"idle_pss_kb":167990,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":406584,"open_ns":1603625,"handshake_ns":346958,"cold_total_ns":2357167,"warm_model_list_ns":[96875,91875,117458,103750,94334],"idle_cpu_ms_per_second":0,"idle_pss_kb":168085,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":419750,"open_ns":1643334,"handshake_ns":351833,"cold_total_ns":2414917,"warm_model_list_ns":[101959,161750,112292,97333,103083],"idle_cpu_ms_per_second":0,"idle_pss_kb":168072,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":366958,"open_ns":1542917,"handshake_ns":471917,"cold_total_ns":2381792,"warm_model_list_ns":[116042,97625,94208,91792,94084],"idle_cpu_ms_per_second":0,"idle_pss_kb":168113,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":387500,"open_ns":1612542,"handshake_ns":343958,"cold_total_ns":2344000,"warm_model_list_ns":[100750,93375,92417,99166,92292],"idle_cpu_ms_per_second":0,"idle_pss_kb":168001,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":374042,"open_ns":1557667,"handshake_ns":356416,"cold_total_ns":2288125,"warm_model_list_ns":[104542,96541,96125,207083,103792],"idle_cpu_ms_per_second":0,"idle_pss_kb":167994,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":451667,"open_ns":1658875,"handshake_ns":352458,"cold_total_ns":2463000,"warm_model_list_ns":[105750,108458,119083,100792,106208],"idle_cpu_ms_per_second":0,"idle_pss_kb":168001,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":386583,"open_ns":3479708,"handshake_ns":356000,"cold_total_ns":4222291,"warm_model_list_ns":[104709,95292,97125,96000,97958],"idle_cpu_ms_per_second":0,"idle_pss_kb":168011,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":442875,"open_ns":1793708,"handshake_ns":377459,"cold_total_ns":2614042,"warm_model_list_ns":[104250,92667,92500,89708,93208],"idle_cpu_ms_per_second":0,"idle_pss_kb":168034,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":405959,"open_ns":1507250,"handshake_ns":436250,"cold_total_ns":2349459,"warm_model_list_ns":[111000,205167,139417,105000,99167],"idle_cpu_ms_per_second":0,"idle_pss_kb":168006,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":372667,"open_ns":1393750,"handshake_ns":332625,"cold_total_ns":2099042,"warm_model_list_ns":[101000,92708,93125,90334,93375],"idle_cpu_ms_per_second":0,"idle_pss_kb":167995,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":428500,"open_ns":1651542,"handshake_ns":388000,"cold_total_ns":2468042,"warm_model_list_ns":[108542,94333,96000,92875,94375],"idle_cpu_ms_per_second":1,"idle_pss_kb":168058,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":398958,"open_ns":1533875,"handshake_ns":319542,"cold_total_ns":2252375,"warm_model_list_ns":[99417,94875,101209,91417,92834],"idle_cpu_ms_per_second":0,"idle_pss_kb":168028,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":378209,"open_ns":3542500,"handshake_ns":365416,"cold_total_ns":4286125,"warm_model_list_ns":[108792,94000,109791,95209,94833],"idle_cpu_ms_per_second":0,"idle_pss_kb":168126,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":432875,"open_ns":3742208,"handshake_ns":344292,"cold_total_ns":4519375,"warm_model_list_ns":[99917,97583,93792,111500,94958],"idle_cpu_ms_per_second":0,"idle_pss_kb":168000,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+{"load_ns":434292,"open_ns":1830333,"handshake_ns":337250,"cold_total_ns":2601875,"warm_model_list_ns":[105125,100250,104334,91500,96625],"idle_cpu_ms_per_second":0,"idle_pss_kb":168017,"app_process_count":1,"thermal_status":0,"android":"14","sdk":34,"abi":"arm64-v8a","device":"sdk_gphone64_arm64"}
+

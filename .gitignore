@@ -40,3 +40,7 @@ app/screenshots/
 /design/
 /docs/
 /.claude/
+
+# Local agent coordination and verification notes
+.claude-handoff.md
+.codex-checkpoints/

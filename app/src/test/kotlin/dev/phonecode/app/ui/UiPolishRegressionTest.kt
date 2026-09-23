@@ -246,7 +246,7 @@ class UiPolishRegressionTest {
         assertTrue(build.contains("signingConfig = signingConfigs.getByName(\"debug\")"))
         assertTrue(build.contains("sourceSets.getByName(\"sideload\")"))
         assertTrue(build.contains("withBuildType(\"sideload\")"))
-        assertTrue(build.contains("output.versionCode.set(59)"))
-        assertTrue(build.contains("output.versionName.set(\"0.8.1\")"))
+        assertTrue(build.contains("output.versionCode.set(60)"))
+        assertTrue(build.contains("output.versionName.set(\"0.8.5\")"))
     }
 }

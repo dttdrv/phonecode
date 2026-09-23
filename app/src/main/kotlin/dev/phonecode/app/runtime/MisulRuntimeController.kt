@@ -1,9 +1,23 @@
 package dev.phonecode.app.runtime
 
+import dev.phonecode.tools.Tool
+import dev.phonecode.tools.ToolContext
+import dev.phonecode.tools.ToolResult
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -48,6 +62,12 @@ internal data class MisulRuntimeSpec(
     val model: MisulModel,
     val provider: MisulProvider,
     val allowMutatingTools: Boolean = false,
+    /** Kotlin tools the native runtime advertises and calls back through the host bridge. */
+    val hostTools: List<Tool> = emptyList(),
+    val toolContext: ToolContext? = null,
+    val disabledTools: Set<String> = emptySet(),
+    /** Tools that always wait for approval, even with auto-accept on. */
+    val approvalTools: Set<String> = emptySet(),
 ) {
     fun toJson(): JSONObject {
         val selection = JSONObject()
@@ -96,12 +116,28 @@ internal data class MisulRuntimeSpec(
             .put("maximum_active_runs", 1)
             .put("max_steps", 32)
             .put("allow_mutating_tools", allowMutatingTools)
+            .put("host_tools", JSONArray(hostTools.map { tool ->
+                JSONObject()
+                    .put("name", tool.name)
+                    .put("description", tool.description)
+                    .put("parameters", JSONObject(tool.parameters.toString()))
+                    .put("mutating", tool.needsApproval())
+                    .put("sequential", tool.sequential)
+            }))
+            .put("disabled_tools", JSONArray(disabledTools.sorted()))
+            .put("approval_tools", JSONArray(approvalTools.sorted()))
     }
 
     fun fingerprint(): String = MessageDigest.getInstance("SHA-256")
         .digest(toJson().toString().encodeToByteArray())
         .joinToString("") { "%02x".format(it) }
 }
+
+// ponytail: process and git_branch mutate only for some actions; the native gate is per tool name,
+// so they always ask. Move to per-call host approval if the extra prompts get in the way.
+internal fun Tool.needsApproval(): Boolean = mutating || name == "process" || name == "git_branch"
+
+internal data class HostToolCall(val id: String, val name: String, val input: String)
 
 internal sealed interface MisulRuntimeEvent {
     data class Text(val delta: String) : MisulRuntimeEvent
@@ -168,6 +204,7 @@ internal fun MisulPromptResult.userFacingFailure(): String {
 
 internal data class ParsedMisulRecord(
     val events: List<MisulRuntimeEvent> = emptyList(),
+    val hostCalls: List<HostToolCall> = emptyList(),
     val settlement: MisulPromptResult? = null,
     val failure: String? = null,
     val terminal: Boolean = settlement != null || failure != null,
@@ -198,6 +235,11 @@ internal fun parseMisulRecord(record: String, expectedId: Long): ParsedMisulReco
                 id = params.optString("id"),
                 name = params.optString("name"),
                 isError = params.optBoolean("is_error"),
+            )))
+            "host_tool_request" -> ParsedMisulRecord(hostCalls = listOf(HostToolCall(
+                id = params.optString("id"),
+                name = params.optString("name"),
+                input = params.opt("input")?.toString().orEmpty(),
             )))
             "approval_request" -> ParsedMisulRecord(events = listOf(MisulRuntimeEvent.ApprovalRequested(
                 id = params.optString("id"),
@@ -236,6 +278,8 @@ internal class MisulRuntimeController {
     private val executor = Executors.newSingleThreadExecutor { task -> Thread(task, "misul-runtime") }
     private val dispatcher = executor.asCoroutineDispatcher()
     private val requestIds = AtomicLong(10)
+    // Host tool calls run off the runtime thread so independent calls overlap and polling continues.
+    private val hostCalls = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var nativeSession: MisulNative.Session? = null
     private var specFingerprint: String? = null
 
@@ -275,6 +319,7 @@ internal class MisulRuntimeController {
             native.nextEvent(EVENT_POLL_MILLIS)?.decodeToString()?.let { raw ->
                 val parsed = parseMisulRecord(raw, promptId)
                 parsed.events.forEach(onEvent)
+                parsed.hostCalls.forEach { call -> hostCalls.launch { settleHostCall(native, spec, call) } }
                 parsed.failure?.let { throw IllegalStateException(it) }
                 parsed.settlement?.let { return@withContext it }
             }
@@ -284,6 +329,7 @@ internal class MisulRuntimeController {
     }
 
     suspend fun abort() = withContext(dispatcher) {
+        hostCalls.coroutineContext.cancelChildren()
         val native = nativeSession ?: return@withContext
         val id = requestIds.incrementAndGet()
         val abort = JSONObject()
@@ -305,6 +351,7 @@ internal class MisulRuntimeController {
     }
 
     fun close() {
+        hostCalls.cancel()
         runBlocking(dispatcher) {
             nativeSession?.close()
             nativeSession = null
@@ -312,6 +359,23 @@ internal class MisulRuntimeController {
         }
         dispatcher.close()
         executor.shutdown()
+    }
+
+    private suspend fun settleHostCall(native: MisulNative.Session, spec: MisulRuntimeSpec, call: HostToolCall) {
+        val result = try {
+            runHostTool(spec, call)
+        } catch (canceled: CancellationException) {
+            ToolResult("${call.name}: canceled", isError = true)
+        }
+        val record = JSONObject()
+            .put("type", "tool_result")
+            .put("id", call.id)
+            .put("content", result.output.take(MAX_HOST_TOOL_OUTPUT_CHARS))
+            .put("is_error", result.isError)
+            .toString()
+            .encodeToByteArray()
+        // A result that arrives after an abort or reopen has no waiting call; the runtime rejects it.
+        withContext(NonCancellable + dispatcher) { runCatching { native.hostResponse(record) } }
     }
 
     private fun ensureOpen(spec: MisulRuntimeSpec): MisulNative.Session {
@@ -352,5 +416,25 @@ internal class MisulRuntimeController {
 
     private companion object {
         const val EVENT_POLL_MILLIS = 50
+        // Stays under the native 1 MiB record bound even when every character needs JSON escaping.
+        const val MAX_HOST_TOOL_OUTPUT_CHARS = 100_000
+    }
+}
+
+internal suspend fun runHostTool(spec: MisulRuntimeSpec, call: HostToolCall): ToolResult {
+    val tool = spec.hostTools.firstOrNull { it.name == call.name }
+        ?: return ToolResult("Unknown tool: ${call.name}", isError = true)
+    val context = spec.toolContext ?: return ToolResult("${call.name}: no tool context", isError = true)
+    val input = when (val args = runCatching { Json.parseToJsonElement(call.input.ifBlank { "{}" }) }.getOrNull()) {
+        is JsonObject -> args
+        JsonNull -> JsonObject(emptyMap())
+        else -> return ToolResult("${call.name}: arguments must be a JSON object", isError = true)
+    }
+    return try {
+        tool.execute(input, context)
+    } catch (canceled: CancellationException) {
+        throw canceled
+    } catch (error: Throwable) {
+        ToolResult("${call.name} failed: ${error.message ?: error.javaClass.simpleName}", isError = true)
     }
 }

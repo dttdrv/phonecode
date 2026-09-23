@@ -274,7 +274,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             todoTools(todoStore) +
             WebFetchTool(http) + WebSearchTool(http) + gitTools { gitCredentials() } +
             ShellTool(shellBackend) + ProcessTool(shellBackend) +
-            ExtensionConfigReadTool(repo) { workspace } + ExtensionConfigWriteTool(repo) { workspace }
+            ExtensionConfigReadTool(repo, appSettings) { workspace } + ExtensionConfigWriteTool(repo, appSettings) { workspace }
     }
     @Volatile private var mcpTools: List<Tool> = emptyList()
     @Volatile private var discoveredSkills: List<SkillManifest> = emptyList()
@@ -1137,6 +1137,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             metadataMutationMutex.withLock {
                 sessionStore.delete(id)
                 _state.update { it.copy(sessions = sessionStore.list()) }
+            }
+        }
+    }
+
+    /** A private project: its own workspace folder in app storage, no linked phone folder. */
+    fun createProject(name: String) {
+        val trimmed = name.trim().take(80)
+        if (trimmed.isEmpty()) return
+        if (_state.value.sessionLoading) return fail("Wait for the current data operation to finish.")
+        viewModelScope.launch(Dispatchers.IO) {
+            val project = metadataMutationMutex.withLock {
+                projectStore.add("project-" + System.currentTimeMillis(), trimmed)
+            }
+            withContext(Dispatchers.Main.immediate) {
+                _state.update { it.copy(projects = projectStore.list(), notice = "Project created") }
+                newChat(project.id)
             }
         }
     }
@@ -2101,12 +2117,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             ReasoningEffort.ULTRA, ReasoningEffort.MAX -> "max"
             else -> _state.value.effort.wireValue
         }?.takeIf { supportsReasoning(selected) }
-        val instructions = loadProjectInstructions(pinnedWorkspace, appSettings.load())
-        val systemPrompt = buildString {
-            append("You are PhoneCode, a coding agent running directly on the user's Android phone. ")
-            append("Work in the provided workspace, use tools when they improve correctness, preserve user data, and report results plainly.")
-            if (instructions.isNotEmpty()) append("\n\n").append(instructions.joinToString("\n\n"))
-        }
+        val settings = appSettings.load()
+        val shell = shellBackend.status(pinnedWorkspace.absolutePath).takeIf { it.available }?.detail
+        val hostTools = hostToolsFor(tools.all(), shellAvailable = shell != null)
+        val toolNames = (NATIVE_TOOLS + hostTools.map { it.name }).distinct() - settings.disabledTools
+        val systemPrompt = agentSystemPrompt(toolNames, shell, loadProjectInstructions(pinnedWorkspace, settings))
         return MisulRuntimeSpec(
             workspaceRoot = pinnedWorkspace,
             stateRoot = misulStateRoot(getApplication<Application>().filesDir, projectId),
@@ -2132,6 +2147,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 headers = dev.phonecode.app.runtime.providerRequestHeaders(selected.providerId, sessionId, preset.extraHeaders),
             ),
             allowMutatingTools = _state.value.autoAccept,
+            hostTools = hostTools,
+            toolContext = AndroidToolContext({ pinnedWorkspace.absolutePath }, { _, _ -> false }, ::askUser),
+            disabledTools = settings.disabledTools,
+            approvalTools = settings.approvalTools,
         )
     }
 

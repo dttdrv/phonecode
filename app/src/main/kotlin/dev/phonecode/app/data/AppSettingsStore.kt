@@ -28,6 +28,10 @@ data class AppSettings(
     /** First-run onboarding shown and dismissed (round-4). */
     val onboarded: Boolean = false,
     val activeSessionId: String? = null,
+    /** Tools left out of agent requests. */
+    val disabledTools: Set<String> = emptySet(),
+    /** Tools that always wait for approval, even with auto-accept on. */
+    val approvalTools: Set<String> = emptySet(),
 ) {
     val mode: ThemeMode get() = runCatching { ThemeMode.valueOf(themeMode) }.getOrDefault(ThemeMode.SYSTEM)
     val responseStyle: ResponseStyle get() = runCatching { ResponseStyle.valueOf(responseStyleName) }.getOrDefault(ResponseStyle.DEFAULT)

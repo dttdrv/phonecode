@@ -169,6 +169,37 @@ class MisulRuntimeControllerTest {
         )
     }
 
+    @Test
+    fun hostToolsReachTheRuntimeConfigAndSettleThroughTheBridge() = kotlinx.coroutines.runBlocking {
+        val echo = object : dev.phonecode.tools.Tool {
+            override val name = "echo"
+            override val description = "Echo"
+            override val parameters = kotlinx.serialization.json.buildJsonObject { put("type", kotlinx.serialization.json.JsonPrimitive("object")) }
+            override suspend fun execute(args: kotlinx.serialization.json.JsonObject, context: dev.phonecode.tools.ToolContext) =
+                dev.phonecode.tools.ToolResult("echo ${args["text"]}")
+        }
+        val context = object : dev.phonecode.tools.ToolContext {
+            override val workspacePath = "/tmp/workspace"
+            override suspend fun requestPermission(tool: String, summary: String) = false
+        }
+        val spec = fixtureSpec().copy(hostTools = listOf(echo), toolContext = context, disabledTools = setOf("webfetch"), approvalTools = setOf("read_file"))
+        val json = spec.toJson()
+        assertEquals("echo", json.getJSONArray("host_tools").getJSONObject(0).getString("name"))
+        assertFalse(json.getJSONArray("host_tools").getJSONObject(0).getBoolean("mutating"))
+        assertEquals("webfetch", json.getJSONArray("disabled_tools").getString(0))
+        assertEquals("read_file", json.getJSONArray("approval_tools").getString(0))
+
+        val request = parseMisulRecord(
+            """{"jsonrpc":"2.0","method":"host_tool_request","params":{"id":"c1","name":"echo","input":{"text":"hi"}}}""",
+            expectedId = 1,
+        )
+        assertEquals(listOf(HostToolCall("c1", "echo", """{"text":"hi"}""")), request.hostCalls)
+        assertTrue(request.events.isEmpty())
+        assertEquals("echo \"hi\"", runHostTool(spec, request.hostCalls.single()).output)
+        assertTrue(runHostTool(spec, HostToolCall("c2", "echo", "[1]")).isError)
+        assertTrue(runHostTool(spec, HostToolCall("c3", "missing", "{}")).isError)
+    }
+
     private fun fixtureSpec() = MisulRuntimeSpec(
         workspaceRoot = File("/tmp/workspace"),
         stateRoot = File("/tmp/state"),

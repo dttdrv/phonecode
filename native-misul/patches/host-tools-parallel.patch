@@ -1,0 +1,951 @@
+diff --git a/src/agent_loop.zig b/src/agent_loop.zig
+index 02a9816..7715e05 100644
+--- a/src/agent_loop.zig
++++ b/src/agent_loop.zig
+@@ -25,6 +25,7 @@ pub const ToolBinding = struct {
+ pub const ToolLookupFn = *const fn (context: *anyopaque, name: []const u8) ?ToolBinding;
+ pub const BeforeToolFn = *const fn (context: *anyopaque, call: *const protocol.ToolCall) anyerror!void;
+ pub const AfterToolFn = *const fn (context: *anyopaque, call: *const protocol.ToolCall, result: *const protocol.ToolResultMessage) anyerror!void;
++pub const ParallelToolFn = *const fn (context: *anyopaque, name: []const u8) bool;
+ 
+ pub const Event = union(enum) {
+     agent_start,
+@@ -63,6 +64,10 @@ pub const Config = struct {
+     hook_context: ?*anyopaque = null,
+     before_tool: ?BeforeToolFn = null,
+     after_tool: ?AfterToolFn = null,
++    /// Whether a tool may overlap other calls. Others run alone, after every earlier call of the
++    /// same response settles. Null lets every call overlap.
++    parallel_context: ?*anyopaque = null,
++    parallel_tool: ?ParallelToolFn = null,
+     event_context: ?*anyopaque = null,
+     emit: ?EventSink = null,
+     cancel_context: ?*anyopaque = null,
+@@ -165,21 +170,45 @@ pub fn run(initial_messages: []const protocol.Message, config: Config) !Result {
+         }
+ 
+         var call_count: usize = 0;
+-        var all_terminate = true;
++        for (assistant.content) |part| switch (part) {
++            .tool_call => call_count += 1,
++            else => {},
++        };
++        if (call_count == 0) break;
++
++        // Approval hooks and events stay on this thread, in call order. Each overlapping call starts
++        // as soon as it clears its hook, so independent reads run concurrently while a later call
++        // waits for approval; mutations run alone and in order. Results are appended in call order
++        // after every started call settles.
++        const slots = try allocator.alloc(ToolSlot, call_count);
++        var started: usize = 0;
++        defer for (slots[0..started]) |*slot| slot.deinit();
++        var cancelled = false;
+         for (assistant.content) |*part| switch (part.*) {
+             .tool_call => |*call| {
+                 if (isCancelled(config)) {
+-                    try emit(config, .cancellation_requested);
+-                    stop = .cancelled;
+-                    break :run_loop;
++                    cancelled = true;
++                    break;
+                 }
+-                call_count += 1;
+-                const terminate = try executeTool(allocator, &messages, config, call);
+-                all_terminate = all_terminate and terminate;
++                slots[started] = .{ .call = call };
++                started += 1;
++                const overlap = call_count > 1 and isParallelTool(config, call.name);
++                if (!overlap) for (slots[0 .. started - 1]) |*earlier| earlier.join();
++                try startTool(allocator, config, &slots[started - 1], overlap);
+             },
+             else => {},
+         };
+-        if (call_count == 0) break;
++        for (slots[0..started]) |*slot| slot.join();
++        var all_terminate = true;
++        for (slots[0..started]) |*slot| {
++            const terminate = try finishTool(allocator, &messages, config, slot);
++            all_terminate = all_terminate and terminate;
++        }
++        if (cancelled) {
++            try emit(config, .cancellation_requested);
++            stop = .cancelled;
++            break;
++        }
+         if (all_terminate) {
+             stop = .terminated;
+             break;
+@@ -199,6 +228,11 @@ pub fn run(initial_messages: []const protocol.Message, config: Config) !Result {
+     };
+ }
+ 
++fn isParallelTool(config: Config, name: []const u8) bool {
++    const check = config.parallel_tool orelse return true;
++    return check(config.parallel_context orelse config.stream_context, name);
++}
++
+ fn isCancelled(config: Config) bool {
+     return if (config.is_cancelled) |check|
+         check(config.cancel_context orelse config.stream_context)
+@@ -206,33 +240,68 @@ fn isCancelled(config: Config) bool {
+         false;
+ }
+ 
+-fn executeTool(
+-    allocator: std.mem.Allocator,
+-    messages: *std.ArrayList(protocol.Message),
+-    config: Config,
++const ToolSlot = struct {
+     call: *const protocol.ToolCall,
+-) !bool {
+-    try emit(config, .{ .tool_start = call });
+-    var output: ToolOutput = undefined;
+-    var generated_error: ?[]const u8 = null;
++    binding: ?ToolBinding = null,
++    arena: ?std.heap.ArenaAllocator = null,
++    output: ToolOutput = .{ .content = &.{} },
++    failure: ?anyerror = null,
++    blocked: ?[]const u8 = null,
++    thread: ?std.Thread = null,
++
++    fn run(slot: *ToolSlot) void {
++        const tool = slot.binding.?;
++        slot.output = tool.execute(tool.context, slot.call, slot.arena.?.allocator()) catch |err| {
++            slot.failure = err;
++            return;
++        };
++    }
++
++    fn join(slot: *ToolSlot) void {
++        if (slot.thread) |thread| thread.join();
++        slot.thread = null;
++    }
+ 
++    fn deinit(slot: *ToolSlot) void {
++        slot.join();
++        if (slot.arena) |*arena| arena.deinit();
++        slot.arena = null;
++    }
++};
++
++fn startTool(allocator: std.mem.Allocator, config: Config, slot: *ToolSlot, concurrent: bool) !void {
++    const call = slot.call;
++    try emit(config, .{ .tool_start = call });
+     if (config.before_tool) |hook| hook(config.hook_context orelse config.stream_context, call) catch |err| {
+-        generated_error = try std.fmt.allocPrint(allocator, "tool {s} was blocked: {s}", .{ call.name, @errorName(err) });
++        slot.blocked = try std.fmt.allocPrint(allocator, "tool {s} was blocked: {s}", .{ call.name, describeToolError(err) });
++        return;
+     };
+-    if (generated_error == null) {
+-        const binding = if (config.lookup_tool) |lookup|
+-            lookup(config.tool_context orelse config.stream_context, call.name)
+-        else
+-            null;
+-        if (binding) |tool| {
+-            output = tool.execute(tool.context, call, allocator) catch |err| blk: {
+-                generated_error = try std.fmt.allocPrint(allocator, "tool {s} failed: {s}", .{ call.name, @errorName(err) });
+-                break :blk undefined;
+-            };
+-        } else {
+-            generated_error = try std.fmt.allocPrint(allocator, "Unknown tool: {s}", .{call.name});
+-        }
+-    }
++    const binding = if (config.lookup_tool) |lookup|
++        lookup(config.tool_context orelse config.stream_context, call.name)
++    else
++        null;
++    slot.binding = binding orelse {
++        slot.blocked = try std.fmt.allocPrint(allocator, "Unknown tool: {s}", .{call.name});
++        return;
++    };
++    // Tools allocate from a private arena so concurrent calls never share the loop's arena.
++    slot.arena = std.heap.ArenaAllocator.init(config.allocator);
++    if (concurrent) slot.thread = std.Thread.spawn(.{}, ToolSlot.run, .{slot}) catch null;
++    if (slot.thread == null) slot.run();
++}
++
++fn finishTool(
++    allocator: std.mem.Allocator,
++    messages: *std.ArrayList(protocol.Message),
++    config: Config,
++    slot: *ToolSlot,
++) !bool {
++    const call = slot.call;
++    const generated_error = slot.blocked orelse if (slot.failure) |err|
++        try std.fmt.allocPrint(allocator, "tool {s} failed: {s}", .{ call.name, describeToolError(err) })
++    else
++        null;
++    const output = slot.output;
+ 
+     const content = if (generated_error) |text|
+         try singleText(allocator, text)
+@@ -254,6 +323,24 @@ fn executeTool(
+     return generated_error == null and output.terminate;
+ }
+ 
++/// Error names alone do not tell a model how to recover; add the fix for the common ones.
++fn describeToolError(err: anyerror) []const u8 {
++    return switch (err) {
++        error.InvalidPath => "InvalidPath: use a path inside the workspace, relative to its root, without ..",
++        error.FileNotFound => "FileNotFound: no such file or directory in the workspace",
++        error.NotAFile, error.IsDir => "NotAFile: the path is a directory",
++        error.NotDir => "NotDir: a path component is not a directory",
++        error.ExpectedOneMatch => "ExpectedOneMatch: old_string must match exactly one location; read the file and include more surrounding text",
++        error.EmptyOldString => "EmptyOldString: old_string must not be empty; use write_file to create files",
++        error.SymlinkNotAllowed => "SymlinkNotAllowed: symbolic links are not followed",
++        error.InputTooLarge => "InputTooLarge: the file or content exceeds the tool limit",
++        error.MissingField, error.UnknownField, error.UnexpectedToken, error.InvalidArguments => "InvalidArguments: the arguments do not match this tool's parameter schema",
++        error.ToolApprovalDenied => "ToolApprovalDenied: the user denied this call; do not retry it without asking",
++        error.Canceled => "Canceled: the call was stopped",
++        else => @errorName(err),
++    };
++}
++
+ const Capture = struct {
+     allocator: std.mem.Allocator,
+     config: Config,
+@@ -803,3 +890,102 @@ test "compaction cannot dispatch a stale cacheable message count" {
+     }));
+     try std.testing.expectEqual(@as(usize, 0), probe.calls);
+ }
++
++const BarrierTest = struct {
++    requests: usize = 0,
++    arrived: std.atomic.Value(usize) = .init(0),
++};
++
++fn barrierStream(raw: *anyopaque, _: *const protocol.Model, _: *const protocol.Context, _: protocol.StreamOptions, sink_context: *anyopaque, sink: protocol.StreamSink) !void {
++    const state: *BarrierTest = @ptrCast(@alignCast(raw));
++    state.requests += 1;
++    if (state.requests == 1) {
++        const message = protocol.AssistantMessage{
++            .content = &.{
++                .{ .tool_call = .{ .id = "first", .name = "meet", .arguments = .null } },
++                .{ .tool_call = .{ .id = "second", .name = "meet", .arguments = .null } },
++            },
++            .api = "test",
++            .provider = "fake",
++            .model = "fake",
++            .stop_reason = .tool_use,
++            .timestamp_ms = 1,
++        };
++        try sink(sink_context, .{ .done = message });
++    } else {
++        const content = [_]protocol.AssistantContent{.{ .text = .{ .text = "met" } }};
++        try sink(sink_context, .{ .done = assistantText(&content, .stop) });
++    }
++}
++
++fn lookupMeet(raw: *anyopaque, _: []const u8) ?ToolBinding {
++    return .{ .context = raw, .execute = executeMeet };
++}
++
++/// Returns only after both calls are running at once; serial dispatch would time out.
++fn executeMeet(raw: *anyopaque, call: *const protocol.ToolCall, allocator: std.mem.Allocator) !ToolOutput {
++    const state: *BarrierTest = @ptrCast(@alignCast(raw));
++    _ = state.arrived.fetchAdd(1, .acq_rel);
++    var spins: usize = 0;
++    while (state.arrived.load(.acquire) < 2) : (spins += 1) {
++        if (spins > 2_000_000) return error.NotConcurrent;
++        std.Thread.yield() catch {};
++    }
++    const content = try allocator.alloc(protocol.UserContent, 1);
++    content[0] = .{ .text = .{ .text = try allocator.dupe(u8, call.id) } };
++    return .{ .content = content };
++}
++
++test "independent tool calls run concurrently and settle in call order" {
++    var state = BarrierTest{};
++    var result = try run(&.{}, .{
++        .allocator = std.testing.allocator,
++        .model = &test_model,
++        .stream_context = &state,
++        .stream = barrierStream,
++        .tool_context = &state,
++        .lookup_tool = lookupMeet,
++    });
++    defer result.deinit();
++    try std.testing.expectEqual(@as(usize, 4), result.messages.len);
++    try std.testing.expect(!result.messages[1].tool_result.is_error);
++    try std.testing.expectEqualStrings("first", result.messages[1].tool_result.content[0].text.text);
++    try std.testing.expectEqualStrings("second", result.messages[2].tool_result.content[0].text.text);
++}
++
++fn noOverlap(_: *anyopaque, _: []const u8) bool {
++    return false;
++}
++
++fn lookupRecord(raw: *anyopaque, _: []const u8) ?ToolBinding {
++    return .{ .context = raw, .execute = executeRecord };
++}
++
++/// The first call is slow; it still finishes first when calls may not overlap.
++fn executeRecord(raw: *anyopaque, call: *const protocol.ToolCall, allocator: std.mem.Allocator) !ToolOutput {
++    const state: *BarrierTest = @ptrCast(@alignCast(raw));
++    if (std.mem.eql(u8, call.id, "first")) {
++        var spins: usize = 0;
++        while (spins < 200_000) : (spins += 1) std.Thread.yield() catch {};
++    }
++    const position = state.arrived.fetchAdd(1, .acq_rel);
++    const content = try allocator.alloc(protocol.UserContent, 1);
++    content[0] = .{ .text = .{ .text = try std.fmt.allocPrint(allocator, "{d}", .{position}) } };
++    return .{ .content = content };
++}
++
++test "tools that may not overlap run alone and in call order" {
++    var state = BarrierTest{};
++    var result = try run(&.{}, .{
++        .allocator = std.testing.allocator,
++        .model = &test_model,
++        .stream_context = &state,
++        .stream = barrierStream,
++        .tool_context = &state,
++        .lookup_tool = lookupRecord,
++        .parallel_tool = noOverlap,
++    });
++    defer result.deinit();
++    try std.testing.expectEqualStrings("0", result.messages[1].tool_result.content[0].text.text);
++    try std.testing.expectEqualStrings("1", result.messages[2].tool_result.content[0].text.text);
++}
+diff --git a/src/android_api.zig b/src/android_api.zig
+index 423bc18..7c9d334 100644
+--- a/src/android_api.zig
++++ b/src/android_api.zig
+@@ -4,6 +4,9 @@ const model_catalog = @import("model_catalog.zig");
+ const openai_compatible = @import("openai_compatible.zig");
+ const rpc_server = @import("rpc_server.zig");
+ const runtime_module = @import("runtime.zig");
++const harness = @import("harness.zig");
++const protocol = @import("protocol.zig");
++const agent_loop = @import("agent_loop.zig");
+ 
+ pub const abi_version: u32 = 1;
+ pub const max_config_bytes: usize = 512 * 1024;
+@@ -42,8 +45,26 @@ const OpenConfig = struct {
+     maximum_active_runs: usize = 8,
+     max_steps: usize = 32,
+     allow_mutating_tools: bool = false,
++    host_tools: []const HostToolConfig = &.{},
++    disabled_tools: []const []const u8 = &.{},
++    approval_tools: []const []const u8 = &.{},
+ };
+ 
++/// A tool the Android host executes. Calls arrive as `host_tool_request` records and settle
++/// through `misul_android_host_response` with a `tool_result` record.
++const HostToolConfig = struct {
++    name: []const u8,
++    description: []const u8,
++    parameters: std.json.Value,
++    mutating: bool = false,
++    /// Runs alone instead of overlapping other calls, for example because it prompts the user.
++    sequential: bool = false,
++};
++
++const HostTool = struct { handle: *Handle };
++
++const HostResult = struct { content: []u8, is_error: bool };
++
+ pub const Handle = struct {
+     allocator: std.mem.Allocator,
+     threaded: std.Io.Threaded,
+@@ -60,6 +81,12 @@ pub const Handle = struct {
+     pending_approval_decision: ?bool = null,
+     cancel_pending_approval: bool = false,
+     closing: bool = false,
++    /// Owns host tool definitions and name lists for the runtime's lifetime.
++    host_arena: std.heap.ArenaAllocator,
++    /// Pending host tool calls by id; a null value is still waiting. Guarded by approval_mutex.
++    host_calls: std.StringHashMapUnmanaged(?HostResult) = .empty,
++    /// Bumped by every abort so waiting host calls settle as canceled.
++    host_abort_generation: u64 = 0,
+ 
+     fn close(self: *Handle) void {
+         self.approval_mutex.lockUncancelable(self.threaded.io());
+@@ -80,6 +107,8 @@ pub const Handle = struct {
+         self.buffers.deinit();
+         self.server.deinit();
+         self.runtime.destroy();
++        self.host_calls.deinit(self.allocator);
++        self.host_arena.deinit();
+         self.environment.deinit();
+         self.threaded.deinit();
+         if (is_android) misul_android_signals_release();
+@@ -142,6 +171,7 @@ pub export fn misul_android_host_response(handle: ?*Handle, record: ?[*]const u8
+     if (parsed.value != .object) return .invalid_argument;
+     const kind = parsed.value.object.get("type") orelse return .invalid_argument;
+     const id = parsed.value.object.get("id") orelse return .invalid_argument;
++    if (kind == .string and std.mem.eql(u8, kind.string, "tool_result")) return settleHostTool(active, parsed.value.object, id);
+     const approved = parsed.value.object.get("approved") orelse return .invalid_argument;
+     if (kind != .string or !std.mem.eql(u8, kind.string, "approval") or id != .string or approved != .bool) return .invalid_argument;
+ 
+@@ -203,6 +233,11 @@ fn openWithAllocator(allocator: std.mem.Allocator, config_json: []const u8) !*Ha
+     if (is_android and misul_android_signals_repair() == 0) return error.AndroidSignalSetupFailed;
+     handle.approval_mutex = std.Io.Mutex.init;
+     handle.approval_condition = std.Io.Condition.init;
++    handle.host_arena = std.heap.ArenaAllocator.init(allocator);
++    errdefer handle.host_arena.deinit();
++    handle.host_calls = .empty;
++    handle.host_abort_generation = 0;
++    const host = try hostToolOptions(handle, parsed.value);
+     handle.pending_approval_id = null;
+     handle.pending_approval_decision = null;
+     handle.cancel_pending_approval = false;
+@@ -222,6 +257,11 @@ fn openWithAllocator(allocator: std.mem.Allocator, config_json: []const u8) !*Ha
+         .allow_mutating_tools = parsed.value.allow_mutating_tools,
+         .approval_context = handle,
+         .approve_tool = requestToolApproval,
++        .host_tools = host.tools,
++        .mutating_tools = host.mutating,
++        .serial_tools = host.serial,
++        .disabled_tools = host.disabled,
++        .approval_tools = host.approval,
+     }) catch |err| switch (err) {
+         error.OutOfMemory => return err,
+         else => return error.InvalidConfig,
+@@ -287,6 +327,122 @@ fn requestToolApproval(
+     return approved;
+ }
+ 
++const HostToolOptions = struct {
++    tools: []harness.Tool,
++    mutating: []const []const u8,
++    serial: []const []const u8,
++    disabled: []const []const u8,
++    approval: []const []const u8,
++};
++
++fn hostToolOptions(handle: *Handle, config: OpenConfig) !HostToolOptions {
++    const arena = handle.host_arena.allocator();
++    const tools = try arena.alloc(harness.Tool, config.host_tools.len);
++    var mutating: std.ArrayList([]const u8) = .empty;
++    var serial: std.ArrayList([]const u8) = .empty;
++    const context = try arena.create(HostTool);
++    context.* = .{ .handle = handle };
++    for (config.host_tools, tools) |spec, *tool| {
++        if (spec.name.len == 0) return error.InvalidConfig;
++        const name = try arena.dupe(u8, spec.name);
++        tool.* = .{
++            .name = name,
++            .description = try arena.dupe(u8, spec.description),
++            .parameters = try cloneValue(arena, spec.parameters),
++            .context = context,
++            .execute = executeHostTool,
++        };
++        if (spec.mutating) try mutating.append(arena, name);
++        if (spec.sequential) try serial.append(arena, name);
++    }
++    return .{
++        .tools = tools,
++        .mutating = mutating.items,
++        .serial = serial.items,
++        .disabled = try dupeNames(arena, config.disabled_tools),
++        .approval = try dupeNames(arena, config.approval_tools),
++    };
++}
++
++fn dupeNames(arena: std.mem.Allocator, names: []const []const u8) ![]const []const u8 {
++    const copy = try arena.alloc([]const u8, names.len);
++    for (names, copy) |name, *slot| slot.* = try arena.dupe(u8, name);
++    return copy;
++}
++
++fn cloneValue(arena: std.mem.Allocator, value: std.json.Value) !std.json.Value {
++    const text = try std.json.Stringify.valueAlloc(arena, value, .{});
++    return std.json.parseFromSliceLeaky(std.json.Value, arena, text, .{});
++}
++
++/// Runs on a tool worker thread: publish the call, then wait for the host's result, an abort,
++/// or close. Several calls may wait at once; each settles by its own id.
++fn executeHostTool(raw: *anyopaque, call: *const protocol.ToolCall, allocator: std.mem.Allocator) !agent_loop.ToolOutput {
++    const handle = (@as(*HostTool, @ptrCast(@alignCast(raw)))).handle;
++    const io = handle.threaded.io();
++    const key = try handle.allocator.dupe(u8, call.id);
++    var key_owned = true;
++    defer if (key_owned) handle.allocator.free(key);
++
++    handle.approval_mutex.lockUncancelable(io);
++    if (handle.closing) {
++        handle.approval_mutex.unlock(io);
++        return error.Canceled;
++    }
++    const generation = handle.host_abort_generation;
++    const entry = handle.host_calls.getOrPut(handle.allocator, key) catch |err| {
++        handle.approval_mutex.unlock(io);
++        return err;
++    };
++    if (entry.found_existing) {
++        handle.approval_mutex.unlock(io);
++        return error.DuplicateToolCall;
++    }
++    entry.value_ptr.* = null;
++    key_owned = false;
++    handle.approval_mutex.unlock(io);
++
++    const notification = std.json.Stringify.valueAlloc(allocator, .{
++        .jsonrpc = "2.0",
++        .method = "host_tool_request",
++        .params = .{ .id = call.id, .name = call.name, .input = call.arguments },
++    }, .{});
++    const published = if (notification) |record| handle.output.writeAtomic(record) else |err| err;
++
++    handle.approval_mutex.lockUncancelable(io);
++    if (published) |_| {
++        while (handle.host_calls.get(call.id).? == null and !handle.closing and generation == handle.host_abort_generation) {
++            handle.approval_condition.waitUncancelable(io, &handle.approval_mutex);
++        }
++    } else |_| {}
++    const settled = handle.host_calls.fetchRemove(call.id).?;
++    handle.approval_mutex.unlock(io);
++    handle.allocator.free(settled.key);
++    try published;
++    const result = settled.value orelse return error.Canceled;
++    defer handle.allocator.free(result.content);
++    const content = try allocator.alloc(protocol.UserContent, 1);
++    content[0] = .{ .text = .{ .text = try allocator.dupe(u8, result.content) } };
++    return .{ .content = content, .is_error = result.is_error };
++}
++
++fn settleHostTool(handle: *Handle, record: std.json.ObjectMap, id: std.json.Value) Status {
++    const content = record.get("content") orelse return .invalid_argument;
++    const is_error = record.get("is_error") orelse return .invalid_argument;
++    if (id != .string or content != .string or is_error != .bool) return .invalid_argument;
++    const io = handle.threaded.io();
++    handle.approval_mutex.lockUncancelable(io);
++    defer handle.approval_mutex.unlock(io);
++    const pending = handle.host_calls.getPtr(id.string) orelse return .invalid_argument;
++    if (pending.* != null) return .invalid_argument;
++    pending.* = .{
++        .content = handle.allocator.dupe(u8, content.string) catch return .out_of_memory,
++        .is_error = is_error.bool,
++    };
++    handle.approval_condition.broadcast(io);
++    return .ok;
++}
++
+ fn clearPendingApproval(handle: *Handle) void {
+     handle.approval_mutex.lockUncancelable(handle.threaded.io());
+     if (handle.pending_approval_id) |id| handle.allocator.free(id);
+@@ -299,6 +455,7 @@ fn clearPendingApproval(handle: *Handle) void {
+ fn cancelPendingApproval(handle: *Handle) void {
+     handle.approval_mutex.lockUncancelable(handle.threaded.io());
+     handle.cancel_pending_approval = true;
++    handle.host_abort_generation +%= 1;
+     handle.approval_condition.broadcast(handle.threaded.io());
+     handle.approval_mutex.unlock(handle.threaded.io());
+ }
+@@ -515,3 +672,85 @@ test "Android ABI preserves allocation failure" {
+     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+     try std.testing.expectError(error.OutOfMemory, openWithAllocator(failing.allocator(), "{}"));
+ }
++
++const HostCallProbe = struct {
++    handle: *Handle,
++    call: protocol.ToolCall,
++    arena: std.heap.ArenaAllocator,
++    output: ?agent_loop.ToolOutput = null,
++    failure: ?anyerror = null,
++
++    fn run(probe: *HostCallProbe) void {
++        var tool = HostTool{ .handle = probe.handle };
++        probe.output = executeHostTool(&tool, &probe.call, probe.arena.allocator()) catch |err| {
++            probe.failure = err;
++            return;
++        };
++    }
++};
++
++fn awaitHostRequest(handle: ?*Handle, id: []const u8) !void {
++    var response = Buffer{};
++    for (0..200) |_| {
++        try std.testing.expectEqual(Status.ok, misul_android_next_event(handle, 50, &response));
++        if (response.data == null) continue;
++        defer _ = misul_android_buffer_free(handle, &response);
++        const record = response.data.?[0..response.len];
++        if (std.mem.indexOf(u8, record, "\"method\":\"host_tool_request\"") != null and std.mem.indexOf(u8, record, id) != null) return;
++    }
++    return error.HostRequestMissing;
++}
++
++test "Android ABI exposes host tools and settles their calls by id" {
++    var workspace_tmp = std.testing.tmpDir(.{});
++    defer workspace_tmp.cleanup();
++    var state_tmp = std.testing.tmpDir(.{});
++    defer state_tmp.cleanup();
++    var workspace_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
++    var state_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
++    const workspace = workspace_buffer[0..try workspace_tmp.dir.realPath(std.testing.io, &workspace_buffer)];
++    const state = state_buffer[0..try state_tmp.dir.realPath(std.testing.io, &state_buffer)];
++    const base = try testConfig(std.testing.allocator, workspace, state);
++    defer std.testing.allocator.free(base);
++    const config = try std.mem.concat(std.testing.allocator, u8, &.{
++        base[0 .. base.len - 1],
++        \\,"host_tools":[{"name":"host_echo","description":"Echo on the host","parameters":{"type":"object","properties":{"text":{"type":"string"}}},"mutating":true}],"disabled_tools":["write_file"],"approval_tools":["read_file"]}
++    });
++    defer std.testing.allocator.free(config);
++
++    var handle: ?*Handle = try openWithAllocator(std.testing.allocator, config);
++    defer _ = misul_android_close(&handle);
++    const runtime = handle.?.runtime;
++    try std.testing.expect(runtime.tool_stack.has("host_echo"));
++    try std.testing.expect(!runtime.tool_stack.has("write_file"));
++    try std.testing.expect(runtime.tool_stack.has("read_file"));
++
++    var probe = HostCallProbe{
++        .handle = handle.?,
++        .call = .{ .id = "call-host", .name = "host_echo", .arguments = .null },
++        .arena = std.heap.ArenaAllocator.init(std.testing.allocator),
++    };
++    defer probe.arena.deinit();
++    const thread = try std.Thread.spawn(.{}, HostCallProbe.run, .{&probe});
++    try awaitHostRequest(handle, "call-host");
++    const unknown = "{\"type\":\"tool_result\",\"id\":\"other\",\"content\":\"x\",\"is_error\":false}";
++    try std.testing.expectEqual(Status.invalid_argument, misul_android_host_response(handle, unknown.ptr, unknown.len));
++    const settle = "{\"type\":\"tool_result\",\"id\":\"call-host\",\"content\":\"echoed on host\",\"is_error\":true}";
++    try std.testing.expectEqual(Status.ok, misul_android_host_response(handle, settle.ptr, settle.len));
++    thread.join();
++    try std.testing.expect(probe.failure == null);
++    try std.testing.expect(probe.output.?.is_error);
++    try std.testing.expectEqualStrings("echoed on host", probe.output.?.content[0].text.text);
++
++    var aborted = HostCallProbe{
++        .handle = handle.?,
++        .call = .{ .id = "call-aborted", .name = "host_echo", .arguments = .null },
++        .arena = std.heap.ArenaAllocator.init(std.testing.allocator),
++    };
++    defer aborted.arena.deinit();
++    const waiting = try std.Thread.spawn(.{}, HostCallProbe.run, .{&aborted});
++    try awaitHostRequest(handle, "call-aborted");
++    cancelPendingApproval(handle.?);
++    waiting.join();
++    try std.testing.expectEqual(@as(?anyerror, error.Canceled), aborted.failure);
++}
+diff --git a/src/builtin_tools.zig b/src/builtin_tools.zig
+index c9000c5..d827fca 100644
+--- a/src/builtin_tools.zig
++++ b/src/builtin_tools.zig
+@@ -87,23 +87,29 @@ pub const Runtime = struct {
+     io: std.Io,
+     root: std.Io.Dir,
+     workspace_root: []u8,
++    /// The configured root before symlink resolution, as shown to the model.
++    configured_root: []u8,
+ 
+     pub fn init(allocator: std.mem.Allocator, io: std.Io, workspace_root: []const u8) !Runtime {
+         var root = try std.Io.Dir.cwd().openDir(io, workspace_root, .{ .iterate = true });
+         errdefer root.close(io);
+         var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+         const path_len = try root.realPath(io, &path_buffer);
++        const resolved = try allocator.dupe(u8, path_buffer[0..path_len]);
++        errdefer allocator.free(resolved);
+         return .{
+             .allocator = allocator,
+             .io = io,
+             .root = root,
+-            .workspace_root = try allocator.dupe(u8, path_buffer[0..path_len]),
++            .workspace_root = resolved,
++            .configured_root = try allocator.dupe(u8, std.mem.trimEnd(u8, workspace_root, "/")),
+         };
+     }
+ 
+     pub fn deinit(self: *Runtime) void {
+         self.root.close(self.io);
+         self.allocator.free(self.workspace_root);
++        self.allocator.free(self.configured_root);
+         self.* = undefined;
+     }
+ 
+@@ -187,7 +193,22 @@ pub const Runtime = struct {
+         });
+     }
+ 
+-    fn openDirPath(self: *Runtime, path: []const u8, create: bool, iterate: bool) !std.Io.Dir {
++    /// Models often echo the absolute workspace path they were shown, or the /workspace mount
++    /// used by the command runtime. Map both onto the workspace root; anything else stays invalid.
++    fn workspacePath(self: *const Runtime, path: []const u8) []const u8 {
++        for ([_][]const u8{ self.workspace_root, self.configured_root, "/workspace" }) |root| {
++            if (!std.fs.path.isAbsolute(root)) continue;
++            if (!std.mem.startsWith(u8, path, root)) continue;
++            const rest = path[root.len..];
++            if (rest.len != 0 and !isSeparator(rest[0])) continue;
++            const local = std.mem.trimStart(u8, rest, "/");
++            return if (local.len == 0) "." else local;
++        }
++        return path;
++    }
++
++    fn openDirPath(self: *Runtime, raw_path: []const u8, create: bool, iterate: bool) !std.Io.Dir {
++        const path = self.workspacePath(raw_path);
+         try validateRelativePath(path, true);
+         var current = try self.root.openDir(self.io, ".", .{ .iterate = iterate });
+         errdefer current.close(self.io);
+@@ -217,7 +238,8 @@ pub const Runtime = struct {
+         basename: []const u8,
+     };
+ 
+-    fn openTarget(self: *Runtime, path: []const u8, create_parent_dirs: bool) !Target {
++    fn openTarget(self: *Runtime, raw_path: []const u8, create_parent_dirs: bool) !Target {
++        const path = self.workspacePath(raw_path);
+         try validateRelativePath(path, false);
+         const basename = std.fs.path.basename(path);
+         if (basename.len == 0 or std.mem.eql(u8, basename, ".") or std.mem.eql(u8, basename, "..")) return error.InvalidPath;
+@@ -338,7 +360,7 @@ const ShellArgs = struct {
+ 
+ fn executeReadFile(raw: *anyopaque, call: *const protocol.ToolCall, allocator: std.mem.Allocator) !agent_loop.ToolOutput {
+     const runtime: *Runtime = @ptrCast(@alignCast(raw));
+-    var parsed = try std.json.parseFromValue(ReadArgs, allocator, call.arguments, .{});
++    var parsed = try std.json.parseFromValue(ReadArgs, allocator, call.arguments, .{ .ignore_unknown_fields = true });
+     defer parsed.deinit();
+     const args = parsed.value;
+     if (args.start_line) |start_line| {
+@@ -356,7 +378,7 @@ fn executeReadFile(raw: *anyopaque, call: *const protocol.ToolCall, allocator: s
+ 
+ fn executeWriteFile(raw: *anyopaque, call: *const protocol.ToolCall, allocator: std.mem.Allocator) !agent_loop.ToolOutput {
+     const runtime: *Runtime = @ptrCast(@alignCast(raw));
+-    var parsed = try std.json.parseFromValue(WriteArgs, allocator, call.arguments, .{});
++    var parsed = try std.json.parseFromValue(WriteArgs, allocator, call.arguments, .{ .ignore_unknown_fields = true });
+     defer parsed.deinit();
+     try runtime.writeFile(parsed.value.path, parsed.value.content, parsed.value.create_parent_dirs);
+     const message = try std.fmt.allocPrint(allocator, "wrote {d} bytes to {s}", .{ parsed.value.content.len, parsed.value.path });
+@@ -366,7 +388,7 @@ fn executeWriteFile(raw: *anyopaque, call: *const protocol.ToolCall, allocator:
+ 
+ fn executeEditFile(raw: *anyopaque, call: *const protocol.ToolCall, allocator: std.mem.Allocator) !agent_loop.ToolOutput {
+     const runtime: *Runtime = @ptrCast(@alignCast(raw));
+-    var parsed = try std.json.parseFromValue(EditArgs, allocator, call.arguments, .{});
++    var parsed = try std.json.parseFromValue(EditArgs, allocator, call.arguments, .{ .ignore_unknown_fields = true });
+     defer parsed.deinit();
+     try runtime.editFile(allocator, parsed.value.path, parsed.value.old_string, parsed.value.new_string);
+     const message = try std.fmt.allocPrint(allocator, "edited {s}", .{parsed.value.path});
+@@ -376,7 +398,7 @@ fn executeEditFile(raw: *anyopaque, call: *const protocol.ToolCall, allocator: s
+ 
+ fn executeGrepFiles(raw: *anyopaque, call: *const protocol.ToolCall, allocator: std.mem.Allocator) !agent_loop.ToolOutput {
+     const runtime: *Runtime = @ptrCast(@alignCast(raw));
+-    var parsed = try std.json.parseFromValue(SearchArgs, allocator, call.arguments, .{});
++    var parsed = try std.json.parseFromValue(SearchArgs, allocator, call.arguments, .{ .ignore_unknown_fields = true });
+     defer parsed.deinit();
+     if (parsed.value.pattern.len == 0) return error.EmptyPattern;
+     const limit = boundedResultLimit(parsed.value.max_results);
+@@ -395,7 +417,7 @@ fn executeFindFiles(raw: *anyopaque, call: *const protocol.ToolCall, allocator:
+ 
+ fn executeGlob(raw: *anyopaque, call: *const protocol.ToolCall, allocator: std.mem.Allocator) !agent_loop.ToolOutput {
+     const runtime: *Runtime = @ptrCast(@alignCast(raw));
+-    var parsed = try std.json.parseFromValue(GlobArgs, allocator, call.arguments, .{});
++    var parsed = try std.json.parseFromValue(GlobArgs, allocator, call.arguments, .{ .ignore_unknown_fields = true });
+     defer parsed.deinit();
+     if (parsed.value.pattern.len == 0) return error.EmptyPattern;
+     const output = try globFiles(runtime, allocator, parsed.value.path, parsed.value.pattern, boundedResultLimit(parsed.value.max_results));
+@@ -405,7 +427,7 @@ fn executeGlob(raw: *anyopaque, call: *const protocol.ToolCall, allocator: std.m
+ 
+ fn executeListFiles(raw: *anyopaque, call: *const protocol.ToolCall, allocator: std.mem.Allocator) !agent_loop.ToolOutput {
+     const runtime: *Runtime = @ptrCast(@alignCast(raw));
+-    var parsed = try std.json.parseFromValue(ListArgs, allocator, call.arguments, .{});
++    var parsed = try std.json.parseFromValue(ListArgs, allocator, call.arguments, .{ .ignore_unknown_fields = true });
+     defer parsed.deinit();
+     const output = try listFiles(runtime, allocator, parsed.value.path, boundedResultLimit(parsed.value.max_results));
+     defer allocator.free(output);
+@@ -414,7 +436,7 @@ fn executeListFiles(raw: *anyopaque, call: *const protocol.ToolCall, allocator:
+ 
+ fn executeShell(raw: *anyopaque, call: *const protocol.ToolCall, allocator: std.mem.Allocator) !agent_loop.ToolOutput {
+     const runtime: *Runtime = @ptrCast(@alignCast(raw));
+-    var parsed = try std.json.parseFromValue(ShellArgs, allocator, call.arguments, .{});
++    var parsed = try std.json.parseFromValue(ShellArgs, allocator, call.arguments, .{ .ignore_unknown_fields = true });
+     defer parsed.deinit();
+     const args = parsed.value;
+     if (args.command.len == 0) return error.EmptyCommand;
+@@ -863,3 +885,19 @@ test "workspace traversal rejects parent components and symlinks" {
+         return error.TestUnexpectedResult;
+     } else |_| {}
+ }
++
++test "absolute paths inside the workspace resolve to workspace-relative paths" {
++    var tmp = std.testing.tmpDir(.{});
++    defer tmp.cleanup();
++    var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
++    const root = buffer[0..try tmp.dir.realPath(std.testing.io, &buffer)];
++    var runtime = try Runtime.init(std.testing.allocator, std.testing.io, root);
++    defer runtime.deinit();
++    const inside = try std.fs.path.join(std.testing.allocator, &.{ root, "src/main.zig" });
++    defer std.testing.allocator.free(inside);
++    try std.testing.expectEqualStrings("src/main.zig", runtime.workspacePath(inside));
++    try std.testing.expectEqualStrings(".", runtime.workspacePath(root));
++    try std.testing.expectEqualStrings("a.txt", runtime.workspacePath("/workspace/a.txt"));
++    try std.testing.expectEqualStrings("/workspacex/a.txt", runtime.workspacePath("/workspacex/a.txt"));
++    try std.testing.expectEqualStrings("/etc/passwd", runtime.workspacePath("/etc/passwd"));
++}
+diff --git a/src/openai_compatible.zig b/src/openai_compatible.zig
+index 0ee9fbd..79336d8 100644
+--- a/src/openai_compatible.zig
++++ b/src/openai_compatible.zig
+@@ -11,6 +11,8 @@ pub const max_error_body_bytes = 64 * 1024;
+ pub const max_sse_line_bytes = 64 * 1024;
+ pub const max_sse_event_bytes = 256 * 1024;
+ pub const max_tool_calls = 16;
++/// Tools advertised per request; separate from the calls one response may make.
++pub const max_tools = 128;
+ pub const max_tool_arguments_bytes = 128 * 1024;
+ pub const max_rendered_request_bytes = 8 * 1024 * 1024;
+ pub const max_request_messages = 4096;
+@@ -1110,11 +1112,12 @@ const StreamDecoder = struct {
+             if (!tool.started) continue;
+             const id = tool.id orelse return self.fail(.malformed_response, "provider tool call id was missing");
+             const name = tool.name orelse return self.fail(.malformed_response, "provider tool call name was missing");
+-            if (tool.arguments.items.len == 0) return self.fail(.malformed_response, "provider tool arguments were missing");
+             for (self.tools.items[0..tool_index]) |previous| if (previous.started) if (previous.id) |previous_id| {
+                 if (std.mem.eql(u8, previous_id, id)) return self.fail(.malformed_response, "provider tool call id was duplicated");
+             };
+-            const arguments = std.json.parseFromSliceLeaky(std.json.Value, arguments_arena.allocator(), tool.arguments.items, .{}) catch |err| switch (err) {
++            // Several providers stream no argument text for a call without parameters.
++            const argument_text = if (std.mem.trim(u8, tool.arguments.items, " \t\r\n").len == 0) "{}" else tool.arguments.items;
++            const arguments = std.json.parseFromSliceLeaky(std.json.Value, arguments_arena.allocator(), argument_text, .{}) catch |err| switch (err) {
+                 error.OutOfMemory => return err,
+                 else => return self.fail(.malformed_response, "provider tool arguments were invalid"),
+             };
+@@ -1123,7 +1126,8 @@ const StreamDecoder = struct {
+             active_tools += 1;
+         }
+         const finish_reason = self.finish_reason.?;
+-        if (active_tools != 0 and finish_reason != .tool_use) return self.fail(.malformed_response, "provider finish reason did not match tool calls");
++        // Gemini-, Qwen-, and Kimi-backed routes report "stop" for completed tool calls. A call
++        // cut off by the output limit still fails above when its arguments do not parse.
+         if (active_tools == 0 and finish_reason == .tool_use) return self.fail(.malformed_response, "provider finish reason required missing tool calls");
+         for (self.tools.items) |tool| if (tool.started) {
+             const call = switch (content[tool.content_index]) {
+@@ -1544,7 +1548,7 @@ fn validateRenderBounds(context: *const protocol.Context, model: *const protocol
+         try validateWireText(lane);
+         if (!addEstimate(&estimate, lane.len *| 6) or !addEstimate(&estimate, 64)) return error.RequestTooLarge;
+     }
+-    if (context.tools.len > max_tool_calls) return error.RequestTooLarge;
++    if (context.tools.len > max_tools) return error.RequestTooLarge;
+     for (context.messages) |message| {
+         switch (message) {
+             .user => |user| {
+@@ -3582,3 +3586,36 @@ test "usage totals and later usage reports follow the provider instead of failin
+         try std.testing.expectError(error.InvalidUsage, parseUsage(.openrouter_chat, value.object));
+     }
+ }
++
++test "tool calls with empty arguments or a stop finish reason still settle as tool use" {
++    const Capture = struct {
++        stop: ?protocol.StopReason = null,
++        arguments_are_object: bool = false,
++        failed: usize = 0,
++        fn receive(raw: *anyopaque, event: protocol.StreamEvent) !void {
++            const capture: *@This() = @ptrCast(@alignCast(raw));
++            switch (event) {
++                .done => |message| {
++                    capture.stop = message.stop_reason;
++                    for (message.content) |part| switch (part) {
++                        .tool_call => |call| capture.arguments_are_object = call.arguments == .object,
++                        else => {},
++                    };
++                },
++                .failed => capture.failed += 1,
++                else => {},
++            }
++        }
++    };
++    const model = protocol.Model{ .id = "m", .api = "openai-chat", .provider = "p", .context_window = 4096, .max_tokens = 256 };
++    var capture = Capture{};
++    var callback_attempted = false;
++    var decoder = StreamDecoder.init(std.testing.allocator, &model, "openai-chat", .openai_chat, 4096, 64 * 1024, 200, null, "secret", &.{}, &capture, Capture.receive, &callback_attempted);
++    defer decoder.deinit();
++    try decoderEvent(&decoder, .{ .event = "message", .data = "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"list_files\",\"arguments\":\"\"}}]},\"finish_reason\":\"stop\"}]}" });
++    try decoderEvent(&decoder, .{ .event = "message", .data = "[DONE]" });
++    try decoder.finish();
++    try std.testing.expectEqual(@as(usize, 0), capture.failed);
++    try std.testing.expectEqual(protocol.StopReason.tool_use, capture.stop.?);
++    try std.testing.expect(capture.arguments_are_object);
++}
+diff --git a/src/runtime.zig b/src/runtime.zig
+index 43942ae..4a6895c 100644
+--- a/src/runtime.zig
++++ b/src/runtime.zig
+@@ -386,6 +386,17 @@ pub const Options = struct {
+     allow_mutating_tools: bool = true,
+     approval_context: ?*anyopaque = null,
+     approve_tool: ?ToolApprovalFn = null,
++    /// Host-provided tools, added after the built-ins and replacing any with the same name. The
++    /// caller keeps these and the name lists below alive for the runtime's lifetime.
++    host_tools: []const harness_module.Tool = &.{},
++    /// Host tools that mutate state and pass through the same approval as built-in mutations.
++    mutating_tools: []const []const u8 = &.{},
++    /// Host tools that must not overlap other calls. Mutating tools never overlap.
++    serial_tools: []const []const u8 = &.{},
++    /// Tools left out of every request.
++    disabled_tools: []const []const u8 = &.{},
++    /// Tools that always need approval, even when mutating tools are allowed.
++    approval_tools: []const []const u8 = &.{},
+     publication_capacity: usize = default_publication_capacity,
+     subscription_capacity: usize = default_subscription_capacity,
+     telemetry_context: ?*anyopaque = null,
+@@ -596,6 +607,9 @@ pub const Runtime = struct {
+     allow_mutating_tools: bool,
+     approval_context: ?*anyopaque,
+     approve_tool: ?ToolApprovalFn,
++    mutating_tools: []const []const u8,
++    serial_tools: []const []const u8,
++    approval_tools: []const []const u8,
+     telemetry_context: ?*anyopaque,
+     telemetry: ?agent_loop.TelemetrySink,
+     telemetry_mutex: std.Io.Mutex = std.Io.Mutex.init,
+@@ -731,6 +745,9 @@ pub const Runtime = struct {
+             .allow_mutating_tools = options.allow_mutating_tools,
+             .approval_context = options.approval_context,
+             .approve_tool = options.approve_tool,
++            .mutating_tools = options.mutating_tools,
++            .serial_tools = options.serial_tools,
++            .approval_tools = options.approval_tools,
+             .telemetry_context = options.telemetry_context,
+             .telemetry = options.telemetry,
+             .telemetry_epoch = options.telemetry_epoch,
+@@ -803,9 +820,15 @@ pub const Runtime = struct {
+         for (self.builtin_registry.tools()) |tool| {
+             if (!options.allow_mutating_tools and options.approve_tool == null and builtin_tools.isMutatingTool(tool.name)) continue;
+             if (builtin.abi.isAndroid() and !builtin_tools.isSupportedOnAndroid(tool.name)) continue;
++            if (containsName(options.disabled_tools, tool.name)) continue;
++            try base_tools.append(allocator, tool);
++        }
++        if (!containsName(options.disabled_tools, "skill")) try base_tools.append(allocator, self.skill_runtime.tool());
++        for (options.host_tools) |tool| {
++            if (containsName(options.disabled_tools, tool.name)) continue;
++            if (!options.allow_mutating_tools and options.approve_tool == null and containsName(options.mutating_tools, tool.name)) continue;
+             try base_tools.append(allocator, tool);
+         }
+-        try base_tools.append(allocator, self.skill_runtime.tool());
+         try self.tool_stack.setBase(base_tools.items);
+         self.services = .{ .prompts = &self.prompt_stack, .tools = &self.tool_stack };
+         _ = try self.context.mount(NativeHarness.plugin("native-harness", 1, &self.services));
+@@ -2769,6 +2792,8 @@ pub const Runtime = struct {
+             .emit = runEvent,
+             .hook_context = run,
+             .before_tool = if (self.approve_tool != null) approveRuntimeTool else null,
++            .parallel_context = self,
++            .parallel_tool = isParallelRuntimeTool,
+             .cancel_context = run,
+             .is_cancelled = isRunCancelled,
+             .max_steps = self.max_steps,
+@@ -3249,10 +3274,24 @@ fn viewRecord(record: *const event_store.RecordRef) event_store.RecordView {
+     };
+ }
+ 
++fn containsName(names: []const []const u8, name: []const u8) bool {
++    for (names) |candidate| if (std.mem.eql(u8, candidate, name)) return true;
++    return false;
++}
++
++fn isParallelRuntimeTool(raw: *anyopaque, name: []const u8) bool {
++    const runtime: *Runtime = @ptrCast(@alignCast(raw));
++    return !builtin_tools.isMutatingTool(name) and
++        !containsName(runtime.mutating_tools, name) and
++        !containsName(runtime.serial_tools, name);
++}
++
+ fn approveRuntimeTool(raw: *anyopaque, call: *const protocol.ToolCall) !void {
+     const run: *Run = @ptrCast(@alignCast(raw));
+     const runtime = run.runtime;
+-    if (!builtin_tools.isMutatingTool(call.name) or runtime.allow_mutating_tools) return;
++    const mutating = builtin_tools.isMutatingTool(call.name) or containsName(runtime.mutating_tools, call.name);
++    const always = containsName(runtime.approval_tools, call.name);
++    if (!always and (!mutating or runtime.allow_mutating_tools)) return;
+     const approve = runtime.approve_tool orelse return error.ToolApprovalUnavailable;
+     if (!try approve(runtime.approval_context orelse raw, call, &run.cancel_requested)) {
+         return error.ToolApprovalDenied;

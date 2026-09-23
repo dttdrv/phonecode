@@ -162,6 +162,32 @@ class ExtensionConfigToolsTest {
         assertTrue(repository.loadMcpConfig().mcp.isEmpty())
     }
 
+    @Test fun setToolOnlyRestrictsAndKeepsConfigurationToolsEnabled() = withTools { repository, project ->
+        val settings = dev.phonecode.app.data.AppSettingsStore(project.resolve("../settings.json"))
+        val tool = ExtensionConfigWriteTool(repository, settings) { project }
+        fun set(vararg pairs: Pair<String, Any>) = runBlocking {
+            tool.execute(buildJsonObject {
+                put("action", "set_tool")
+                pairs.forEach { (key, value) -> if (value is Boolean) put(key, value) else put(key, value.toString()) }
+            }, Context)
+        }
+
+        assertFalse(set("name" to "webfetch", "enabled" to false).isError)
+        assertFalse(set("name" to "read_file", "approval" to "always").isError)
+        assertTrue(set("name" to "extension_write", "enabled" to false).isError)
+        assertTrue(set("name" to "bash", "approval" to "never").isError)
+        assertTrue(set("name" to "bash").isError)
+        assertTrue(runBlocking {
+            tool.execute(buildJsonObject { put("action", "remove_tool"); put("name", "read_file") }, Context)
+        }.output.contains("cannot be removed"))
+        assertTrue(settings.load().disabledTools == setOf("webfetch"))
+        assertTrue(settings.load().approvalTools == setOf("read_file"))
+
+        assertFalse(set("name" to "webfetch", "enabled" to true).isError)
+        assertFalse(set("name" to "read_file", "approval" to "default").isError)
+        assertTrue(settings.load().disabledTools.isEmpty() && settings.load().approvalTools.isEmpty())
+    }
+
     private fun withTools(block: (McpSkillRepository, java.io.File) -> Unit) {
         val root = Files.createTempDirectory("phonecode-extension-tools").toFile()
         try {

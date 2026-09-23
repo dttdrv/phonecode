@@ -1,5 +1,6 @@
 package dev.phonecode.app.agent
 
+import dev.phonecode.app.data.AppSettingsStore
 import dev.phonecode.app.data.McpConfigLoad
 import dev.phonecode.app.data.McpSkillRepository
 import dev.phonecode.app.data.SkillScope
@@ -19,12 +20,16 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import java.io.File
 
+/** The configuration tools stay enabled so the agent can always repair its own configuration. */
+internal val PROTECTED_TOOLS = setOf("extension_read", "extension_write")
+
 internal class ExtensionConfigReadTool(
     private val repository: McpSkillRepository,
+    private val toolSettings: AppSettingsStore? = null,
     private val projectDirectory: () -> File,
 ) : Tool {
     override val name = "extension_read"
-    override val description = "Inspect PhoneCode MCP servers and global or project skills without exposing saved header values."
+    override val description = "Inspect PhoneCode MCP servers, global or project skills, and tool settings without exposing saved header values."
     override val promptSnippet = "inspect configured MCP servers and skill files"
     override val parameters = buildJsonObject {
         put("type", "object")
@@ -71,22 +76,29 @@ internal class ExtensionConfigReadTool(
                 "- ${skill.scope.name.lowercase()}/${skill.name}: ${skill.status.name.lowercase()}$issue"
             }
         }
-        return ToolResult("$mcp\n$skills")
+        val tools = toolSettings?.load()?.let { settings ->
+            "\nTool settings: disabled: ${settings.disabledTools.sorted().joinToString().ifBlank { "none" }}; " +
+                "always ask: ${settings.approvalTools.sorted().joinToString().ifBlank { "none" }}"
+        }.orEmpty()
+        return ToolResult("$mcp\n$skills$tools")
     }
 }
 
 internal class ExtensionConfigWriteTool(
     private val repository: McpSkillRepository,
+    private val toolSettings: AppSettingsStore? = null,
     private val projectDirectory: () -> File,
 ) : Tool {
     override val name = "extension_write"
-    override val description = "Add, update, disable, or remove an MCP server, or write and remove bounded global or project skill files. MCP servers must be tested and enabled in Settings."
+    override val description = "Add, update, disable, or remove an MCP server; write and remove bounded global or project skill files; " +
+        "or change a tool's settings with set_tool (enabled, approval \"always\" or \"default\"). MCP servers must be tested and " +
+        "enabled in Settings. Built-in tools can be disabled but never removed. Tool changes apply from the next message."
     override val promptSnippet = "manage MCP servers and global or project skill files"
     override val mutating = true
     override val parameters = buildJsonObject {
         put("type", "object")
         putJsonObject("properties") {
-            enumProperty("action", "upsert_mcp", "remove_mcp", "set_mcp_enabled", "reset_mcp_config", "write_skill", "delete_skill")
+            enumProperty("action", "upsert_mcp", "remove_mcp", "set_mcp_enabled", "reset_mcp_config", "write_skill", "delete_skill", "set_tool")
             enumProperty("scope", "global", "project")
             stringProperty("name")
             stringProperty("original_name")
@@ -95,6 +107,7 @@ internal class ExtensionConfigWriteTool(
             stringProperty("content")
             putJsonObject("enabled") { put("type", "boolean") }
             putJsonObject("timeout") { put("type", "integer"); put("minimum", 1000); put("maximum", 60000) }
+            enumProperty("approval", "default", "always")
         }
         put("required", buildJsonArray { add(JsonPrimitive("action")) })
         put("additionalProperties", false)
@@ -131,7 +144,41 @@ internal class ExtensionConfigWriteTool(
             repository.deleteEditableSkill(scope, name, projectDirectory())
                 .fold({ ToolResult("Skill deleted") }, { ToolResult("extension_write: ${it.message}", true) })
         }
-        else -> ToolResult("extension_write: unsupported action", true)
+        "set_tool" -> setTool(args)
+        else -> ToolResult("extension_write: unsupported action. Built-in tools cannot be removed; disable them with set_tool.", true)
+    }
+
+    private fun setTool(args: JsonObject): ToolResult {
+        val store = toolSettings ?: return ToolResult("extension_write: tool settings are unavailable", true)
+        val name = args.requiredName() ?: return ToolResult("extension_write: name is required", true)
+        val enabled = args.boolean("enabled")
+        val approval = args.string("approval").ifBlank { null }
+        if (enabled == null && approval == null) return ToolResult("extension_write: set enabled or approval", true)
+        if (approval != null && approval !in setOf("default", "always")) {
+            return ToolResult("extension_write: approval must be default or always", true)
+        }
+        if (enabled == false && name in PROTECTED_TOOLS) {
+            return ToolResult("extension_write: $name stays enabled so configuration can be repaired", true)
+        }
+        // The agent can only add restrictions: "default" restores the built-in approval rule, and
+        // nothing here can let a mutating tool skip approval.
+        val saved = store.update { settings ->
+            settings.copy(
+                disabledTools = when (enabled) {
+                    true -> settings.disabledTools - name
+                    false -> settings.disabledTools + name
+                    null -> settings.disabledTools
+                },
+                approvalTools = when (approval) {
+                    "always" -> settings.approvalTools + name
+                    "default" -> settings.approvalTools - name
+                    else -> settings.approvalTools
+                },
+            )
+        }
+        val state = if (name in saved.disabledTools) "disabled" else "enabled"
+        val ask = if (name in saved.approvalTools) "always asks for approval" else "uses default approval"
+        return ToolResult("Tool $name is $state and $ask, starting with the next message")
     }
 
     private fun upsertMcp(args: JsonObject): ToolResult {

@@ -4,12 +4,17 @@ import android.app.Application
 import android.os.Process
 import dev.phonecode.app.agent.ChatViewModel
 import dev.phonecode.app.agent.TurnService
+import dev.phonecode.app.agent.turnStatusOf
 import dev.phonecode.app.data.TransferBundle
 import dev.phonecode.app.runtime.MisulRuntimeController
 import dev.phonecode.app.runtime.ShellBackendFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 class PhoneCodeApplication : Application() {
     override fun onCreate() {
@@ -27,7 +32,17 @@ class PhoneCodeApplication : Application() {
     }
     val chatViewModel by lazy {
         requireMainUid()
-        ChatViewModel(this)
+        ChatViewModel(this).also { vm ->
+            // Mirror the turn into the foreground/Live Update notification. Main thread keeps it
+            // ordered with TurnService's own stop handling.
+            MainScope().launch {
+                var reported = false
+                vm.state.map(::turnStatusOf).distinctUntilChanged().collect { status ->
+                    if (status?.ongoing == true || reported) TurnService.showTurnStatus(this@PhoneCodeApplication, status)
+                    reported = status?.ongoing == true
+                }
+            }
+        }
     }
     internal val shellBackend by lazy {
         requireMainUid()

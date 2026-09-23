@@ -1,22 +1,22 @@
 package dev.phonecode.app.agent
 
 import android.annotation.SuppressLint
-import android.app.Notification
+import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
-import dev.phonecode.app.MainActivity
+import androidx.core.content.ContextCompat
 import dev.phonecode.app.PhoneCodeApplication
-import dev.phonecode.app.R
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.launch
 
@@ -24,19 +24,25 @@ class TurnService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private val stopping = AtomicBoolean()
 
+    // Runs on the main thread, like showTurnStatus. A dismissed Live Update stays gone until the next turn.
+    private val dismissReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            liveDismissed = true
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         register(this)
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Agent activity",
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = "Shown while PhoneCode is working in the background."
-        }
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        ensureChannel(this)
+        ContextCompat.registerReceiver(
+            this,
+            dismissReceiver,
+            IntentFilter(ACTION_DISMISSED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     @SuppressLint("WakelockTimeout")
@@ -62,27 +68,7 @@ class TurnService : Service() {
     }
 
     private fun promoteToForeground() {
-        val open = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val stop = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, TurnService::class.java).setAction(ACTION_STOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val notification = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("PhoneCode is working")
-            .setContentText("Agent work and local processes remain active.")
-            .setContentIntent(open)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .setOngoing(true)
-            .addAction(Notification.Action.Builder(null, "Stop", stop).build())
-            .build()
+        val notification = buildTurnNotification(this, liveStatus, turnStartedAt)
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
@@ -91,6 +77,7 @@ class TurnService : Service() {
     }
 
     override fun onDestroy() {
+        unregisterReceiver(dismissReceiver)
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         unregister(this)
@@ -136,14 +123,57 @@ class TurnService : Service() {
     }
 
     companion object {
-        private const val ACTION_STOP = "dev.phonecode.app.action.STOP_WORK"
-        private const val CHANNEL_ID = "turn"
+        internal const val ACTION_STOP = "dev.phonecode.app.action.STOP_WORK"
+        internal const val ACTION_DISMISSED = "dev.phonecode.app.action.TURN_NOTIFICATION_DISMISSED"
         private const val NOTIFICATION_ID = 1
+        private const val RESULT_NOTIFICATION_ID = 2
+        private var liveStatus: TurnStatus? = null
+        private var turnStartedAt = 0L
+        private var liveDismissed = false
         private val lifecycleLock = Any()
         private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
         private var desiredRunning = false
         private var startPending = false
         private var activeService: TurnService? = null
+
+        /**
+         * Main thread only (same thread as [stopForNoOwners]), so the foreground notification is
+         * never re-posted after the service removed it, nor after the user dismissed it this turn. Ongoing states update the foreground
+         * notification in place; a finished/failed turn posts one dismissible result, only when
+         * PhoneCode is not on screen.
+         */
+        internal fun showTurnStatus(context: Context, status: TurnStatus?) {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            val ongoing = status?.takeIf { it.ongoing }
+            if (ongoing != null && liveStatus == null) {
+                turnStartedAt = System.currentTimeMillis()
+                liveDismissed = false
+                manager.cancel(RESULT_NOTIFICATION_ID)
+            }
+            liveStatus = ongoing
+            if (!liveDismissed && synchronized(lifecycleLock) { activeService } != null) {
+                manager.notify(NOTIFICATION_ID, buildTurnNotification(context, ongoing, turnStartedAt))
+            }
+            if (status != null && !status.ongoing && !appVisible()) {
+                ensureChannel(context)
+                manager.notify(RESULT_NOTIFICATION_ID, buildTurnNotification(context, status, turnStartedAt))
+            }
+        }
+
+        private fun appVisible(): Boolean = ActivityManager.RunningAppProcessInfo()
+            .also(ActivityManager::getMyMemoryState)
+            .importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+
+        private fun ensureChannel(context: Context) {
+            val channel = NotificationChannel(
+                TURN_CHANNEL_ID,
+                "Agent activity",
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = "Shown while PhoneCode is working in the background."
+            }
+            context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
 
         fun start(context: Context) {
             val shouldStart = synchronized(lifecycleLock) {

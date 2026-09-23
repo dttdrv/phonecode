@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -42,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.material3.ColorScheme
 import dev.phonecode.app.ui.theme.LocalMisulAccent
+import dev.phonecode.app.ui.theme.LocalGlassHaze
+import dev.phonecode.app.ui.theme.liquidGlass
 import dev.phonecode.app.ui.theme.PhoneDurations
 import dev.phonecode.app.ui.theme.PhoneEasings
 
@@ -235,19 +238,25 @@ fun MisulIconButton(
 }
 
 /**
- * Floating chrome surface: a raised white capsule with a soft ambient shadow in light mode, one
- * tonal step above the canvas in dark mode (where shadows do not read). Used for controls that
- * float over the transcript - header buttons and the composer.
+ * Floating chrome surface for controls that hover over content (header buttons, composer, status
+ * cards). Over a blur source it is liquid glass; elsewhere a raised capsule - white with a soft
+ * shadow in light mode, one tonal step up in dark mode.
  */
 @Composable
-fun Modifier.floatingChrome(shape: Shape = CircleShape): Modifier {
+fun Modifier.floatingChrome(shape: Shape = CircleShape, glass: Boolean = true): Modifier {
     val colors = MaterialTheme.colorScheme
     val dark = colors.background.luminance() < 0.5f
-    val shadowColor = Color.Black.copy(alpha = 0.14f)
-    return this
-        .shadow(if (dark) 0.dp else 14.dp, shape, clip = false, ambientColor = shadowColor, spotColor = shadowColor)
+    val surface = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest
+    val shadowColor = Color.Black.copy(alpha = if (dark) 0.3f else 0.18f)
+    val haze = LocalGlassHaze.current.takeIf { glass }
+    val raised = this
+        .shadow(if (dark) 0.dp else 16.dp, shape, clip = false, ambientColor = shadowColor, spotColor = shadowColor)
         .clip(shape)
-        .background(if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest)
+    return when {
+        haze != null -> raised.liquidGlass(haze, shape, dark, surface)
+        dark -> raised.background(surface)
+        else -> raised.background(surface).border(1.dp, Color.Black.copy(alpha = 0.08f), shape)
+    }
 }
 
 /** A 44dp floating circular control inside a 48dp target. */

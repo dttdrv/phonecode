@@ -1,9 +1,9 @@
 package dev.phonecode.app.ui.onboarding
 
+import dev.phonecode.app.ui.components.AppIcon
 import androidx.compose.ui.semantics.selected
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.ui.graphics.Color
-import dev.phonecode.app.ui.settings.PluginTile
 import dev.phonecode.app.ui.components.PhoneIcons
 import dev.phonecode.app.ui.components.FloatingIconButton
 import android.content.Intent
@@ -244,7 +244,7 @@ private fun ProviderChoice(
             } else {
                 MisulGroup {
                     MisulContentRow(showDivider = false) {
-                        PluginTile("ChatGPT", Color(0xFF10A37F), 36.dp)
+                        AppIcon("codex", 36.dp)
                         Column(Modifier.weight(1f)) {
                             Text("ChatGPT", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
                             Text("Use the models in your ChatGPT plan", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
@@ -309,7 +309,7 @@ private fun ProviderGroup(
                 showDivider = index != providers.lastIndex,
                 modifier = Modifier.semantics { if (configured) selected = true },
             ) {
-                PluginTile(provider.displayName, null, 36.dp)
+                AppIcon(provider.id, 36.dp, fallback = Icons.Outlined.Cloud)
                 Column(Modifier.weight(1f)) {
                     Text(provider.displayName, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
                     Text(

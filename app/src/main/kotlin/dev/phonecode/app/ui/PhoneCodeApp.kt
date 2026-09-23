@@ -411,6 +411,7 @@ fun PhoneCodeApp() {
                                     navController.navigate("settings") { launchSingleTop = true }
                                 },
                                 sendOnEnter = settings.sendOnEnter,
+                                onLinkFolder = { projectPicker.launch(null) },
                             )
                         }
                         composable("settings") {
@@ -494,6 +495,7 @@ fun PhoneCodeApp() {
                             onOpenSession = { id -> vm.switchSession(id); closeDrawer() },
                             onNewChat = { projectId -> vm.newChat(projectId); closeDrawer() },
                             onCreateProject = openProjectPickerFromDrawer,
+                            onCreateNamedProject = { name -> closeDrawer(); vm.createProject(name) },
                             onOpenSettings = { settingsInitial = "home"; navigateFromDrawer("settings") },
                             onOpenSkills = { navigateFromDrawer("skills") },
                             onOpenMcp = { navigateFromDrawer("mcp") },

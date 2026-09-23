@@ -1,5 +1,9 @@
 package dev.phonecode.app.ui.settings
 
+import dev.phonecode.app.ui.theme.ShapePill
+import androidx.compose.ui.semantics.selected
+import androidx.compose.material.icons.outlined.Dns
+import dev.phonecode.app.ui.components.AppIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -16,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,11 +38,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import dev.phonecode.app.agent.ChatViewModel
-import dev.phonecode.app.ui.components.MisulFilter
 import dev.phonecode.app.ui.components.MisulGroup
 import dev.phonecode.app.ui.components.MisulSearchField
 import dev.phonecode.app.ui.components.MisulSectionLabel
@@ -72,8 +72,6 @@ internal data class PluginCatalogEntry(
     val publisher: String,
     val category: PluginCategory,
     val auth: PluginAuth = PluginAuth.None,
-    /** Tile tint; a neutral monogram stands in for third-party logos. */
-    val tint: Color,
 )
 
 internal val availablePlugins = listOf(
@@ -88,7 +86,6 @@ internal val availablePlugins = listOf(
             label = "Personal access token",
             help = "Create a fine-grained token at github.com/settings/tokens with only the repositories and permissions the agent needs.",
         ),
-        tint = Color(0xFF24292F),
     ),
     PluginCatalogEntry(
         id = "deepwiki",
@@ -97,7 +94,6 @@ internal val availablePlugins = listOf(
         url = "https://mcp.deepwiki.com/mcp",
         publisher = "deepwiki.com",
         category = PluginCategory.DOCS,
-        tint = Color(0xFF3B6FD8),
     ),
     PluginCatalogEntry(
         id = "microsoft-learn",
@@ -106,7 +102,6 @@ internal val availablePlugins = listOf(
         url = "https://learn.microsoft.com/api/mcp",
         publisher = "learn.microsoft.com",
         category = PluginCategory.DOCS,
-        tint = Color(0xFF0F6CBD),
     ),
     PluginCatalogEntry(
         id = "aws-knowledge",
@@ -115,7 +110,6 @@ internal val availablePlugins = listOf(
         url = "https://knowledge-mcp.global.api.aws",
         publisher = "aws.amazon.com",
         category = PluginCategory.DOCS,
-        tint = Color(0xFFD9822B),
     ),
     PluginCatalogEntry(
         id = "cloudflare-docs",
@@ -124,7 +118,6 @@ internal val availablePlugins = listOf(
         url = "https://docs.mcp.cloudflare.com/mcp",
         publisher = "developers.cloudflare.com",
         category = PluginCategory.DOCS,
-        tint = Color(0xFFE8731C),
     ),
     PluginCatalogEntry(
         id = "cloudflare-agents-docs",
@@ -133,7 +126,6 @@ internal val availablePlugins = listOf(
         url = "https://agents.cloudflare.com/mcp",
         publisher = "agents.cloudflare.com",
         category = PluginCategory.DOCS,
-        tint = Color(0xFFC9611A),
     ),
     PluginCatalogEntry(
         id = "stripe",
@@ -146,7 +138,6 @@ internal val availablePlugins = listOf(
             label = "Restricted API key",
             help = "Create a restricted key in the Stripe Dashboard under Developers › API keys. Use test mode while trying it out.",
         ),
-        tint = Color(0xFF635BFF),
     ),
 )
 
@@ -169,8 +160,6 @@ internal fun PluginsPage(
                 plugin.description.contains(query, ignoreCase = true))
     }
     SettingsPageShell("Plugins", onBack) {
-        SettingsNote("Plugins give the agent tools from other services. You review each plugin's tools before adding it.")
-        Spacer(Modifier.height(Spacing.xs))
         MisulSearchField(query, { query = it }, "Search plugins")
 
         if (state.mcpServers.isNotEmpty() && query.isBlank()) {
@@ -179,19 +168,21 @@ internal fun PluginsPage(
                 state.mcpServers.entries.toList().forEachIndexed { index, (name, server) ->
                     val snapshot = state.mcpSnapshots[name]
                     val catalog = availablePlugins.firstOrNull { it.url.trimEnd('/') == server.url.trimEnd('/') }
-                    val status = when {
-                        !server.enabled -> "Off"
-                        name in state.mcpConnecting -> "Connecting…"
-                        snapshot?.connected == true -> "${snapshot.tools.size} ${if (snapshot.tools.size == 1) "tool" else "tools"}"
-                        snapshot?.error?.isNotBlank() == true -> "Needs attention"
-                        else -> "Not connected"
+                    val (status, healthy) = when {
+                        !server.enabled -> "Off" to null
+                        name in state.mcpConnecting -> "Connecting…" to null
+                        snapshot?.connected == true ->
+                            "${snapshot.tools.size} ${if (snapshot.tools.size == 1) "tool" else "tools"}" to true
+                        snapshot?.error?.isNotBlank() == true -> "Needs attention" to false
+                        else -> "Not connected" to null
                     }
                     PluginRow(
                         name = name,
                         supporting = status,
-                        tint = catalog?.tint,
+                        iconKey = catalog?.id.orEmpty(),
                         showDivider = index != state.mcpServers.size - 1,
                         onClick = { onOpenServer(name) },
+                        trailing = { StatusDot(healthy) },
                     )
                 }
             }
@@ -199,12 +190,12 @@ internal fun PluginsPage(
 
         MisulSectionLabel(if (query.isBlank()) "Discover" else "Results")
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = Spacing.xs),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = Spacing.s),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            MisulFilter("All", selected = category == null, onClick = { category = null })
+            CategoryChip("All", category == null) { category = null }
             PluginCategory.entries.forEach { entry ->
-                MisulFilter(entry.label, selected = category == entry.name, onClick = { category = entry.name })
+                CategoryChip(entry.label, category == entry.name) { category = entry.name }
             }
         }
         if (directory.isEmpty()) {
@@ -218,97 +209,104 @@ internal fun PluginsPage(
                     PluginRow(
                         name = plugin.name,
                         supporting = plugin.description,
-                        tint = plugin.tint,
+                        iconKey = plugin.id,
                         showDivider = index != directory.lastIndex,
                         onClick = { onOpenPlugin(plugin.id) },
+                        trailing = { AddPill() },
                     )
                 }
             }
         }
 
-        MisulSectionLabel("Custom")
+        Spacer(Modifier.height(Spacing.l))
         MisulGroup {
             SettingsNavigationRow(
                 label = "MCP servers",
-                supportingText = "Add any remote MCP server or manage connection details",
+                supportingText = "Add a custom server or manage connections",
+                icon = Icons.Outlined.Dns,
                 showDivider = false,
                 onClick = onOpenAdvanced,
             )
         }
+        SettingsNote("Every plugin runs a live connection check and shows its tools before it's added.")
     }
 }
 
-/** Rounded monogram tile standing in for a service logo. */
 @Composable
-internal fun PluginTile(name: String, tint: Color?, size: Dp, modifier: Modifier = Modifier) {
+private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
-        // Decorative: the service name is always written next to the tile.
-        modifier.size(size).clip(RoundedCornerShape(size * 0.28f))
-            .background(tint ?: colors.surfaceContainerHigh)
-            .clearAndSetSemantics {},
+        Modifier.heightIn(min = Spacing.touchTarget).clickable(role = Role.Tab, onClick = onClick)
+            .semantics { this.selected = selected },
         contentAlignment = Alignment.Center,
     ) {
-        val initials = monogram(name)
         Text(
-            initials,
-            color = if (tint == null) colors.onSurface else Color.White,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.SemiBold,
-                fontSize = (size.value * if (initials.length > 1) 0.34f else 0.42f).sp,
-                letterSpacing = 0.sp,
-            ),
+            label,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal),
+            color = if (selected) colors.background else colors.onSurface,
+            modifier = Modifier.clip(ShapePill)
+                .background(if (selected) colors.onBackground else colors.surfaceContainerLow)
+                .padding(horizontal = 14.dp, vertical = 8.dp),
         )
     }
 }
 
-/** First letters of the first and last word, or of a camel-cased single word (OpenRouter -> OR). */
-internal fun monogram(name: String): String {
-    val words = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-    if (words.isEmpty()) return "?"
-    if (words.size > 1) return "${words.first().first()}${words.last().first()}".uppercase()
-    val word = words.first()
-    val second = word.drop(1).firstOrNull { it.isUpperCase() }
-    return (word.first().toString() + (second?.toString() ?: "")).uppercase()
+@Composable
+private fun AddPill() {
+    val colors = MaterialTheme.colorScheme
+    Text(
+        "Add",
+        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+        color = colors.onSurface,
+        modifier = Modifier.clip(ShapePill).background(colors.surfaceContainerHigh)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+    )
+}
+
+/** Green when connected, red when it needs attention, hidden when off or pending. */
+@Composable
+private fun StatusDot(healthy: Boolean?) {
+    if (healthy == null) return
+    Box(
+        Modifier.size(8.dp).clip(ShapePill)
+            .background(if (healthy) Color(0xFF34C759) else MaterialTheme.colorScheme.error),
+    )
 }
 
 @Composable
 private fun PluginRow(
     name: String,
     supporting: String,
-    tint: Color?,
+    iconKey: String,
     showDivider: Boolean,
     onClick: () -> Unit,
+    trailing: @Composable () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick)
-                .heightIn(min = 68.dp).padding(horizontal = 16.dp, vertical = 10.dp),
+                .heightIn(min = 72.dp).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            PluginTile(name, tint, 40.dp)
+            AppIcon(iconKey, 44.dp)
             Column(Modifier.weight(1f)) {
-                Text(name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium), color = colors.onSurface)
+                Text(name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = colors.onSurface)
                 Text(
                     supporting,
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowForwardIos,
-                null,
-                tint = colors.tertiary.copy(alpha = 0.7f),
-                modifier = Modifier.size(14.dp),
-            )
+            trailing()
         }
         if (showDivider) {
             androidx.compose.material3.HorizontalDivider(
-                Modifier.padding(start = 70.dp),
+                Modifier.padding(start = 74.dp),
                 color = colors.outlineVariant.copy(alpha = 0.52f),
             )
         }
@@ -324,7 +322,7 @@ internal fun PluginHero(plugin: PluginCatalogEntry) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        PluginTile(plugin.name, plugin.tint, 64.dp)
+        AppIcon(plugin.id, 64.dp)
         Column(Modifier.weight(1f)) {
             Text(
                 plugin.name,

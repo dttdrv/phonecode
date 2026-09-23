@@ -201,6 +201,7 @@ Original instruction.
 
         // Model sheet opens from the composer's model pill (header is always visible; specific
         // model rows may sit below the sheet's scroll fold).
+        compose.onNodeWithContentDescription("Message").performClick()
         compose.onNodeWithContentDescription("Switch model").performClick()
         compose.onNodeWithText("Search models").assertIsDisplayed()
         compose.onNodeWithText("Reasoning").assertIsDisplayed()
@@ -218,6 +219,7 @@ Original instruction.
         // Context usage breakdown opens from the glanceable ring (moved out of the tools menu).
         // Done last: this sheet has no in-content dismiss row, so we leave it open - the test only
         // proves it composes without crashing.
+        compose.onNodeWithContentDescription("Message").performClick()
         compose.onNodeWithContentDescription("Context usage", substring = true).performClick()
         compose.onNodeWithText("Input").assertIsDisplayed()
     }
@@ -341,7 +343,6 @@ Original instruction.
             "Appearance",
             "Personalization",
             "Models & providers",
-            "Agent tools",
             "Plugins",
             "Skills",
             "Files & permissions",
@@ -988,13 +989,6 @@ Original instruction.
         dismissOnboardingIfPresent()
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
-
-        compose.onNodeWithText("Agent tools").performClick()
-        compose.onNodeWithText("Read only").performClick()
-        compose.onNodeWithContentDescription("Search tools").performTextInput("definitely-no-such-tool")
-        compose.onNodeWithText("No tools match", substring = true).assertIsDisplayed()
-        compose.onNodeWithContentDescription("Back").performClick()
-        compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("Plugins").performClick()
         compose.onNodeWithText("MCP servers").performScrollTo().performClick()

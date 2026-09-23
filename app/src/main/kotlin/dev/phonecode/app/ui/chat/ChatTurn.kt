@@ -1,5 +1,14 @@
 package dev.phonecode.app.ui.chat
 
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
@@ -289,11 +298,11 @@ internal fun AssistantTurn(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Text(
-                    if (isThinking) "Thinking" else "Thought process",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isThinking) LocalMisulAccent.current else colors.onSurfaceVariant,
-                )
+                if (isThinking) {
+                    ShimmerText("Thinking", MaterialTheme.typography.bodyMedium, colors.onSurfaceVariant)
+                } else {
+                    Text("Thought process", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                }
                 Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     null,
@@ -659,7 +668,12 @@ internal fun ToolActivityView(line: ChatLine.ToolActivity) {
                 running || line.status == ToolStatus.AWAITING_APPROVAL -> accent
                 else -> colors.onSurfaceVariant
             }
-            Icon(toolIcon(line.name), null, tint = tone, modifier = Modifier.size(17.dp))
+            Icon(
+                toolIcon(line.name),
+                null,
+                tint = tone,
+                modifier = Modifier.background(colors.background).padding(vertical = 2.dp).size(17.dp),
+            )
             Text(
                 buildAnnotatedString {
                     withStyle(SpanStyle(color = tone)) { append(toolAction(line.name, line.status)) }
@@ -697,7 +711,156 @@ internal fun ToolActivityView(line: ChatLine.ToolActivity) {
     )
 }
 
-private fun toolAction(name: String, status: ToolStatus): String {
+/** Text with a light band sweeping across it while work is live; static when animations are off. */
+@Composable
+internal fun ShimmerText(text: String, style: TextStyle, color: Color, modifier: Modifier = Modifier) {
+    if (!android.animation.ValueAnimator.areAnimatorsEnabled()) {
+        Text(text, style = style, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = modifier)
+        return
+    }
+    val sweep by rememberInfiniteTransition(label = "shimmer").animateFloat(
+        initialValue = -1f,
+        targetValue = 2f,
+        animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing)),
+        label = "shimmerSweep",
+    )
+    val highlight = MaterialTheme.colorScheme.onBackground
+    Text(
+        text,
+        style = style.copy(
+            brush = Brush.linearGradient(
+                0f to color, (sweep - 0.25f).coerceIn(0f, 1f) to color,
+                sweep.coerceIn(0f, 1f) to highlight,
+                (sweep + 0.25f).coerceIn(0f, 1f) to color, 1f to color,
+                start = Offset(0f, 0f), end = Offset(600f, 0f),
+            ),
+        ),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
+    )
+}
+
+/** "Read 2 files · ran a command" for a finished run of tool steps. */
+internal fun toolSummary(lines: List<ChatLine.ToolActivity>): String {
+    fun count(n: Int, one: String, many: String) = if (n == 1) one else "$n $many"
+    // Each family keeps its own verb so the line says what actually happened.
+    fun family(name: String): String = when {
+        name == "read" -> "read"
+        name == "write" || name == "edit" || name == "apply_patch" -> "edit"
+        name == "bash" || name == "process" -> "run"
+        name == "grep" -> "grep"
+        name == "glob" -> "find"
+        name == "ls" -> "list"
+        name.startsWith("web") -> "web"
+        name.startsWith("git_") -> "git"
+        name.startsWith("todo") -> "plan"
+        name.startsWith("extension_") -> "config"
+        name.startsWith("mcp_") -> "plugin"
+        name.startsWith("shared_files") -> "shared"
+        else -> "other"
+    }
+    val parts = lines.groupBy { family(canonicalTool(it.name)) }.map { (kind, steps) ->
+        val n = steps.size
+        when (kind) {
+            "read" -> "read " + count(n, "a file", "files")
+            "edit" -> "edited " + count(n, "a file", "files")
+            "run" -> "ran " + count(n, "a command", "commands")
+            "grep" -> "searched code" + if (n == 1) "" else " $n times"
+            "find" -> "found files" + if (n == 1) "" else " $n times"
+            "list" -> "listed " + count(n, "a folder", "folders")
+            "web" -> "browsed " + count(n, "the web", "pages")
+            "git" -> "ran " + count(n, "a Git step", "Git steps")
+            "plan" -> "checked the plan"
+            "config" -> "checked the configuration"
+            "plugin" -> "used " + count(n, "a plugin", "plugin tools")
+            "shared" -> "opened " + count(n, "a shared file", "shared files")
+            else -> "used " + count(n, "a tool", "tools")
+        }
+    }
+    val failed = lines.count { it.status == ToolStatus.ERROR }
+    val text = parts.joinToString(" · ").replaceFirstChar { it.uppercase() }
+    return if (failed > 0) "$text · $failed failed" else text
+}
+
+/**
+ * A run of consecutive tool steps shown as one quiet line: the live step while work runs, a
+ * summary once it settles. Tapping reveals the steps as a connected timeline.
+ */
+@Composable
+internal fun ToolGroupView(lines: List<ChatLine.ToolActivity>) {
+    if (lines.size == 1) return ToolActivityView(lines.first())
+    val colors = MaterialTheme.colorScheme
+    val live = lines.lastOrNull { it.status == ToolStatus.RUNNING || it.status == ToolStatus.AWAITING_APPROVAL }
+    var open by remember(lines.first().id) { mutableStateOf(false) }
+    val turn by animateFloatAsState(if (open) 90f else 0f, PhoneTweens.popEnter, label = "toolGroupChevron")
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(MaterialTheme.shapes.small)
+                .clickable(role = Role.Button, onClickLabel = if (open) "Hide steps" else "Show steps") { open = !open }
+                .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
+                .padding(horizontal = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (live != null) {
+                val detail = live.detail.lineSequence().firstOrNull().orEmpty().trim()
+                ShimmerText(
+                    listOf(toolAction(live.name, live.status), detail).filter { it.isNotEmpty() }.joinToString("  "),
+                    MaterialTheme.typography.bodyMedium,
+                    colors.onSurfaceVariant,
+                    Modifier.weight(1f, fill = false).semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            } else {
+                Text(
+                    toolSummary(lines),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (lines.any { it.status == ToolStatus.ERROR }) colors.error else colors.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                null,
+                tint = colors.tertiary,
+                modifier = Modifier.size(16.dp).rotate(turn),
+            )
+        }
+        AnimatedVisibility(open, enter = fadeIn(PhoneTweens.popEnter) + expandVertically(), exit = fadeOut(PhoneTweens.popExit) + shrinkVertically()) {
+            Column(Modifier.padding(start = 2.dp)) {
+                lines.forEachIndexed { index, line ->
+                    Row(Modifier.height(IntrinsicSize.Min)) {
+                        // Timeline rail joining the steps.
+                        Box(Modifier.width(17.dp).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
+                            Box(
+                                Modifier.padding(top = if (index == 0) 22.dp else 0.dp, bottom = if (index == lines.lastIndex) 22.dp else 0.dp)
+                                    .width(1.dp).fillMaxHeight().background(colors.outlineVariant),
+                            )
+                        }
+                        Box(Modifier.weight(1f).offset(x = (-17).dp)) { ToolActivityView(line) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The native runtime's tool names (read_file, list_files, shell, ...) mapped to the short family names used for labels. */
+internal fun canonicalTool(name: String): String = when (name) {
+    "read_file" -> "read"
+    "write_file" -> "write"
+    "edit_file" -> "edit"
+    "shell" -> "bash"
+    "grep_files" -> "grep"
+    "glob_files", "find_files" -> "glob"
+    "list_files" -> "ls"
+    else -> name
+}
+
+private fun toolAction(rawName: String, status: ToolStatus): String {
+    val name = canonicalTool(rawName)
     val active = status == ToolStatus.RUNNING
     val awaitingApproval = status == ToolStatus.AWAITING_APPROVAL
     if (status == ToolStatus.ERROR) {
@@ -764,7 +927,7 @@ private fun toolAction(name: String, status: ToolStatus): String {
 }
 
 /** Icon per tool family - keeps the chip scannable without reading names. */
-private fun toolIcon(name: String) = when {
+private fun toolIcon(rawName: String) = canonicalTool(rawName).let { name -> when {
     name.startsWith("read") -> Icons.Outlined.Description
     name.startsWith("write") || name.startsWith("edit") || name.startsWith("apply") -> Icons.Outlined.Edit
     name.startsWith("glob") || name.startsWith("grep") || name == "ls" -> Icons.Outlined.Search
@@ -773,6 +936,7 @@ private fun toolIcon(name: String) = when {
     name.startsWith("todo") -> Icons.Outlined.Checklist
     name.startsWith("question") -> Icons.AutoMirrored.Outlined.HelpOutline
     else -> Icons.Outlined.Build
+}
 }
 
 

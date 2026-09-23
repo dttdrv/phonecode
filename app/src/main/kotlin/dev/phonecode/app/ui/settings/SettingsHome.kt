@@ -62,7 +62,6 @@ internal fun HomePage(
             SettingsNavigationRow("Models & providers", icon = Icons.Outlined.Cloud, showDivider = false) { onOpen(SettingsRoute.Providers) }
         }
         SettingsRootGroup("Capabilities") {
-            SettingsNavigationRow("Agent tools", vm.availableTools().size.toString(), Icons.Outlined.Build) { onOpen(SettingsRoute.AgentTools) }
             SettingsNavigationRow("Plugins", state.mcpServers.size.toString(), Icons.Outlined.Extension) { onOpen(SettingsRoute.Plugins) }
             SettingsNavigationRow("Skills", state.skills.count { it.status == SkillStatus.ACTIVE }.toString(), Icons.Outlined.AutoAwesome, showDivider = false) { onOpen(SettingsRoute.Skills) }
         }

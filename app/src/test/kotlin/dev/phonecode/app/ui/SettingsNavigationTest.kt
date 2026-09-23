@@ -33,7 +33,6 @@ class SettingsNavigationTest {
         val source = route.readText()
         listOf(
             "data object Home",
-            "data object AgentTools",
             "data object Files",
             "data object Appearance",
             "data object Personalization",

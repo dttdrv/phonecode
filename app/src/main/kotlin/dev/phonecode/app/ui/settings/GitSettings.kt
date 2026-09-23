@@ -1,5 +1,6 @@
 package dev.phonecode.app.ui.settings
 
+import dev.phonecode.app.ui.components.AppIcon
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -210,7 +211,7 @@ internal fun GitPage(
             state.githubLogin != null -> {
                 MisulGroup {
                     MisulContentRow(showDivider = false) {
-                        PluginTile("GitHub", androidx.compose.ui.graphics.Color(0xFF24292F), 36.dp)
+                        AppIcon("github", 36.dp)
                         Column(Modifier.weight(1f)) {
                             Text("@${state.githubLogin}", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
                             Text("GitHub account connected", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
@@ -223,7 +224,7 @@ internal fun GitPage(
             else -> {
                 MisulGroup {
                     MisulContentRow(showDivider = false) {
-                        PluginTile("GitHub", androidx.compose.ui.graphics.Color(0xFF24292F), 36.dp)
+                        AppIcon("github", 36.dp)
                         Column(Modifier.weight(1f)) {
                             Text("GitHub", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
                             Text("Push, pull and clone private repositories", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)

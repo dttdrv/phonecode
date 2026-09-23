@@ -1,5 +1,13 @@
 package dev.phonecode.app.ui.chat
 
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Folder
+import dev.phonecode.app.ui.drawer.NewProjectDialog
+import dev.phonecode.app.ui.theme.LocalGlassHaze
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.chrisbanes.haze.HazeState
 import androidx.activity.result.PickVisualMediaRequest
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
@@ -230,6 +238,7 @@ fun ChatScreen(
     onOpenModelSetup: () -> Unit,
     onOpenProviderSetup: (String) -> Unit,
     sendOnEnter: Boolean = true,
+    onLinkFolder: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val colors = MaterialTheme.colorScheme
@@ -245,6 +254,7 @@ fun ChatScreen(
     var pendingProviderSetup by remember { mutableStateOf<String?>(null) }
     var contextOpen by remember { mutableStateOf(false) }
     var reportOpen by rememberSaveable { mutableStateOf(false) }
+    var newProjectOpen by remember { mutableStateOf(false) }
     var bottomOverlayHeight by remember { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
     val listCanScroll = listState.canScrollBackward || listState.canScrollForward
@@ -331,332 +341,342 @@ fun ChatScreen(
 
     // NOTE: no imePadding anywhere in this screen - the root container applies safeDrawing
     // (bars + IME) exactly once; adding it again here is what flung the composer off-screen.
+    val glassHaze = remember { HazeState() }
+    CompositionLocalProvider(LocalGlassHaze provides glassHaze) {
     Box(Modifier.fillMaxSize().background(colors.background)) {
-        // The timeline softens beneath the controls with progressive scroll-edge blur.
-        val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-        val topChromeHeight = Spacing.navBarHeight + 20.dp
-        val chromeDensity = LocalDensity.current
-        StretchSyncedScrollChrome(
-            modifier = Modifier.fillMaxSize(),
-            showTop = blurTopBand,
-            showBottom = blurBottomBand,
-            topHeight = statusInset + topChromeHeight + 12.dp,
-            bottomHeight = with(chromeDensity) { bottomOverlayHeight.toDp() } + 12.dp,
-        ) { _ ->
-            // New-chat transition: conversation fades out, empty state fades in (chatgpt-motion.md
-            // - a fade, never a slide; exits faster than enters).
-            AnimatedContent(
-                targetState = empty,
-                transitionSpec = {
-                    fadeIn(tween(220, easing = PhoneEasings.easeOut)) togetherWith
-                        fadeOut(tween(180, easing = PhoneEasings.easeOut))
-                },
-                label = "emptySwap",
+            // The timeline softens beneath the controls with progressive scroll-edge blur.
+            val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+            val topChromeHeight = Spacing.navBarHeight + 20.dp
+            val chromeDensity = LocalDensity.current
+            StretchSyncedScrollChrome(
                 modifier = Modifier.fillMaxSize(),
-            ) { isEmpty ->
-                Box(
-                    Modifier.fillMaxSize()
-                        .then(
-                            if (isEmpty) {
-                                Modifier.padding(
-                                    top = statusInset + topChromeHeight,
-                                    bottom = with(chromeDensity) { bottomOverlayHeight.toDp() } + 18.dp,
-                                )
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .shortContentVerticalOverscroll(
-                            enabled = isEmpty || !listCanScroll,
-                            effect = listOverscroll,
-                        )
-                        .background(colors.background),
-                ) {
-                if (isEmpty) {
-                    AnimatedVisibility(
-                        visible = !imeVisible,
-                        enter = fadeIn(tween(150, easing = PhoneEasings.easeOut)),
-                        exit = fadeOut(tween(120, easing = PhoneEasings.easeOut)),
-                        modifier = Modifier.align(Alignment.Center),
-                    ) {
-                        EmptyState(
-                            modelConfigured = modelConfigured,
-                            onSuggestion = { input = it },
-                            onOpenModelSetup = onOpenModelSetup,
-                        )
-                    }
-                } else {
-                    val lastAssistantIndex = state.lines.indexOfLast { it is ChatLine.Assistant }
-                    // No imeNestedScroll: its scroll-to-show-IME behavior meant dragging the list
-                    // after typing pulled the KEYBOARD open (device feedback) - the keyboard
-                    // should only ever come from the text field.
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        overscrollEffect = listOverscroll.takeIf { listCanScroll },
-                        userScrollEnabled = listCanScroll,
-                        // Padding clears the floating chrome at rest while letting scrolled
-                        // content slide beneath the pills (top) and the composer (bottom).
-                        contentPadding = PaddingValues(
-                            start = 18.dp, end = 18.dp,
-                            top = statusInset + topChromeHeight,
-                            bottom = with(chromeDensity) { bottomOverlayHeight.toDp() } + 18.dp,
-                        ),
-                    ) {
-                        // Index keys are safe because `lines` only ever appends within one
-                        // (session, timelineEpoch): reduce() never edits mid-list, and the one
-                        // path that REWINDS lines (redo) bumps timelineEpoch - baked into the key
-                        // so truncated-then-regrown slots get fresh identities, never recycled
-                        // composition state. contentType aids recycling per line variant.
-                        items(
-                            count = state.lines.size,
-                            // Session id in the key too: a same-epoch session switch must not
-                            // reuse slot state (fold toggles, entrance flags) across conversations.
-                            key = { "${state.currentSessionId}:${state.timelineEpoch}:$it" },
-                            contentType = { state.lines[it]::class },
-                        ) { i ->
-                            val line = state.lines[i]
-                            // A Reasoning line directly before an Assistant line renders folded into that
-                            // turn; skip it here entirely (no stray padded gap).
-                            if (line is ChatLine.Reasoning && state.lines.getOrNull(i + 1) is ChatLine.Assistant) {
-                                SideEffect { appendTransitions.discard(i) }
-                                return@items
-                            }
-                            val entryMotion = appendTransitions.motionFor(i)
-                            // Tool chips sit tighter than prose turns - they read as one timeline.
-                            val rhythm = if (line is ChatLine.ToolActivity) 2.dp else 8.dp
-                            Box(
-                                Modifier.messageEnter(entryMotion) { appendTransitions.markEntered(i) }
-                                    .padding(vertical = rhythm),
-                            ) {
-                                ChatTurn(
-                                    line = line,
-                                    reasoning = reasoningBefore(state.lines, i),
-                                    isLatestAssistant = i == lastAssistantIndex,
-                                    isRunning = state.isRunning,
-                                    turnOutcome = state.turnOutcome,
-                                    completedAt = state.lastCompletedAt,
-                                    onRedo = vm::redo,
-                                    onReport = { reportOpen = true },
-                                    onBranch = {
-                                        val turn = state.lines.take(i + 1).count { it is ChatLine.User }
-                                        vm.branchFrom(turn)
-                                    },
-                                )
-                            }
-                        }
-                        if (state.streamingReasoning.isNotEmpty() || state.streaming.isNotEmpty()) {
-                            item {
-                                Box(Modifier.padding(vertical = 8.dp)) {
-                                    AssistantTurn(
-                                        text = state.streaming,
-                                        reasoning = state.streamingReasoning.ifEmpty { null },
-                                        streaming = true,
-                                        showActions = false, showReport = false, completedAt = null,
-                                        onCopy = {}, onRedo = {}, onReport = {}, copyText = "",
+                hazeState = glassHaze,
+                showTop = blurTopBand,
+                showBottom = blurBottomBand,
+                topHeight = statusInset + topChromeHeight + 12.dp,
+                bottomHeight = with(chromeDensity) { bottomOverlayHeight.toDp() } + 12.dp,
+            ) { _ ->
+                // New-chat transition: conversation fades out, empty state fades in (chatgpt-motion.md
+                // - a fade, never a slide; exits faster than enters).
+                AnimatedContent(
+                    targetState = empty,
+                    transitionSpec = {
+                        fadeIn(tween(220, easing = PhoneEasings.easeOut)) togetherWith
+                            fadeOut(tween(180, easing = PhoneEasings.easeOut))
+                    },
+                    label = "emptySwap",
+                    modifier = Modifier.fillMaxSize(),
+                ) { isEmpty ->
+                    Box(
+                        Modifier.fillMaxSize()
+                            .then(
+                                if (isEmpty) {
+                                    Modifier.padding(
+                                        top = statusInset + topChromeHeight,
+                                        bottom = with(chromeDensity) { bottomOverlayHeight.toDp() } + 18.dp,
                                     )
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .shortContentVerticalOverscroll(
+                                enabled = isEmpty || !listCanScroll,
+                                effect = listOverscroll,
+                            )
+                            .background(colors.background),
+                    ) {
+                    if (isEmpty) {
+                        AnimatedVisibility(
+                            visible = !imeVisible,
+                            enter = fadeIn(tween(150, easing = PhoneEasings.easeOut)),
+                            exit = fadeOut(tween(120, easing = PhoneEasings.easeOut)),
+                            modifier = Modifier.align(Alignment.Center),
+                        ) {
+                            EmptyState(
+                                modelConfigured = modelConfigured,
+                                onSuggestion = { input = it },
+                                onOpenModelSetup = onOpenModelSetup,
+                            )
+                        }
+                    } else {
+                        val lastAssistantIndex = state.lines.indexOfLast { it is ChatLine.Assistant }
+                        // No imeNestedScroll: its scroll-to-show-IME behavior meant dragging the list
+                        // after typing pulled the KEYBOARD open (device feedback) - the keyboard
+                        // should only ever come from the text field.
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            overscrollEffect = listOverscroll.takeIf { listCanScroll },
+                            userScrollEnabled = listCanScroll,
+                            // Padding clears the floating chrome at rest while letting scrolled
+                            // content slide beneath the pills (top) and the composer (bottom).
+                            contentPadding = PaddingValues(
+                                start = 18.dp, end = 18.dp,
+                                top = statusInset + topChromeHeight,
+                                bottom = with(chromeDensity) { bottomOverlayHeight.toDp() } + 18.dp,
+                            ),
+                        ) {
+                            // Index keys are safe because `lines` only ever appends within one
+                            // (session, timelineEpoch): reduce() never edits mid-list, and the one
+                            // path that REWINDS lines (redo) bumps timelineEpoch - baked into the key
+                            // so truncated-then-regrown slots get fresh identities, never recycled
+                            // composition state. contentType aids recycling per line variant.
+                            items(
+                                count = state.lines.size,
+                                // Session id in the key too: a same-epoch session switch must not
+                                // reuse slot state (fold toggles, entrance flags) across conversations.
+                                key = { "${state.currentSessionId}:${state.timelineEpoch}:$it" },
+                                contentType = { state.lines[it]::class },
+                            ) { i ->
+                                val line = state.lines[i]
+                                // A Reasoning line directly before an Assistant line renders folded into that
+                                // turn; skip it here entirely (no stray padded gap).
+                                // Consecutive tool steps render once, as a group owned by the first step.
+                                if (line is ChatLine.ToolActivity && state.lines.getOrNull(i - 1) is ChatLine.ToolActivity) {
+                                    SideEffect { appendTransitions.discard(i) }
+                                    return@items
+                                }
+                                if (line is ChatLine.Reasoning && state.lines.getOrNull(i + 1) is ChatLine.Assistant) {
+                                    SideEffect { appendTransitions.discard(i) }
+                                    return@items
+                                }
+                                val entryMotion = appendTransitions.motionFor(i)
+                                // Tool chips sit tighter than prose turns - they read as one timeline.
+                                val rhythm = if (line is ChatLine.ToolActivity) 2.dp else 8.dp
+                                Box(
+                                    Modifier.messageEnter(entryMotion) { appendTransitions.markEntered(i) }
+                                        .padding(vertical = rhythm),
+                                ) {
+                                    if (line is ChatLine.ToolActivity) {
+                                        val run = state.lines.drop(i).takeWhile { it is ChatLine.ToolActivity }
+                                            .filterIsInstance<ChatLine.ToolActivity>()
+                                        ToolGroupView(run)
+                                    } else ChatTurn(
+                                        line = line,
+                                        reasoning = reasoningBefore(state.lines, i),
+                                        isLatestAssistant = i == lastAssistantIndex,
+                                        isRunning = state.isRunning,
+                                        turnOutcome = state.turnOutcome,
+                                        completedAt = state.lastCompletedAt,
+                                        onRedo = vm::redo,
+                                        onReport = { reportOpen = true },
+                                        onBranch = {
+                                            val turn = state.lines.take(i + 1).count { it is ChatLine.User }
+                                            vm.branchFrom(turn)
+                                        },
+                                    )
+                                }
+                            }
+                            if (state.streamingReasoning.isNotEmpty() || state.streaming.isNotEmpty()) {
+                                item {
+                                    Box(Modifier.padding(vertical = 8.dp)) {
+                                        AssistantTurn(
+                                            text = state.streaming,
+                                            reasoning = state.streamingReasoning.ifEmpty { null },
+                                            streaming = true,
+                                            showActions = false, showReport = false, completedAt = null,
+                                            onCopy = {}, onRedo = {}, onReport = {}, copyText = "",
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
+                    }
                 }
+
+            }
+
+            Row(
+                Modifier.align(Alignment.TopStart).fillMaxWidth()
+                    .padding(top = statusInset + 6.dp, start = 10.dp, end = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Opening the drawer clears any open overlay so Back/scrim semantics stay unambiguous.
+                FloatingIconButton(
+                    PhoneIcons.Menu,
+                    "Menu",
+                    onClick = {
+                        modelOpen = false
+                        onOpenDrawer()
+                    },
+                )
+                Column(Modifier.weight(1f).padding(start = 8.dp, end = 8.dp)) {
+                    if (!empty) {
+                        Text(
+                            chatTitle(state),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.onBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.semantics { heading() },
+                        )
+                    }
+                    ProjectChip(
+                        name = projectName(state),
+                        enabled = !state.isRunning,
+                        projects = state.projects,
+                        currentProjectId = state.currentProjectId,
+                        onSelect = { projectId -> vm.moveSession(state.currentSessionId, projectId) },
+                        onNewProject = { newProjectOpen = true },
+                    )
+                }
+                if (!empty) {
+                    FloatingIconButton(
+                        PhoneIcons.NewChat,
+                        "New chat",
+                        onClick = {
+                            modelOpen = false
+                            vm.newChat()
+                        },
+                    )
                 }
             }
 
-        }
-
-        Row(
-            Modifier.align(Alignment.TopStart).fillMaxWidth()
-                .padding(top = statusInset + 6.dp, start = 10.dp, end = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Opening the drawer clears any open overlay so Back/scrim semantics stay unambiguous.
-            FloatingIconButton(
-                PhoneIcons.Menu,
-                "Menu",
-                onClick = {
-                    modelOpen = false
-                    onOpenDrawer()
-                },
-            )
             Column(
-                Modifier.weight(1f).padding(start = 8.dp, end = 8.dp)
-                    .semantics(mergeDescendants = true) { heading() },
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .onSizeChanged { bottomOverlayHeight = it.height }
+                    // Union of ime+navbar: above the keyboard when typing, above the navbar otherwise.
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
             ) {
-                if (!empty) {
-                    Text(
-                        chatTitle(state),
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = colors.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                ChatStatus(
+                    error = state.error,
+                    turnOutcome = state.turnOutcome,
+                    failedTurnRetryable = state.failedTurnRetryable,
+                    hasPartialOutput = hasPartialOutput,
+                    queued = state.queued,
+                    interruptedTurn = state.interruptedTurn,
+                    retry = state.retry,
+                    notice = state.notice,
+                    todos = state.todos,
+                    isRunning = state.isRunning,
+                    sessionLoading = state.sessionLoading,
+                    onRetry = vm::redo,
+                    onDismissError = vm::clearError,
+                    onClearNotice = vm::clearNotice,
+                    onRestoreQueued = {
+                        input = listOf(input.trim(), state.queued.joinToString("\n\n"))
+                            .filter { it.isNotBlank() }
+                            .joinToString("\n\n")
+                        vm.clearQueuedMessages()
+                    },
+                    onClearQueued = vm::clearQueuedMessages,
+                )
+                val submitMessage = {
+                    if (vm.send(input, photos)) {
+                        rootView.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                        input = ""
+                        vm.setDraftPhotos(composerKey, emptyList())
+                    }
+                }
+                ChatComposer(
+                    value = input,
+                    onValueChange = { input = it },
+                    photos = photos,
+                    onRemovePhoto = { index ->
+                        vm.setDraftPhotos(composerKey, photos.filterIndexed { current, _ -> current != index })
+                    },
+                    onAttach = { attachOpen = true },
+                    onSend = submitMessage,
+                    onStop = vm::cancel,
+                    onQueue = submitMessage.takeIf { canQueueComposerDraft(input, photos) },
+                    enabled = modelConfigured,
+                    loading = state.sessionLoading,
+                    running = state.isRunning,
+                    sendOnEnter = sendOnEnter,
+                    placeholder = if (modelConfigured) "Ask PhoneCode" else "Set up a model to start",
+                ) {
+                    ComposerModelChip(
+                        label = if (modelConfigured) {
+                            listOfNotNull(
+                                modelShortLabel(state),
+                                state.effort.takeIf { it != ReasoningEffort.DEFAULT }?.display(),
+                            ).joinToString("  ")
+                        } else {
+                            "Set up model"
+                        },
+                        actionLabel = if (modelConfigured) "Switch model" else "Set up model",
+                        onClick = { if (modelConfigured) modelOpen = true else onOpenModelSetup() },
                     )
-                    projectName(state)?.let { project ->
-                        Text(
-                            project,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = colors.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                    Spacer(Modifier.weight(1f))
+                    // Context usage is a glanceable ring beside send; tap for the breakdown.
+                    val ctxUsed = state.usageInput + state.usageOutput
+                    val ctxFrac = state.contextLimit?.let { if (it > 0) ctxUsed.toFloat() / it else 0f } ?: 0f
+                    if (modelConfigured) Box(
+                        Modifier.size(Spacing.touchTarget).clip(ShapePill)
+                            .clickable(role = Role.Button) { modelOpen = false; contextOpen = true }
+                            .semantics { contentDescription = "Context usage ${(ctxFrac.coerceIn(0f, 1f) * 100).toInt()} percent" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ContextRing(
+                            fraction = ctxFrac,
+                            modifier = Modifier.size(20.dp),
+                            stroke = 2.5f,
+                            color = contextUsageColor(ctxFrac),
+                        )
+                        ContextUsageMenu(
+                            expanded = contextOpen,
+                            onDismiss = { contextOpen = false },
+                            inputTokens = state.usageInput,
+                            outputTokens = state.usageOutput,
+                            contextLimit = state.contextLimit,
                         )
                     }
                 }
             }
-            if (!empty) {
-                FloatingIconButton(
-                    PhoneIcons.NewChat,
-                    "New chat",
-                    onClick = {
-                        modelOpen = false
-                        vm.newChat()
+
+            // The file picker is registered at SCREEN level: registering it inside the sheet's
+            // conditional composition dropped results whenever the sheet/activity got recreated while
+            // picking (device feedback: "attaching images/files doesn't work").
+            if (attachOpen) {
+                AttachSheet(
+                    onDismiss = { attachOpen = false },
+                    onPhotos = {
+                        attachOpen = false
+                        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
+                    onFiles = {
+                        attachOpen = false
+                        picker.launch(arrayOf("image/*", "text/*", "application/json", "application/xml"))
                     },
                 )
             }
-        }
-
-        Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .onSizeChanged { bottomOverlayHeight = it.height }
-                // Union of ime+navbar: above the keyboard when typing, above the navbar otherwise.
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
-        ) {
-            ChatStatus(
-                error = state.error,
-                turnOutcome = state.turnOutcome,
-                failedTurnRetryable = state.failedTurnRetryable,
-                hasPartialOutput = hasPartialOutput,
-                queued = state.queued,
-                interruptedTurn = state.interruptedTurn,
-                retry = state.retry,
-                notice = state.notice,
-                todos = state.todos,
-                isRunning = state.isRunning,
-                sessionLoading = state.sessionLoading,
-                onRetry = vm::redo,
-                onDismissError = vm::clearError,
-                onClearNotice = vm::clearNotice,
-                onRestoreQueued = {
-                    input = listOf(input.trim(), state.queued.joinToString("\n\n"))
-                        .filter { it.isNotBlank() }
-                        .joinToString("\n\n")
-                    vm.clearQueuedMessages()
+            ChatOverlays(
+                modelOpen = modelOpen,
+                onDismissModel = {
+                    modelOpen = false
+                    pendingProviderSetup?.let(onOpenProviderSetup)
+                    pendingProviderSetup = null
                 },
-                onClearQueued = vm::clearQueuedMessages,
-            )
-            val submitMessage = {
-                if (vm.send(input, photos)) {
-                    rootView.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
-                    input = ""
-                    vm.setDraftPhotos(composerKey, emptyList())
-                }
-            }
-            ChatComposer(
-                value = input,
-                onValueChange = { input = it },
-                photos = photos,
-                onRemovePhoto = { index ->
-                    vm.setDraftPhotos(composerKey, photos.filterIndexed { current, _ -> current != index })
-                },
-                onAttach = { attachOpen = true },
-                onSend = submitMessage,
-                onStop = vm::cancel,
-                onQueue = submitMessage.takeIf { canQueueComposerDraft(input, photos) },
-                enabled = modelConfigured,
-                loading = state.sessionLoading,
-                running = state.isRunning,
-                sendOnEnter = sendOnEnter,
-                placeholder = if (modelConfigured) "Ask PhoneCode" else "Set up a model to start",
-            ) {
-                ComposerModelChip(
-                    label = if (modelConfigured) {
-                        listOfNotNull(
-                            modelShortLabel(state),
-                            state.effort.takeIf { it != ReasoningEffort.DEFAULT }?.display(),
-                        ).joinToString("  ")
-                    } else {
-                        "Set up model"
-                    },
-                    actionLabel = if (modelConfigured) "Switch model" else "Set up model",
-                    onClick = { if (modelConfigured) modelOpen = true else onOpenModelSetup() },
-                )
-                Spacer(Modifier.weight(1f))
-                // Context usage is a glanceable ring beside send; tap for the breakdown.
-                val ctxUsed = state.usageInput + state.usageOutput
-                val ctxFrac = state.contextLimit?.let { if (it > 0) ctxUsed.toFloat() / it else 0f } ?: 0f
-                if (modelConfigured) Box(
-                    Modifier.size(Spacing.touchTarget).clip(ShapePill)
-                        .clickable(role = Role.Button) { modelOpen = false; contextOpen = true }
-                        .semantics { contentDescription = "Context usage ${(ctxFrac.coerceIn(0f, 1f) * 100).toInt()} percent" },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    ContextRing(
-                        fraction = ctxFrac,
-                        modifier = Modifier.size(20.dp),
-                        stroke = 2.5f,
-                        color = contextUsageColor(ctxFrac),
-                    )
-                    ContextUsageMenu(
-                        expanded = contextOpen,
-                        onDismiss = { contextOpen = false },
-                        inputTokens = state.usageInput,
-                        outputTokens = state.usageOutput,
-                        contextLimit = state.contextLimit,
-                    )
-                }
-            }
-        }
-
-        // The file picker is registered at SCREEN level: registering it inside the sheet's
-        // conditional composition dropped results whenever the sheet/activity got recreated while
-        // picking (device feedback: "attaching images/files doesn't work").
-        if (attachOpen) {
-            AttachSheet(
-                onDismiss = { attachOpen = false },
-                onPhotos = {
-                    attachOpen = false
-                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                },
-                onFiles = {
-                    attachOpen = false
-                    picker.launch(arrayOf("image/*", "text/*", "application/json", "application/xml"))
+                models = state.models,
+                selectedModel = state.selected,
+                selectedEffort = state.effort,
+                disabledProviders = state.disabledProviders,
+                hiddenModels = state.hiddenModels,
+                favourites = state.favourites,
+                codexConnected = state.codexConnected,
+                providerConfigured = vm::providerConfigured,
+                reasoningEfforts = vm::reasoningEfforts,
+                providerNames = { vm.allProviders().associate { it.id to it.displayName } },
+                onSetEffort = vm::setEffort,
+                onSelectModel = vm::selectModel,
+                onToggleFavourite = vm::toggleFavourite,
+                onConfigureProvider = { pendingProviderSetup = it },
+                pendingPermission = state.pendingPermission,
+                onResolvePermission = vm::resolvePermission,
+                pendingQuestion = state.pendingQuestion,
+                onResolveQuestion = vm::resolveQuestion,
+                reportOpen = reportOpen,
+                reportSubmitting = state.reportSubmitting,
+                reportSubmission = state.reportSubmission,
+                onClearReportSubmission = vm::clearAiReportSubmission,
+                onSubmitReport = vm::submitAiReport,
+                onDismissReport = {
+                    vm.clearAiReportSubmission()
+                    reportOpen = false
                 },
             )
         }
-        ChatOverlays(
-            modelOpen = modelOpen,
-            onDismissModel = {
-                modelOpen = false
-                pendingProviderSetup?.let(onOpenProviderSetup)
-                pendingProviderSetup = null
-            },
-            models = state.models,
-            selectedModel = state.selected,
-            selectedEffort = state.effort,
-            disabledProviders = state.disabledProviders,
-            hiddenModels = state.hiddenModels,
-            favourites = state.favourites,
-            codexConnected = state.codexConnected,
-            providerConfigured = vm::providerConfigured,
-            reasoningEfforts = vm::reasoningEfforts,
-            providerNames = { vm.allProviders().associate { it.id to it.displayName } },
-            onSetEffort = vm::setEffort,
-            onSelectModel = vm::selectModel,
-            onToggleFavourite = vm::toggleFavourite,
-            onConfigureProvider = { pendingProviderSetup = it },
-            pendingPermission = state.pendingPermission,
-            onResolvePermission = vm::resolvePermission,
-            pendingQuestion = state.pendingQuestion,
-            onResolveQuestion = vm::resolveQuestion,
-            reportOpen = reportOpen,
-            reportSubmitting = state.reportSubmitting,
-            reportSubmission = state.reportSubmission,
-            onClearReportSubmission = vm::clearAiReportSubmission,
-            onSubmitReport = vm::submitAiReport,
-            onDismissReport = {
-                vm.clearAiReportSubmission()
-                reportOpen = false
-            },
-        )
     }
 }
 
@@ -767,6 +787,81 @@ private fun chatTitle(state: ChatUiState): String =
 /** Compact model name for the composer pill (drops any "Provider ·" prefix). */
 private fun projectName(state: ChatUiState): String? =
     state.currentProjectId?.let { id -> state.projects.firstOrNull { it.id == id }?.name }
+
+/** The chat's project: tap to move this chat to another project or start a new one. */
+@Composable
+private fun ProjectChip(
+    name: String?,
+    enabled: Boolean,
+    projects: List<dev.phonecode.app.data.Project>,
+    currentProjectId: String?,
+    onSelect: (String?) -> Unit,
+    onNewProject: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            Modifier.heightIn(min = 32.dp).clip(ShapePill)
+                .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Change project") { open = true }
+                .padding(end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(Icons.Outlined.Folder, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(14.dp))
+            Text(
+                name ?: "No project",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 200.dp),
+            )
+            Icon(Icons.Filled.KeyboardArrowDown, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(14.dp))
+        }
+        MorphingMenu(expanded = open, onDismiss = { open = false }, above = false, modifier = Modifier.width(260.dp)) {
+            Column(Modifier.padding(vertical = 6.dp)) {
+                Text(
+                    "Project",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                (listOf<dev.phonecode.app.data.Project?>(null) + projects).forEach { project ->
+                    val selected = project?.id == currentProjectId
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                            .clickable(role = Role.RadioButton) { open = false; if (!selected) onSelect(project?.id) }
+                            .semantics { this.selected = selected }
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            if (project == null) Icons.Outlined.Inbox else Icons.Outlined.Folder,
+                            null,
+                            tint = colors.onSurface,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(project?.name ?: "No project", style = MaterialTheme.typography.bodyLarge, color = colors.onSurface, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (selected) Icon(Icons.Filled.Check, null, tint = colors.onSurface, modifier = Modifier.size(18.dp))
+                    }
+                }
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                        .clickable(role = Role.Button) { open = false; onNewProject() }
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(Icons.Outlined.CreateNewFolder, null, tint = colors.onSurface, modifier = Modifier.size(20.dp))
+                    Text("New project", style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
+                }
+            }
+        }
+    }
+}
 
 /** Model and effort selector inside the composer's action row. */
 @Composable

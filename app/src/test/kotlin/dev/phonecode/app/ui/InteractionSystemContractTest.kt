@@ -265,19 +265,15 @@ class InteractionSystemContractTest {
     @Test
     fun task10UsesSharedSearchFiltersStableLoadingAndDirtyGitExit() {
         val settingsDir = File(root, "app/src/main/kotlin/dev/phonecode/app/ui/settings")
-        val tools = File(settingsDir, "AgentToolsSettings.kt").readText()
         val providers = File(settingsDir, "ProviderSettings.kt").readText()
         val mcp = File(settingsDir, "McpSettings.kt").readText()
         val skills = File(settingsDir, "SkillSettings.kt").readText()
         val git = File(settingsDir, "GitSettings.kt").readText()
 
-        listOf(tools, providers, mcp, skills).forEach { source ->
+        listOf(providers, mcp, skills).forEach { source ->
             assertTrue(source.contains("MisulSearchField("))
         }
-        assertTrue(tools.contains("AgentToolsCategoryPage("))
-        assertTrue(tools.contains("inventory.size >= 12"))
         assertTrue(skills.contains("state.skills.size >= 12"))
-        assertFalse(tools.contains("MisulFilter("))
         assertFalse(skills.contains("MisulFilter("))
         assertTrue(git.contains("animateContentSize("))
         assertTrue(git.contains("manualDraftIsDirty"))

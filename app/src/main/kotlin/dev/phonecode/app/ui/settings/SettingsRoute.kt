@@ -7,8 +7,6 @@ sealed interface SettingsRoute {
     companion object
 
     @Serializable data object Home : SettingsRoute
-    @Serializable data object AgentTools : SettingsRoute
-    @Serializable data class AgentToolsCategory(val access: String) : SettingsRoute
     @Serializable data object Files : SettingsRoute
     @Serializable data object Appearance : SettingsRoute
     @Serializable data object Personalization : SettingsRoute
@@ -34,7 +32,6 @@ sealed interface SettingsRoute {
 
 internal fun SettingsRoute.parent(): SettingsRoute? = when (this) {
     SettingsRoute.Home -> null
-    SettingsRoute.AgentTools,
     SettingsRoute.Files,
     SettingsRoute.Appearance,
     SettingsRoute.Personalization,
@@ -44,7 +41,6 @@ internal fun SettingsRoute.parent(): SettingsRoute? = when (this) {
     SettingsRoute.Git,
     SettingsRoute.Data,
     SettingsRoute.About -> SettingsRoute.Home
-    is SettingsRoute.AgentToolsCategory -> SettingsRoute.AgentTools
     SettingsRoute.Profile,
     SettingsRoute.CustomInstructions -> SettingsRoute.Personalization
     is SettingsRoute.Provider -> SettingsRoute.Providers
@@ -66,7 +62,6 @@ internal fun SettingsRoute.Companion.fromLegacyPage(page: String): SettingsRoute
     page.startsWith("doc:") -> SettingsRoute.Document(page.removePrefix("doc:"))
     else -> when (page) {
         "home" -> SettingsRoute.Home
-        "tools" -> SettingsRoute.AgentTools
         "files" -> SettingsRoute.Files
         "appearance" -> SettingsRoute.Appearance
         "personal" -> SettingsRoute.Personalization

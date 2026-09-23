@@ -24,9 +24,9 @@ fun StretchSyncedScrollChrome(
     showBottom: Boolean,
     topHeight: Dp,
     bottomHeight: Dp,
+    hazeState: HazeState = remember { HazeState() },
     content: @Composable BoxScope.(HazeState) -> Unit,
 ) {
-    val hazeState = remember { HazeState() }
     Box(modifier) {
         Box(Modifier.fillMaxSize().hazeSource(hazeState)) {
             content(hazeState)

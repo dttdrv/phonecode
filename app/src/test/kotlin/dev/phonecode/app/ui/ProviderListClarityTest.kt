@@ -35,7 +35,6 @@ class ProviderListClarityTest {
         val root = File("src/main/kotlin/dev/phonecode/app/ui/settings")
         val screen = File(root, "SettingsScreen.kt").readText()
         val expected = mapOf(
-            "AgentToolsSettings.kt" to "AgentToolsPage",
             "ProviderSettings.kt" to "ProviderDetailPage",
             "McpSettings.kt" to "McpServerPage",
             "SkillSettings.kt" to "SkillEditorPage",
@@ -53,10 +52,6 @@ class ProviderListClarityTest {
                     assertFalse("$fileName must use shared Misul components, not $legacy", source.contains(legacy))
                 }
         }
-        val agentTools = File(root, "AgentToolsSettings.kt").readText()
-        assertTrue(agentTools.contains("PcMono"))
-        assertTrue(agentTools.contains("Search tools"))
-        assertTrue(agentTools.contains("stateDescription"))
         val providers = File(root, "ProviderSettings.kt").readText()
         assertTrue(providers.contains("MisulNavigationRow"))
     }

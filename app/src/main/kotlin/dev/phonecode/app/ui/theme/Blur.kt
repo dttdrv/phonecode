@@ -13,6 +13,10 @@ import dev.chrisbanes.haze.HazeProgressive
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.HazeTint
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.foundation.border
 
 /**
  * The DISSOLVE band style (status-bar / behind-composer zones): NO TINT AT ALL - the bar areas
@@ -85,3 +89,32 @@ private fun Modifier.edgeDissolve(fromTop: Boolean, edgeColor: Color): Modifier 
 
 fun Modifier.blurFade(state: HazeState, style: HazeStyle, fromTop: Boolean, edgeColor: Color): Modifier =
     progressiveBlurEdge(state, style, fromTop, edgeColor)
+
+
+/** The page content behind floating chrome; screens that float controls over content provide it. */
+val LocalGlassHaze = staticCompositionLocalOf<HazeState?> { null }
+
+/**
+ * Liquid-glass material: the content behind is blurred and lightly tinted, with a bright rim
+ * catching the light along the top edge. Without a blur source (or before API 32) it falls back to
+ * the same tint made opaque, so the control stays legible.
+ */
+fun Modifier.liquidGlass(state: HazeState, shape: Shape, dark: Boolean, surface: Color): Modifier {
+    val tint = surface.copy(alpha = if (dark) 0.52f else 0.72f)
+    val style = HazeStyle(
+        backgroundColor = surface,
+        tints = listOf(HazeTint(tint)),
+        blurRadius = 20.dp,
+        noiseFactor = 0f,
+        fallbackTint = HazeTint(surface),
+    )
+    // Dark glass catches light along its top edge; light glass needs a faint ink edge instead,
+    // since a white rim vanishes against a white page.
+    val rim = Brush.verticalGradient(
+        if (dark) listOf(Color.White.copy(alpha = 0.22f), Color.White.copy(alpha = 0.05f))
+        else listOf(Color.Black.copy(alpha = 0.06f), Color.Black.copy(alpha = 0.11f)),
+    )
+    return this
+        .hazeEffect(state, style) { applyDefaults() }
+        .border(1.dp, rim, shape)
+}

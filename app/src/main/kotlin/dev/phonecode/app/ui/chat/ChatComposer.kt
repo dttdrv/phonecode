@@ -1,5 +1,16 @@
 package dev.phonecode.app.ui.chat
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.snap
@@ -129,9 +140,74 @@ internal fun ChatComposer(
         else -> null
     }
 
+    var focused by remember { mutableStateOf(false) }
+    // Resting capsule: one line with "+" and the action. Focus, a draft or a photo expands it.
+    // Dismissing the keyboard ends editing: drop focus so an empty draft returns to the capsule.
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val focusManager = LocalFocusManager.current
+    var imeWasVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(imeVisible) {
+        if (imeWasVisible && !imeVisible) focusManager.clearFocus()
+        imeWasVisible = imeVisible
+    }
+    val expanded = focused || sendable
+
+    @Composable
+    fun ActionSlot() {
+        actionSlots.queueWidth?.let {
+            MisulIconButton(
+                Icons.Filled.ArrowUpward,
+                "Queue message",
+                filled = true,
+                visualSize = ComposerActionVisual,
+                iconSize = 20.dp,
+                onClick = { onQueue?.invoke() },
+            )
+        }
+        Box(
+            Modifier.size(actionSlots.primaryWidth),
+            contentAlignment = Alignment.Center,
+        ) {
+            AnimatedContent(
+                targetState = visualState,
+                transitionSpec = {
+                    (scaleIn(initialScale = 0.92f, animationSpec = tween(140)) + fadeIn(tween(140)))
+                        .togetherWith(scaleOut(targetScale = 0.92f, animationSpec = tween(100)) + fadeOut(tween(100)))
+                        .using(SizeTransform(clip = false) { _, _ -> snap() })
+                },
+                contentAlignment = Alignment.Center,
+                label = "composerAction",
+            ) { state ->
+                val isStop = state == ComposerVisualState.RUNNING || state == ComposerVisualState.RUNNING_WITH_QUEUE
+                MisulIconButton(
+                    if (isStop) Icons.Filled.Stop else Icons.Filled.ArrowUpward,
+                    if (isStop) "Stop" else "Send",
+                    filled = state != ComposerVisualState.RUNNING_WITH_QUEUE,
+                    enabled = state != ComposerVisualState.EMPTY && state != ComposerVisualState.DISABLED,
+                    visualSize = ComposerActionVisual,
+                    iconSize = 20.dp,
+                    onClick = if (isStop) onStop else onSend,
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun AttachButton() {
+        MisulIconButton(
+            Icons.Filled.Add,
+            "Add attachment",
+            enabled = canEdit,
+            visualSize = ComposerActionVisual,
+            iconSize = 22.dp,
+            onClick = onAttach,
+        )
+    }
+
     Column(
         modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)
             .floatingChrome(RoundedCornerShape(ComposerCorner))
+            .animateContentSize(tween(180))
             .testTag("chat-composer"),
     ) {
         if (photos.isNotEmpty()) {
@@ -165,88 +241,63 @@ internal fun ChatComposer(
                 }
             }
         }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            enabled = canEdit,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onBackground),
-            cursorBrush = SolidColor(LocalMisulAccent.current),
-            maxLines = ComposerMaxLines,
-            keyboardOptions = if (sendOnEnter) {
-                KeyboardOptions(imeAction = ImeAction.Send)
-            } else {
-                KeyboardOptions.Default
-            },
-            keyboardActions = KeyboardActions(onSend = { submit?.invoke() }),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)
-                .semantics { contentDescription = "Message" },
-            decorationBox = { innerTextField ->
-                Box(Modifier.padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 4.dp)) {
-                    if (value.isEmpty()) {
-                        Text(
-                            if (loading) "Opening chat…" else placeholder,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = colors.onSurfaceVariant,
-                            maxLines = 1,
-                            modifier = Modifier.clearAndSetSemantics {},
-                        )
-                    }
-                    innerTextField()
-                }
-            },
-        )
         Row(
-            Modifier.fillMaxWidth().heightIn(min = ComposerHeight).padding(start = 4.dp, end = 6.dp),
+            Modifier.fillMaxWidth().heightIn(min = ComposerHeight).padding(horizontal = if (expanded) 0.dp else 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MisulIconButton(
-                Icons.Filled.Add,
-                "Add attachment",
+            if (!expanded) AttachButton()
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
                 enabled = canEdit,
-                visualSize = ComposerActionVisual,
-                iconSize = 22.dp,
-                onClick = onAttach,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onBackground),
+                cursorBrush = SolidColor(LocalMisulAccent.current),
+                maxLines = ComposerMaxLines,
+                keyboardOptions = if (sendOnEnter) {
+                    KeyboardOptions(imeAction = ImeAction.Send)
+                } else {
+                    KeyboardOptions.Default
+                },
+                keyboardActions = KeyboardActions(onSend = { submit?.invoke() }),
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp)
+                    .onFocusChanged { focused = it.isFocused }
+                    .semantics { contentDescription = "Message" },
+                decorationBox = { innerTextField ->
+                    Box(
+                        Modifier.padding(
+                            start = if (expanded) 18.dp else 2.dp,
+                            end = if (expanded) 18.dp else 4.dp,
+                            top = 12.dp,
+                            bottom = if (expanded) 4.dp else 12.dp,
+                        ),
+                    ) {
+                        if (value.isEmpty()) {
+                            Text(
+                                if (loading) "Opening chat…" else placeholder,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = colors.onSurfaceVariant,
+                                maxLines = 1,
+                                modifier = Modifier.clearAndSetSemantics {},
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
             )
+            if (!expanded) ActionSlot()
+        }
+        if (expanded) {
             Row(
-                Modifier.weight(1f),
+                Modifier.fillMaxWidth().heightIn(min = ComposerHeight).padding(start = 4.dp, end = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                content = toolbar,
-            )
-            actionSlots.queueWidth?.let {
-                MisulIconButton(
-                    Icons.Filled.ArrowUpward,
-                    "Queue message",
-                    filled = true,
-                    visualSize = ComposerActionVisual,
-                    iconSize = 20.dp,
-                    onClick = { onQueue?.invoke() },
-                )
-            }
-            Box(
-                Modifier.size(actionSlots.primaryWidth),
-                contentAlignment = Alignment.Center,
             ) {
-                AnimatedContent(
-                    targetState = visualState,
-                    transitionSpec = {
-                        (scaleIn(initialScale = 0.92f, animationSpec = tween(140)) + fadeIn(tween(140)))
-                            .togetherWith(scaleOut(targetScale = 0.92f, animationSpec = tween(100)) + fadeOut(tween(100)))
-                            .using(SizeTransform(clip = false) { _, _ -> snap() })
-                    },
-                    contentAlignment = Alignment.Center,
-                    label = "composerAction",
-                ) { state ->
-                    val isStop = state == ComposerVisualState.RUNNING || state == ComposerVisualState.RUNNING_WITH_QUEUE
-                    MisulIconButton(
-                        if (isStop) Icons.Filled.Stop else Icons.Filled.ArrowUpward,
-                        if (isStop) "Stop" else "Send",
-                        filled = state != ComposerVisualState.RUNNING_WITH_QUEUE,
-                        enabled = state != ComposerVisualState.EMPTY && state != ComposerVisualState.DISABLED,
-                        visualSize = ComposerActionVisual,
-                        iconSize = 20.dp,
-                        onClick = if (isStop) onStop else onSend,
-                    )
-                }
+                AttachButton()
+                Row(
+                    Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = toolbar,
+                )
+                ActionSlot()
             }
         }
     }

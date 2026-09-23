@@ -1,5 +1,7 @@
 package dev.phonecode.app.ui.chat
 
+import androidx.compose.material.icons.outlined.Cloud
+import dev.phonecode.app.ui.components.AppIcon
 import dev.phonecode.app.ui.components.raisedFillColor
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Description
@@ -619,7 +621,7 @@ private fun ModelSheet(
                     val selected = selectedEffort == effort
                     Box(
                         Modifier.heightIn(min = 40.dp).widthIn(min = 64.dp)
-                            .then(if (selected) Modifier.floatingChrome(ShapePill) else Modifier.clip(ShapePill))
+                            .then(if (selected) Modifier.floatingChrome(ShapePill, glass = false) else Modifier.clip(ShapePill))
                             .semantics {
                                 this.selected = selected
                                 role = Role.RadioButton
@@ -713,6 +715,7 @@ private fun ModelSheet(
                 if (query.isBlank()) {
                     items(pendingGroups.entries.toList(), key = { "pending:${it.key}" }) { (pid, options) ->
                         ProviderSetupRow(
+                            providerId = pid,
                             name = names[pid] ?: pid,
                             modelCount = options.size,
                             onSetup = { onConfigureProvider(pid) },
@@ -750,14 +753,16 @@ private fun ModelGroupHeader(label: String) {
 }
 
 @Composable
-private fun ProviderSetupRow(name: String, modelCount: Int, onSetup: () -> Unit) {
+private fun ProviderSetupRow(providerId: String, name: String, modelCount: Int, onSetup: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
             .clickable(role = Role.Button, onClickLabel = "Set up $name", onClick = onSetup)
             .heightIn(min = 52.dp).padding(start = 12.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        AppIcon(providerId, 32.dp, fallback = Icons.Outlined.Cloud)
         Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
             Text(name, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(

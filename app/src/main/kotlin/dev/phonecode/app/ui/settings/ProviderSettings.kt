@@ -1,5 +1,6 @@
 package dev.phonecode.app.ui.settings
 
+import dev.phonecode.app.ui.components.AppIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import dev.phonecode.app.ui.components.MisulDialogAction
@@ -226,7 +227,7 @@ internal fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, 
                 }
                 MisulNavigationRow(
                     label = preset.displayName,
-                    leading = { PluginTile(preset.displayName, null, 36.dp) },
+                    leading = { AppIcon(preset.id, 36.dp, fallback = Icons.Outlined.Cloud) },
                     supportingText = status,
                     onClick = { onOpenProvider(preset.id) },
                     showDivider = index != providers.lastIndex,

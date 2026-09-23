@@ -52,20 +52,6 @@ internal fun SettingsNavigation(
                     onOpen = navController::navigate,
                 )
 
-                SettingsRoute.AgentTools -> AgentToolsPage(
-                    vm = vm,
-                    onBack = ::popOrExit,
-                    onOpenCategory = { filter ->
-                        navController.navigate(SettingsRoute.AgentToolsCategory(filter.name))
-                    },
-                )
-
-                is SettingsRoute.AgentToolsCategory -> AgentToolsCategoryPage(
-                    vm = vm,
-                    access = AgentToolAccessFilter.valueOf(route.access),
-                    onBack = ::popOrExit,
-                )
-
                 SettingsRoute.Files -> FilesPage(
                     vm = vm,
                     onBack = ::popOrExit,
@@ -288,10 +274,6 @@ internal fun NavGraphBuilder.settingsRouteGraph(
     destination: @Composable (SettingsRoute) -> Unit,
 ) {
     composable<SettingsRoute.Home> { destination(SettingsRoute.Home) }
-    composable<SettingsRoute.AgentTools> { destination(SettingsRoute.AgentTools) }
-    composable<SettingsRoute.AgentToolsCategory> { entry ->
-        destination(entry.toRoute<SettingsRoute.AgentToolsCategory>())
-    }
     composable<SettingsRoute.Files> { destination(SettingsRoute.Files) }
     composable<SettingsRoute.Appearance> { destination(SettingsRoute.Appearance) }
     composable<SettingsRoute.Personalization> { destination(SettingsRoute.Personalization) }

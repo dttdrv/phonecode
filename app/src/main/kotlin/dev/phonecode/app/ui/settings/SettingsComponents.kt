@@ -1,5 +1,8 @@
 package dev.phonecode.app.ui.settings
 
+import dev.phonecode.app.ui.theme.LocalGlassHaze
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.chrisbanes.haze.HazeState
 import dev.phonecode.app.ui.components.floatingChrome
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
@@ -78,12 +81,15 @@ internal fun SettingsPageShell(
     val hasMoreBelow = remember { derivedStateOf { scrollState.canScrollForward } }
     val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottomInset = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+    val glassHaze = remember { HazeState() }
     MaterialTheme(colorScheme = colors) {
+        CompositionLocalProvider(LocalGlassHaze provides glassHaze) {
         Box(
             Modifier.fillMaxSize().background(colors.background)
                 .testTag("settings-page-shell"),
         ) {
             StretchSyncedScrollChrome(
+                hazeState = glassHaze,
                 modifier = Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(),
                 showTop = scrolled.value,
                 showBottom = hasMoreBelow.value,
@@ -128,6 +134,7 @@ internal fun SettingsPageShell(
                 )
                 if (action != null) Box(Modifier.align(Alignment.CenterEnd)) { action() }
             }
+        }
         }
     }
 }

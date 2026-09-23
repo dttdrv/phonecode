@@ -170,7 +170,7 @@ fun MisulNavigationRow(
     supportingText: String? = null,
     value: String? = null,
     showDivider: Boolean = true,
-    /** A 36dp leading tile (for example a service monogram) in place of [icon]. */
+    /** A 36dp leading tile (for example a service app icon) in place of [icon]. */
     leading: (@Composable () -> Unit)? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }

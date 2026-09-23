@@ -83,6 +83,14 @@ versions and notices are not present in this repository. This pinned backport in
 evidence explicitly preserve the unresolved boundary. Derive the exact bundled dependency closure
 and publish its complete third-party-notice inventory before release.
 
+## Service and provider marks
+
+`app/src/main/res/drawable/brand_*.xml` are glyphs from [Simple Icons](https://simpleicons.org)
+15.22.0, released under CC0 1.0. `app/src/main/res/drawable-nodpi/brand_*.png` (DeepWiki,
+Microsoft, AWS, DeepSeek, OpenCode) are the services' own site icons, reduced to 96 px. All marks
+remain trademarks of their owners and are shown only to identify the service a plugin or model
+provider connects to; no endorsement is implied.
+
 ## Fonts
 
 | File | SHA-256 | License |

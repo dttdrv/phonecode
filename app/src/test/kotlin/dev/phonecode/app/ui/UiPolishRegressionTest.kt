@@ -104,15 +104,10 @@ class UiPolishRegressionTest {
 
     @Test
     fun capabilityLandingPagesUseGroupedRowsInsteadOfControlStrips() {
-        val tools = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/AgentToolsSettings.kt")
         val skills = source("app/src/main/kotlin/dev/phonecode/app/ui/settings/SkillSettings.kt")
 
-        val toolsLanding = tools.substringAfter("internal fun AgentToolsPage").substringBefore("internal fun AgentToolsCategoryPage")
         val skillsLanding = skills.substringAfter("internal fun SkillsPage").substringBefore("internal fun SkillDetailPage")
 
-        assertTrue(toolsLanding.contains("SettingsNavigationRow("))
-        assertFalse(toolsLanding.contains("MisulSearchField("))
-        assertFalse(toolsLanding.contains("MisulFilter("))
         assertTrue(skillsLanding.contains("SettingsNavigationRow("))
         assertFalse(skillsLanding.contains("SkillFilters("))
         assertFalse(skillsLanding.contains("MisulIconButton("))
@@ -246,7 +241,7 @@ class UiPolishRegressionTest {
         assertTrue(build.contains("signingConfig = signingConfigs.getByName(\"debug\")"))
         assertTrue(build.contains("sourceSets.getByName(\"sideload\")"))
         assertTrue(build.contains("withBuildType(\"sideload\")"))
-        assertTrue(build.contains("output.versionCode.set(60)"))
-        assertTrue(build.contains("output.versionName.set(\"0.8.5\")"))
+        assertTrue(build.contains("output.versionCode.set(61)"))
+        assertTrue(build.contains("output.versionName.set(\"0.8.6\")"))
     }
 }

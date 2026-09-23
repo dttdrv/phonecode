@@ -225,6 +225,29 @@ internal fun ConfirmDrawerDeleteDialog(title: String, detail: String, onDismiss:
     )
 }
 
+/** A new project is a named private workspace; linking a phone folder is the alternative. */
+@Composable
+internal fun NewProjectDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit, onLinkFolder: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    MisulDialog(
+        title = "New project",
+        onDismissRequest = onDismiss,
+        body = {
+            MisulField(name, { name = it }, "Project name", placeholder = "e.g. weather-app")
+            Text(
+                "Gets its own private workspace and Git repository on this phone.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        },
+        actions = {
+            MisulDialogAction("Link a folder", { onDismiss(); onLinkFolder() })
+            MisulDialogAction("Create", { onCreate(name.trim()); onDismiss() }, primary = true, enabled = name.isNotBlank())
+        },
+    )
+}
+
 @Composable
 internal fun DrawerRenameDialog(title: String, placeholder: String, initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var value by remember { mutableStateOf(initial) }

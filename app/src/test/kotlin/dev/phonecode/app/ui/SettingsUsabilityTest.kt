@@ -245,13 +245,17 @@ class SettingsUsabilityTest {
     @Test
     fun personalizationStyleAndUseTogglePersistLocally() {
         showSettings("personal")
+        val store = AppSettingsStore(java.io.File(app().filesDir, "app_settings.json"))
+        // The toggle flips whatever an earlier test in this process left behind.
+        val usedBefore = store.load().usePersonalization
         compose.onNodeWithText("Concise").performScrollTo().performClick()
         compose.onNodeWithText("Use personalization").performScrollTo().performClick()
 
-        val store = AppSettingsStore(java.io.File(app().filesDir, "app_settings.json"))
-        compose.waitUntil(5_000) {
-            store.load().responseStyleName == "CONCISE" && !store.load().usePersonalization
-        }
+        runCatching {
+            compose.waitUntil(10_000) {
+                store.load().responseStyleName == "CONCISE" && store.load().usePersonalization != usedBefore
+            }
+        }.onFailure { throw AssertionError("DEBUG before=$usedBefore style=${store.load().responseStyleName} use=${store.load().usePersonalization} ui=${compose.onAllNodesWithText("Use personalization").fetchSemanticsNodes().size}", it) }
         compose.onNodeWithText("Your choices stay on this phone", substring = true).assertIsDisplayed()
     }
 

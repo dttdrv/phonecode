@@ -346,6 +346,10 @@ class ScreenshotTest {
 
     private fun shootScreen(name: String, visibleText: String) {
         settleAnimation()
+        // Sheets and menus can still be settling on a loaded CI runner; wait for the target.
+        compose.waitUntil(3_000) {
+            runCatching { compose.onAllNodesWithText(visibleText).onLast().assertIsDisplayed() }.isSuccess
+        }
         compose.onAllNodesWithText(visibleText).onLast().assertIsDisplayed()
         captureScreenRoboImage("screenshots/$name.png")
     }
@@ -383,6 +387,7 @@ class ScreenshotTest {
         awaitConversation()
         shoot("01-chat-conversation")
 
+        openComposer()
         compose.onNodeWithContentDescription("Switch model").performClick()
         shootScreen("03-model-picker", "Search models")
         compose.onAllNodesWithText("Done").onFirst().performClick()
@@ -428,6 +433,7 @@ class ScreenshotTest {
     @Config(qualifiers = "+night")
     fun darkSurfaces() {
         awaitConversation()
+        openComposer()
         compose.onNodeWithContentDescription("Switch model").performClick()
         settleAnimation()
         shoot("55-model-picker-dark")
@@ -718,13 +724,6 @@ class ScreenshotTest {
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
 
-        compose.onNodeWithText("Agent tools").performClick()
-        shootPage("22-agent-tools-inventory", "Agent tools")
-        compose.onNodeWithText("Read only").performClick()
-        compose.onNodeWithContentDescription("Search tools").performTextInput("missing-production-tool")
-        shootPage("22-tools-no-results", "Read-only tools")
-        compose.onNodeWithContentDescription("Back").performClick()
-        compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("Plugins").performClick()
         compose.onNodeWithText("MCP servers").performScrollTo().performClick()
@@ -1417,5 +1416,11 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage(
             "../play/0.5.1/graphics/phone/04-settings.png",
         )
+    }
+
+    /** The composer rests collapsed; focusing it reveals the model and context controls. */
+    private fun openComposer() {
+        compose.onNodeWithContentDescription("Message").performClick()
+        compose.waitForIdle()
     }
 }

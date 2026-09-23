@@ -1,5 +1,8 @@
 package dev.phonecode.app.ui.drawer
 
+import dev.phonecode.app.ui.theme.LocalGlassHaze
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.chrisbanes.haze.HazeState
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.shadow
@@ -131,6 +134,7 @@ internal fun WorkspaceDrawer(
     onOpenSession: (String) -> Unit,
     onNewChat: (String?) -> Unit,
     onCreateProject: () -> Unit,
+    onCreateNamedProject: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSkills: () -> Unit,
     onOpenMcp: () -> Unit,
@@ -153,6 +157,7 @@ internal fun WorkspaceDrawer(
     var deleteChat by remember { mutableStateOf<SessionMeta?>(null) }
     var deleteProject by remember { mutableStateOf<Project?>(null) }
     var archivedOpen by remember { mutableStateOf(false) }
+    var newProjectOpen by remember { mutableStateOf(false) }
     val searchFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -224,6 +229,8 @@ internal fun WorkspaceDrawer(
         }
     }
 
+    val glassHaze = remember { HazeState() }
+    CompositionLocalProvider(LocalGlassHaze provides glassHaze) {
     Box(
         Modifier.width(width).fillMaxSize().background(colors.background)
             .testTag("workspace-drawer")
@@ -232,6 +239,7 @@ internal fun WorkspaceDrawer(
     ) {
         StretchSyncedScrollChrome(
             modifier = Modifier.fillMaxSize(),
+            hazeState = glassHaze,
             showTop = blurChrome && listScrolled,
             showBottom = blurChrome && hasMoreBelow,
             topHeight = statusInset + 56.dp,
@@ -266,8 +274,8 @@ internal fun WorkspaceDrawer(
                 item(key = "new_project") {
                     DrawerDestination(
                         icon = Icons.Outlined.CreateNewFolder,
-                        label = if (state.projects.isEmpty()) "Link a folder" else "New project",
-                        onClick = onCreateProject,
+                        label = "New project",
+                        onClick = { newProjectOpen = true },
                     )
                 }
             }
@@ -441,6 +449,15 @@ internal fun WorkspaceDrawer(
         }
     }
 
+    }
+
+    if (newProjectOpen) {
+        NewProjectDialog(
+            onDismiss = { newProjectOpen = false },
+            onCreate = onCreateNamedProject,
+            onLinkFolder = onCreateProject,
+        )
+    }
     renameChat?.let { meta ->
         DrawerRenameDialog("Rename chat", "Chat title", meta.title, { renameChat = null }) {
             onRenameSession(meta.id, it); renameChat = null

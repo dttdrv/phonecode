@@ -13,11 +13,15 @@ import androidx.compose.ui.unit.dp
  * outlined Material icons used elsewhere.
  */
 object PhoneIcons {
-    /** Two-bar menu: a full top bar over a shorter bottom bar. */
+    /** Sidebar: a window with its left panel ruled off - opens the workspace drawer. */
     val Menu: ImageVector by lazy {
         stroked("PhoneIcons.Menu") {
-            moveTo(4f, 8.5f); lineTo(20f, 8.5f)
-            moveTo(4f, 15.5f); lineTo(14f, 15.5f)
+            moveTo(6.5f, 5f); lineTo(17.5f, 5f)
+            curveTo(18.9f, 5f, 20f, 6.1f, 20f, 7.5f); lineTo(20f, 16.5f)
+            curveTo(20f, 17.9f, 18.9f, 19f, 17.5f, 19f); lineTo(6.5f, 19f)
+            curveTo(5.1f, 19f, 4f, 17.9f, 4f, 16.5f); lineTo(4f, 7.5f)
+            curveTo(4f, 6.1f, 5.1f, 5f, 6.5f, 5f); close()
+            moveTo(9.5f, 5f); lineTo(9.5f, 19f)
         }
     }
 
@@ -43,22 +47,20 @@ object PhoneIcons {
         }
     }
 
-    /** Open square with a pen crossing its corner: start a new chat. */
+    /** A speech bubble with a plus: start a new chat. */
     val NewChat: ImageVector by lazy {
         stroked("PhoneIcons.NewChat") {
-            moveTo(11f, 4.5f); lineTo(7f, 4.5f)
-            curveTo(5.6f, 4.5f, 4.5f, 5.6f, 4.5f, 7f)
-            lineTo(4.5f, 17f)
-            curveTo(4.5f, 18.4f, 5.6f, 19.5f, 7f, 19.5f)
-            lineTo(17f, 19.5f)
-            curveTo(18.4f, 19.5f, 19.5f, 18.4f, 19.5f, 17f)
-            lineTo(19.5f, 13f)
-            moveTo(17.6f, 3.9f)
-            lineTo(20.1f, 6.4f)
-            lineTo(12.2f, 14.3f)
-            lineTo(9f, 15f)
-            lineTo(9.7f, 11.8f)
+            moveTo(12f, 4.5f)
+            curveTo(16.7f, 4.5f, 20f, 7.6f, 20f, 11.5f)
+            curveTo(20f, 15.4f, 16.7f, 18.5f, 12f, 18.5f)
+            curveTo(10.9f, 18.5f, 9.9f, 18.3f, 9f, 18f)
+            lineTo(4.8f, 19.6f)
+            lineTo(5.9f, 16f)
+            curveTo(4.7f, 14.8f, 4f, 13.2f, 4f, 11.5f)
+            curveTo(4f, 7.6f, 7.3f, 4.5f, 12f, 4.5f)
             close()
+            moveTo(12f, 8.5f); lineTo(12f, 14.5f)
+            moveTo(9f, 11.5f); lineTo(15f, 11.5f)
         }
     }
 

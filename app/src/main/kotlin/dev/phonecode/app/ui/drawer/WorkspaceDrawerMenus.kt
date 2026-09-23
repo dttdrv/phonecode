@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -100,14 +101,14 @@ private fun DrawerMenuRow(
                 role = Role.Button
                 if (selected) this.selected = true
             }
-            .heightIn(min = 48.dp).padding(horizontal = 12.dp),
+            .heightIn(min = 48.dp).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(11.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Icon(icon, null, tint = if (destructive) contentColor else colors.secondary, modifier = Modifier.size(19.dp))
+        Icon(icon, null, tint = contentColor, modifier = Modifier.size(20.dp))
         Text(
             label,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.bodyLarge,
             color = contentColor,
             modifier = Modifier.weight(1f),
             maxLines = 1,
@@ -144,8 +145,8 @@ internal fun ChatOptionsMenu(
             }
             Text(
                 if (moving) "Move to" else meta.title,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onBackground,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -172,6 +173,7 @@ internal fun ChatOptionsMenu(
                 if (lifecycleMutationsEnabled) {
                     DrawerMenuRow("Move to…", Icons.Outlined.Folder) { moving = true }
                     DrawerMenuRow(if (meta.archived) "Unarchive" else "Archive", Icons.Outlined.Archive) { onArchive(); onDismiss() }
+                    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                     DrawerMenuRow("Delete", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); onDismiss() }
                 } else {
                     Text(
@@ -197,14 +199,15 @@ internal fun ProjectOptionsMenu(
     Column(Modifier.fillMaxWidth().padding(6.dp)) {
         Text(
             project.name,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onBackground,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
         )
         DrawerMenuRow("New chat", Icons.Filled.Add) { onDismiss(); onNewChat() }
         DrawerMenuRow("Rename", Icons.Outlined.Edit) { onDismiss(); onRequestRename() }
+        HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
         DrawerMenuRow("Delete project", Icons.Outlined.DeleteOutline, destructive = true) { onDelete(); onDismiss() }
     }
 }
@@ -217,7 +220,6 @@ internal fun ConfirmDrawerDeleteDialog(title: String, detail: String, onDismiss:
         body = { Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         actions = {
             MisulDialogAction("Cancel", onDismiss)
-            Spacer(Modifier.weight(1f))
             MisulDialogAction("Delete", onConfirm, primary = true, destructive = true)
         },
     )
@@ -234,7 +236,6 @@ internal fun DrawerRenameDialog(title: String, placeholder: String, initial: Str
         body = { MisulField(value, { value = it }, placeholder) },
         actions = {
             MisulDialogAction("Cancel", onDismiss)
-            Spacer(Modifier.weight(1f))
             MisulDialogAction("Save", { onConfirm(trimmed) }, primary = true, enabled = enabled)
         },
     )

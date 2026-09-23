@@ -1,5 +1,11 @@
 package dev.phonecode.app.ui.onboarding
 
+import androidx.compose.ui.semantics.selected
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.ui.graphics.Color
+import dev.phonecode.app.ui.settings.PluginTile
+import dev.phonecode.app.ui.components.PhoneIcons
+import dev.phonecode.app.ui.components.FloatingIconButton
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
@@ -182,8 +188,11 @@ private fun ProviderChoice(
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     var showAllProviders by rememberSaveable { mutableStateOf(false) }
-    val recommendedIds = remember { setOf("openai", "anthropic", "google") }
-    val recommendedProviders = providers.filter { it.id in recommendedIds || vm.keyFor(it.id).isNotBlank() }
+    val recommendedIds = remember { setOf("opencode-go", "opencode-zen", "anthropic", "openrouter") }
+    // Recommend only intended providers the native runtime can serve today.
+    val recommendedProviders = providers.filter {
+        (it.id in recommendedIds && vm.providerAvailableInMisul(it.id)) || vm.keyFor(it.id).isNotBlank()
+    }
     val otherProviders = providers.filterNot { it in recommendedProviders }
     SetupPage(
         title = "Set up a model",
@@ -233,15 +242,24 @@ private fun ProviderChoice(
                     }
                 }
             } else {
-                MisulActionButton(
-                    label = "Sign in with ChatGPT",
-                    role = ActionRole.PRIMARY,
-                ) {
-                    vm.startCodexSignIn()?.let { url ->
-                        runCatching {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                        }.onFailure {
-                            vm.surfaceError("Could not open the sign-in page.")
+                MisulGroup {
+                    MisulContentRow(showDivider = false) {
+                        PluginTile("ChatGPT", Color(0xFF10A37F), 36.dp)
+                        Column(Modifier.weight(1f)) {
+                            Text("ChatGPT", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
+                            Text("Use the models in your ChatGPT plan", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        }
+                        MisulActionButton(
+                            label = "Sign in",
+                            role = ActionRole.PRIMARY,
+                        ) {
+                            vm.startCodexSignIn()?.let { url ->
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                }.onFailure {
+                                    vm.surfaceError("Could not open the sign-in page.")
+                                }
+                            }
                         }
                     }
                 }
@@ -286,22 +304,30 @@ private fun ProviderGroup(
     MisulGroup {
         providers.forEachIndexed { index, provider ->
             val configured = vm.keyFor(provider.id).isNotBlank()
-            if (configured) {
-                MisulSelectionRow(
-                    label = provider.displayName,
-                    supportingText = "Configured",
-                    selected = true,
-                    showDivider = index != providers.lastIndex,
-                    onClick = { onSelectProvider(provider.id) },
-                )
-            } else {
-                MisulNavigationRow(
-                    label = provider.displayName,
-                    supportingText = "Add an API key",
-                    icon = Icons.Outlined.Cloud,
-                    showDivider = index != providers.lastIndex,
-                    onClick = { onSelectProvider(provider.id) },
-                )
+            MisulContentRow(
+                onClick = { onSelectProvider(provider.id) },
+                showDivider = index != providers.lastIndex,
+                modifier = Modifier.semantics { if (configured) selected = true },
+            ) {
+                PluginTile(provider.displayName, null, 36.dp)
+                Column(Modifier.weight(1f)) {
+                    Text(provider.displayName, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+                    Text(
+                        if (configured) "Configured" else "Add an API key",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (configured) {
+                    Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(20.dp))
+                } else {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForwardIos,
+                        null,
+                        tint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
             }
         }
     }
@@ -432,10 +458,10 @@ private fun SetupPage(
             .navigationBarsPadding(),
     ) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 8.dp),
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MisulIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClick = onBack)
+            FloatingIconButton(PhoneIcons.Back, "Back", onClick = onBack)
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),

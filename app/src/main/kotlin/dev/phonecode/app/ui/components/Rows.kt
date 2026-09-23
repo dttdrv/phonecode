@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -54,9 +55,9 @@ import androidx.compose.ui.unit.dp
 import dev.phonecode.app.ui.theme.LocalMisulAccent
 import dev.phonecode.app.ui.theme.PhoneDurations
 
-private val GroupCorner = 16.dp
+private val GroupCorner = 22.dp
 private val RowInset = 16.dp
-private val RowIconSize = 24.dp
+private val RowIconSize = 22.dp
 private val RowIconGap = 12.dp
 private val OneLineRowHeight = 52.dp
 private val SupportingRowHeight = 64.dp
@@ -140,6 +141,7 @@ fun MisulInlineToggle(
         checked = checked,
         onCheckedChange = onCheckedChange,
         colors = misulSwitchColors(),
+        thumbContent = MisulSwitchThumb,
         modifier = modifier.semantics(mergeDescendants = true) {
             this.contentDescription = contentDescription
             role = Role.Switch
@@ -152,9 +154,9 @@ fun MisulInlineToggle(
 fun MisulSectionLabel(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.labelMedium,
+        style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp)
+        modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 8.dp)
             .semantics { heading() },
     )
 }
@@ -168,9 +170,12 @@ fun MisulNavigationRow(
     supportingText: String? = null,
     value: String? = null,
     showDivider: Boolean = true,
+    /** A 36dp leading tile (for example a service monogram) in place of [icon]. */
+    leading: (@Composable () -> Unit)? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     RowShell(
+        leadingInset = if (leading != null) 36.dp else null,
         modifier = modifier
             .misulRowPressTreatment(interaction)
             .clickable(
@@ -184,11 +189,12 @@ fun MisulNavigationRow(
         supportingText = supportingText,
         showDivider = showDivider,
     ) {
+        leading?.invoke()
         icon?.let {
             Icon(
                 it,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(RowIconSize),
             )
         }
@@ -199,8 +205,8 @@ fun MisulNavigationRow(
         Icon(
             Icons.AutoMirrored.Filled.ArrowForwardIos,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
+            modifier = Modifier.size(14.dp),
         )
     }
 }
@@ -238,7 +244,7 @@ fun MisulActionRow(
             Icon(
                 it,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(RowIconSize),
             )
         }
@@ -281,8 +287,8 @@ fun MisulDisclosureRow(
         Icon(
             Icons.AutoMirrored.Filled.ArrowForwardIos,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = chevronRotation },
+            tint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
+            modifier = Modifier.size(14.dp).graphicsLayer { rotationZ = chevronRotation },
         )
     }
 }
@@ -323,6 +329,7 @@ fun MisulToggleRow(
             onCheckedChange = null,
             enabled = enabled,
             colors = misulSwitchColors(),
+            thumbContent = MisulSwitchThumb,
             modifier = Modifier
                 .size(MisulMinimumInteractiveSize)
                 .clearAndSetSemantics {},
@@ -402,6 +409,7 @@ fun MisulFilter(
 @Composable
 private fun RowShell(
     modifier: Modifier,
+    leadingInset: androidx.compose.ui.unit.Dp? = null,
     icon: ImageVector?,
     dividerTag: String,
     supportingText: String?,
@@ -420,7 +428,13 @@ private fun RowShell(
         if (showDivider) {
             HorizontalDivider(
                 modifier = Modifier
-                    .padding(start = if (icon == null) RowInset else RowInset + RowIconSize + RowIconGap)
+                    .padding(
+                        start = when {
+                            leadingInset != null -> RowInset + leadingInset + RowIconGap
+                            icon == null -> RowInset
+                            else -> RowInset + RowIconSize + RowIconGap
+                        },
+                    )
                     .testTag("misul-row-divider-$dividerTag"),
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.52f),
             )
@@ -450,14 +464,25 @@ private fun Modifier.misulRowPressTreatment(interaction: MutableInteractionSourc
     }
 }
 
+/** Thumb content keeps the thumb one size in both states, like the platform switch on iOS. */
+private val MisulSwitchThumb: @Composable () -> Unit = {}
+
 @Composable
-private fun misulSwitchColors() = SwitchDefaults.colors(
-    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-    checkedTrackColor = LocalMisulAccent.current,
-    checkedBorderColor = Color.Transparent,
-    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    uncheckedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-    disabledCheckedThumbColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f),
-    disabledCheckedTrackColor = LocalMisulAccent.current.copy(alpha = 0.52f),
-)
+private fun misulSwitchColors(): androidx.compose.material3.SwitchColors {
+    val colors = MaterialTheme.colorScheme
+    val dark = colors.background.luminance() < 0.5f
+    val offTrack = if (dark) Color(0xFF39393D) else Color(0xFFE3E3E6)
+    return SwitchDefaults.colors(
+        checkedThumbColor = if (dark) colors.onPrimary else Color.White,
+        checkedTrackColor = LocalMisulAccent.current,
+        checkedBorderColor = Color.Transparent,
+        uncheckedThumbColor = Color.White,
+        uncheckedTrackColor = offTrack,
+        uncheckedBorderColor = Color.Transparent,
+        disabledCheckedThumbColor = Color.White.copy(alpha = 0.8f),
+        disabledCheckedTrackColor = LocalMisulAccent.current.copy(alpha = 0.4f),
+        disabledUncheckedThumbColor = Color.White.copy(alpha = 0.7f),
+        disabledUncheckedTrackColor = offTrack.copy(alpha = 0.6f),
+        disabledUncheckedBorderColor = Color.Transparent,
+    )
+}

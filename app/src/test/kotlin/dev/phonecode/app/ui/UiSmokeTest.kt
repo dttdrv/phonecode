@@ -202,7 +202,7 @@ Original instruction.
         // Model sheet opens from the composer's model pill (header is always visible; specific
         // model rows may sit below the sheet's scroll fold).
         compose.onNodeWithContentDescription("Switch model").performClick()
-        compose.onNodeWithText("Model & reasoning").assertIsDisplayed()
+        compose.onNodeWithText("Search models").assertIsDisplayed()
         compose.onNodeWithText("Reasoning").assertIsDisplayed()
         compose.onAllNodesWithText("Agent mode").assertCountEquals(0)
         compose.onNodeWithContentDescription("Search models").performTextInput("definitely-no-such-model")
@@ -269,7 +269,7 @@ Original instruction.
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithText("Plugins").performClick()
-        compose.onNodeWithText("MCP servers").performClick()
+        compose.onNodeWithText("MCP servers").performScrollTo().performClick()
         compose.onNodeWithText("Add server").performClick()
         compose.onNodeWithContentDescription("Server name").performTextInput("draft-server")
         compose.onNodeWithContentDescription("Remote URL").performTextInput("https://example.com/mcp")
@@ -282,20 +282,19 @@ Original instruction.
     }
 
     @Test
-    fun pluginCatalogKeepsUnverifiedServicesUnavailableAndPrefillsTheVerifiedOne() {
+    fun pluginCatalogListsOnlyInstallablePluginsAndConnectsBeforeAdding() {
         dismissOnboardingIfPresent()
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithText("Plugins").performClick()
 
-        compose.onNodeWithText("Vercel").assertIsDisplayed()
-        compose.onNodeWithText("Gmail").assertIsDisplayed()
-        compose.onNodeWithText("Requires supported OAuth client access").assertIsDisplayed()
-        compose.onNodeWithText("Cloudflare Agents docs").performClick()
-        compose.onNodeWithText("Test connection").assertIsDisplayed()
-        compose.onAllNodesWithText("Add plugin").onFirst().assertIsNotEnabled()
+        compose.onNodeWithText("GitHub").assertIsDisplayed()
+        compose.onAllNodesWithText("Planned").assertCountEquals(0)
+        compose.onNodeWithText("Cloudflare Agents docs").performScrollTo().performClick()
+        compose.onNodeWithText("Connect").assertIsDisplayed()
+        compose.onAllNodesWithText("Add plugin").assertCountEquals(0)
 
-        compose.onNodeWithText("Connection details").performClick()
+        compose.onNodeWithText("Connection details").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Server name").assertTextEquals("Cloudflare Agents docs")
         compose.onNodeWithContentDescription("Remote URL")
             .assertTextEquals("https://agents.cloudflare.com/mcp")
@@ -732,7 +731,7 @@ Original instruction.
         state.value = state.value.copy(lines = listOf(ChatLine.Assistant("A response to review.")))
         compose.waitForIdle()
 
-        compose.onNodeWithContentDescription("Send safety feedback").performClick()
+        openSafetyFeedback()
         compose.onNodeWithText("Hate").performClick().assertIsSelected()
         compose.onNodeWithContentDescription("Optional report details").assertIsDisplayed()
         compose.onNodeWithContentDescription("Cancel report").performClick()
@@ -751,7 +750,7 @@ Original instruction.
         state.value = state.value.copy(lines = listOf(ChatLine.Assistant("A response to review.")))
         compose.waitForIdle()
 
-        compose.onNodeWithContentDescription("Send safety feedback").performClick()
+        openSafetyFeedback()
         compose.onNodeWithText("Privacy").performClick().assertIsSelected()
         compose.onNodeWithContentDescription("Optional report details")
             .performTextInput("The response exposed private information.")
@@ -789,7 +788,7 @@ Original instruction.
         )
 
         try {
-            compose.onNodeWithContentDescription("Send safety feedback").performClick()
+            openSafetyFeedback()
             compose.onNodeWithText("Hate").performClick()
             compose.onNodeWithText("Send").performClick()
             compose.waitUntil(5_000) {
@@ -833,7 +832,7 @@ Original instruction.
         )
 
         try {
-            compose.onNodeWithContentDescription("Send safety feedback").performClick()
+            openSafetyFeedback()
             compose.onNodeWithText("Hate").performClick()
             compose.onNodeWithText("Send").performClick()
             assertTrue(started.await(5, TimeUnit.SECONDS))
@@ -880,7 +879,7 @@ Original instruction.
         )
 
         try {
-            compose.onNodeWithContentDescription("Send safety feedback").performClick()
+            openSafetyFeedback()
             compose.onNodeWithText("Hate").performClick()
             compose.onNodeWithText("Send").performClick()
             assertTrue(started.await(5, TimeUnit.SECONDS))
@@ -998,7 +997,7 @@ Original instruction.
         compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("Plugins").performClick()
-        compose.onNodeWithText("MCP servers").performClick()
+        compose.onNodeWithText("MCP servers").performScrollTo().performClick()
         compose.onNodeWithText("Add server").performClick()
         compose.onNodeWithText("Save").assertIsNotEnabled()
         compose.onNodeWithContentDescription("Server name").assertIsDisplayed()
@@ -1030,7 +1029,7 @@ Original instruction.
 
         compose.onNodeWithContentDescription("Anthropic API key").performTextInput("replacement-key")
         assertEquals("ui-smoke-key", app.chatViewModel.keyFor("anthropic"))
-        compose.onNodeWithText("Save key").performClick()
+        compose.onNodeWithContentDescription("Save key").performClick()
         assertEquals("replacement-key", app.chatViewModel.keyFor("anthropic"))
     }
 
@@ -1088,13 +1087,13 @@ Original instruction.
         compose.onNodeWithContentDescription("Settings").performClick()
 
         compose.onNodeWithText("Plugins").performClick()
-        compose.onNodeWithText("MCP servers").performClick()
+        compose.onNodeWithText("MCP servers").performScrollTo().performClick()
         compose.onNodeWithText("Add server").performClick()
         compose.onNodeWithContentDescription("Server name").assertIsDisplayed()
         compose.onNodeWithContentDescription("Remote URL").assertIsDisplayed()
         compose.onNodeWithText("HTTP headers").assertIsDisplayed()
         compose.onNodeWithContentDescription("Connection timeout in milliseconds").assertIsDisplayed()
-        compose.onNodeWithText("Test").assertIsDisplayed()
+        compose.onNodeWithText("Test connection").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
@@ -1136,6 +1135,13 @@ Original instruction.
         assertFalse(state.value.codexConnected)
     }
 
+
+    /** Reporting sits inside a response's Info menu. */
+    private fun openSafetyFeedback() {
+        compose.onAllNodesWithContentDescription("Response info").onLast().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Report response").performClick()
+    }
 }
 
 /** Focused Compose contract fixture kept beside the app-wide smoke coverage. */

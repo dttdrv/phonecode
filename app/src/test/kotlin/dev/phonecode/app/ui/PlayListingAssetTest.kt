@@ -147,7 +147,7 @@ class PlayListingAssetTest {
 
         compose.waitForIdle()
         compose.onNodeWithText("Set up a model").assertIsDisplayed()
-        compose.onNodeWithText("Sign in with ChatGPT").assertIsDisplayed()
+        compose.onNodeWithText("Use the models in your ChatGPT plan").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onRoot().captureRoboImage(
             "../play/0.5.1/graphics/phone/07-model-providers.png",

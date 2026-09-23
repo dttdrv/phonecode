@@ -165,7 +165,8 @@ private data class RecoveredWorkspace(val source: File, val target: File, val re
 
 sealed interface ChatLine {
     data class User(val text: String, val images: List<MessagePart.Image> = emptyList()) : ChatLine
-    data class Assistant(val text: String) : ChatLine
+    /** [model] and [completedAt] are known for answers produced in this app session only. */
+    data class Assistant(val text: String, val model: String? = null, val completedAt: Long? = null) : ChatLine
     data class Reasoning(val text: String) : ChatLine
     data class ToolActivity(
         val id: String,
@@ -2438,6 +2439,32 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Copies the conversation through the answer to the [turn]-th human prompt (1-based) into a
+     * new chat in the same project and opens it. The original chat is left untouched.
+     */
+    fun branchFrom(turn: Int) {
+        if (_state.value.isRunning) return fail("Stop the current agent before branching this chat.")
+        if (_state.value.sessionLoading) return fail("Wait for the current data operation to finish.")
+        val source = history
+        val cut = branchCutIndex(source, turn)
+        if (cut <= 0) return
+        val branched = repairInterruptedHistory(source.take(cut))
+        val title = _state.value.sessions.firstOrNull { it.id == sessionId }?.title ?: "Chat"
+        val id = newSessionId()
+        sessionStore.create(
+            PersistedSession(
+                id = id,
+                title = "Branch · $title",
+                updatedAt = System.currentTimeMillis(),
+                messages = branched.map { it.toPersisted() },
+                projectId = currentProjectId,
+            ),
+        )
+        _state.update { it.copy(sessions = sessionStore.list()) }
+        switchSession(id)
+    }
+
     fun cancel() {
         val (stoppedWriteOrder, stoppedQueued) = synchronized(queueStateLock) {
             generation++ // invalidate the in-flight turn's events immediately, then clean up here (single owner)
@@ -2649,7 +2676,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { state ->
             var lines = state.lines
             if (snapshot.reasoning.isNotBlank()) lines = lines + ChatLine.Reasoning(snapshot.reasoning)
-            if (snapshot.text.isNotBlank()) lines = lines + ChatLine.Assistant(snapshot.text)
+            if (snapshot.text.isNotBlank()) {
+                lines = lines + ChatLine.Assistant(snapshot.text, state.selected?.label, System.currentTimeMillis())
+            }
             if (lines === state.lines && state.streaming.isEmpty() && state.streamingReasoning.isEmpty()) {
                 state
             } else {
@@ -2754,6 +2783,19 @@ internal fun aiReportPayload(
  * RESULTS also ride Role.USER (loop convention), and cutting at one of those would orphan the
  * preceding tool_use. Pure function so the shape is unit-testable.
  */
+/** History length that keeps human prompts 1..[turn] and everything answering them. */
+internal fun branchCutIndex(history: List<ChatMessage>, turn: Int): Int {
+    if (turn <= 0) return 0
+    var seen = 0
+    history.forEachIndexed { index, message ->
+        if (message.role == Role.USER && message.parts.any { it is MessagePart.Text }) {
+            seen++
+            if (seen == turn + 1) return index
+        }
+    }
+    return if (seen >= turn) history.size else 0
+}
+
 internal fun redoCutIndex(history: List<ChatMessage>): Int =
     history.indexOfLast { m -> m.role == Role.USER && m.parts.any { it is MessagePart.Text } }
 

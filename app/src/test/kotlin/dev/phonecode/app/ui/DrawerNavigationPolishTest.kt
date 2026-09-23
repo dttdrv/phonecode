@@ -29,9 +29,6 @@ import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -225,11 +222,10 @@ class DrawerNavigationPolishTest {
     }
 
     @Test
-    fun chatDateRemainsInsideTheNavigationTarget() {
+    fun chatTitleIsTheNavigationTarget() {
         showFixture()
-        val date = SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(activeChat.updatedAt))
 
-        compose.onNodeWithText(date).assertHasClickAction()
+        compose.onNodeWithText(activeChat.title).assertHasClickAction()
     }
 
     @Test

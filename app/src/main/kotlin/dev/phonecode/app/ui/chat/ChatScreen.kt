@@ -1,5 +1,6 @@
 package dev.phonecode.app.ui.chat
 
+import androidx.activity.result.PickVisualMediaRequest
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -141,6 +142,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
@@ -184,6 +186,8 @@ import dev.phonecode.app.ui.components.ActionRole
 import dev.phonecode.app.ui.components.MisulActionButton
 import dev.phonecode.app.ui.components.MisulDialogAction
 import dev.phonecode.app.ui.components.MisulIconButton
+import dev.phonecode.app.ui.components.FloatingIconButton
+import dev.phonecode.app.ui.components.PhoneIcons
 import dev.phonecode.app.ui.components.MisulTextAction
 import dev.phonecode.app.ui.components.StretchSyncedScrollChrome
 import dev.phonecode.app.ui.components.MorphingMenu
@@ -266,7 +270,8 @@ fun ChatScreen(
     val blurBottomBand = !empty && listState.canScrollForward
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val attachContext = LocalContext.current
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+    var attachOpen by remember { mutableStateOf(false) }
+    val attach: (Uri?) -> Unit = { uri ->
         if (uri != null) scope.launch {
             val mime = attachContext.contentResolver.getType(uri).orEmpty()
             if (mime.startsWith("image/")) {
@@ -290,6 +295,9 @@ fun ChatScreen(
             }
         }
     }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument(), attach)
+    // The system photo picker needs no storage permission.
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia(), attach)
 
     LaunchedEffect(listState, state.currentSessionId) {
         snapshotFlow { listState.isScrollInProgress to listState.canScrollForward }.collect { (scrolling, canScrollForward) ->
@@ -416,7 +424,7 @@ fun ChatScreen(
                             }
                             val entryMotion = appendTransitions.motionFor(i)
                             // Tool chips sit tighter than prose turns - they read as one timeline.
-                            val rhythm = if (line is ChatLine.ToolActivity) 3.dp else 8.dp
+                            val rhythm = if (line is ChatLine.ToolActivity) 2.dp else 8.dp
                             Box(
                                 Modifier.messageEnter(entryMotion) { appendTransitions.markEntered(i) }
                                     .padding(vertical = rhythm),
@@ -430,6 +438,10 @@ fun ChatScreen(
                                     completedAt = state.lastCompletedAt,
                                     onRedo = vm::redo,
                                     onReport = { reportOpen = true },
+                                    onBranch = {
+                                        val turn = state.lines.take(i + 1).count { it is ChatLine.User }
+                                        vm.branchFrom(turn)
+                                    },
                                 )
                             }
                         }
@@ -453,89 +465,51 @@ fun ChatScreen(
 
         }
 
-        Box(Modifier.align(Alignment.TopStart).padding(top = statusInset + 6.dp, start = 12.dp)) {
+        Row(
+            Modifier.align(Alignment.TopStart).fillMaxWidth()
+                .padding(top = statusInset + 6.dp, start = 10.dp, end = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             // Opening the drawer clears any open overlay so Back/scrim semantics stay unambiguous.
-            MisulIconButton(
-                Icons.Filled.Menu,
+            FloatingIconButton(
+                PhoneIcons.Menu,
                 "Menu",
                 onClick = {
                     modelOpen = false
                     onOpenDrawer()
                 },
             )
-        }
-        Box(Modifier.align(Alignment.TopCenter).padding(top = statusInset + 6.dp)) {
             Column(
-                Modifier.widthIn(max = 230.dp).height(topChromeHeight)
-                    .clickable(role = Role.Button) {
-                        if (modelConfigured) modelOpen = true else onOpenModelSetup()
-                    }
-                    .semantics {
-                        contentDescription = "${chatTitle(state)}, ${if (modelConfigured) modelShortLabel(state) else "set up model"}"
-                    },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                Modifier.weight(1f).padding(start = 8.dp, end = 8.dp)
+                    .semantics(mergeDescendants = true) { heading() },
             ) {
-                Text(
-                    chatTitle(state),
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = colors.onBackground,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-                Row(
-                    Modifier.padding(start = 11.dp, end = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(1.dp),
-                ) {
+                if (!empty) {
                     Text(
-                        if (modelConfigured) modelShortLabel(state) else "Set up model",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.secondary,
+                        chatTitle(state),
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.onBackground,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    Icon(
-                        Icons.Filled.KeyboardArrowDown,
-                        if (modelConfigured) "Switch model" else "Set up model",
-                        tint = colors.secondary,
-                        modifier = Modifier.size(15.dp),
-                    )
+                    projectName(state)?.let { project ->
+                        Text(
+                            project,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
-        }
-        Row(
-            Modifier.align(Alignment.TopEnd).padding(top = statusInset + 6.dp, end = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // Context usage is a glanceable ring now (out of the tools menu); tap for the breakdown.
-            val ctxUsed = state.usageInput + state.usageOutput
-            val ctxFrac = state.contextLimit?.let { if (it > 0) ctxUsed.toFloat() / it else 0f } ?: 0f
-            Box(
-                Modifier.size(Spacing.touchTarget).clip(ShapePill)
-                    .clickable(role = Role.Button) { modelOpen = false; contextOpen = true }
-                    .semantics { contentDescription = "Context usage ${(ctxFrac.coerceIn(0f, 1f) * 100).toInt()} percent" },
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier.size(Spacing.controlVisual).clip(ShapePill)
-                        .background(colors.surfaceContainerHigh),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    ContextRing(
-                        fraction = ctxFrac,
-                        modifier = Modifier.size(21.dp),
-                        stroke = 2.5f,
-                        color = contextUsageColor(ctxFrac),
-                    )
-                }
-                ContextUsageMenu(
-                    expanded = contextOpen,
-                    onDismiss = { contextOpen = false },
-                    inputTokens = state.usageInput,
-                    outputTokens = state.usageOutput,
-                    contextLimit = state.contextLimit,
+            if (!empty) {
+                FloatingIconButton(
+                    PhoneIcons.NewChat,
+                    "New chat",
+                    onClick = {
+                        modelOpen = false
+                        vm.newChat()
+                    },
                 )
             }
         }
@@ -583,7 +557,7 @@ fun ChatScreen(
                 onRemovePhoto = { index ->
                     vm.setDraftPhotos(composerKey, photos.filterIndexed { current, _ -> current != index })
                 },
-                onAttach = { picker.launch(arrayOf("image/*", "text/*", "application/json", "application/xml")) },
+                onAttach = { attachOpen = true },
                 onSend = submitMessage,
                 onStop = vm::cancel,
                 onQueue = submitMessage.takeIf { canQueueComposerDraft(input, photos) },
@@ -591,12 +565,63 @@ fun ChatScreen(
                 loading = state.sessionLoading,
                 running = state.isRunning,
                 sendOnEnter = sendOnEnter,
-            )
+                placeholder = if (modelConfigured) "Ask PhoneCode" else "Set up a model to start",
+            ) {
+                ComposerModelChip(
+                    label = if (modelConfigured) {
+                        listOfNotNull(
+                            modelShortLabel(state),
+                            state.effort.takeIf { it != ReasoningEffort.DEFAULT }?.display(),
+                        ).joinToString("  ")
+                    } else {
+                        "Set up model"
+                    },
+                    actionLabel = if (modelConfigured) "Switch model" else "Set up model",
+                    onClick = { if (modelConfigured) modelOpen = true else onOpenModelSetup() },
+                )
+                Spacer(Modifier.weight(1f))
+                // Context usage is a glanceable ring beside send; tap for the breakdown.
+                val ctxUsed = state.usageInput + state.usageOutput
+                val ctxFrac = state.contextLimit?.let { if (it > 0) ctxUsed.toFloat() / it else 0f } ?: 0f
+                if (modelConfigured) Box(
+                    Modifier.size(Spacing.touchTarget).clip(ShapePill)
+                        .clickable(role = Role.Button) { modelOpen = false; contextOpen = true }
+                        .semantics { contentDescription = "Context usage ${(ctxFrac.coerceIn(0f, 1f) * 100).toInt()} percent" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ContextRing(
+                        fraction = ctxFrac,
+                        modifier = Modifier.size(20.dp),
+                        stroke = 2.5f,
+                        color = contextUsageColor(ctxFrac),
+                    )
+                    ContextUsageMenu(
+                        expanded = contextOpen,
+                        onDismiss = { contextOpen = false },
+                        inputTokens = state.usageInput,
+                        outputTokens = state.usageOutput,
+                        contextLimit = state.contextLimit,
+                    )
+                }
+            }
         }
 
         // The file picker is registered at SCREEN level: registering it inside the sheet's
         // conditional composition dropped results whenever the sheet/activity got recreated while
         // picking (device feedback: "attaching images/files doesn't work").
+        if (attachOpen) {
+            AttachSheet(
+                onDismiss = { attachOpen = false },
+                onPhotos = {
+                    attachOpen = false
+                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                onFiles = {
+                    attachOpen = false
+                    picker.launch(arrayOf("image/*", "text/*", "application/json", "application/xml"))
+                },
+            )
+        }
         ChatOverlays(
             modelOpen = modelOpen,
             onDismissModel = {
@@ -728,6 +753,8 @@ internal class ChatAppendTransitionTracker {
 
     private fun ChatLine.sameTimelineIdentity(other: ChatLine): Boolean = when {
         this is ChatLine.ToolActivity && other is ChatLine.ToolActivity -> id == other.id
+        // Answer metadata exists only in memory; a reload of the same text is the same turn.
+        this is ChatLine.Assistant && other is ChatLine.Assistant -> text == other.text
         else -> this == other
     }
 }
@@ -738,6 +765,42 @@ private fun chatTitle(state: ChatUiState): String =
         ?: "New chat"
 
 /** Compact model name for the composer pill (drops any "Provider ·" prefix). */
+private fun projectName(state: ChatUiState): String? =
+    state.currentProjectId?.let { id -> state.projects.firstOrNull { it.id == id }?.name }
+
+/** Model and effort selector inside the composer's action row. */
+@Composable
+private fun ComposerModelChip(label: String, actionLabel: String, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        Modifier.height(Spacing.touchTarget).clip(ShapePill)
+            .clickable(role = Role.Button, onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = actionLabel
+                stateDescription = label
+                role = Role.Button
+            }
+            .padding(start = 8.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = colors.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 180.dp),
+        )
+        Icon(
+            Icons.Filled.KeyboardArrowDown,
+            null,
+            tint = colors.onSurfaceVariant,
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
 private fun modelShortLabel(state: ChatUiState): String =
     state.selected?.label?.substringAfterLast('·')?.trim()?.take(24) ?: "Model"
 

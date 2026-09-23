@@ -28,6 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -94,7 +97,11 @@ internal fun actionVisuals(
     }
     return when (role) {
         ActionRole.PRIMARY -> ActionVisuals(cobalt, colors.onPrimary)
-        ActionRole.SECONDARY -> ActionVisuals(colors.surfaceContainerHigh, colors.onSurface)
+        // Dark raised surfaces share surfaceContainerHigh, so dark secondary fills step one higher.
+        ActionRole.SECONDARY -> ActionVisuals(
+            if (colors.background.luminance() < 0.5f) colors.surfaceContainerHighest else colors.surfaceContainerHigh,
+            colors.onSurface,
+        )
         ActionRole.QUIET -> ActionVisuals(Color.Transparent, colors.onSurface)
         ActionRole.DESTRUCTIVE -> ActionVisuals(Color.Transparent, colors.error)
     }
@@ -223,6 +230,60 @@ fun MisulIconButton(
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription, tint = if (enabled) tint ?: visual.content else visual.content, modifier = Modifier.size(iconSize))
+        }
+    }
+}
+
+/**
+ * Floating chrome surface: a raised white capsule with a soft ambient shadow in light mode, one
+ * tonal step above the canvas in dark mode (where shadows do not read). Used for controls that
+ * float over the transcript - header buttons and the composer.
+ */
+@Composable
+fun Modifier.floatingChrome(shape: Shape = CircleShape): Modifier {
+    val colors = MaterialTheme.colorScheme
+    val dark = colors.background.luminance() < 0.5f
+    val shadowColor = Color.Black.copy(alpha = 0.14f)
+    return this
+        .shadow(if (dark) 0.dp else 14.dp, shape, clip = false, ambientColor = shadowColor, spotColor = shadowColor)
+        .clip(shape)
+        .background(if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest)
+}
+
+/** A 44dp floating circular control inside a 48dp target. */
+@Composable
+fun FloatingIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val colors = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier
+            .size(IconTarget)
+            .misulPressMotion(interaction, pressedScale = pressedScaleFor(MisulPressTarget.ICON))
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.size(44.dp).floatingChrome().misulTonalFeedback(interaction, colors.onSurface),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription,
+                tint = if (enabled) colors.onBackground else colors.onSurfaceVariant.copy(alpha = 0.38f),
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }

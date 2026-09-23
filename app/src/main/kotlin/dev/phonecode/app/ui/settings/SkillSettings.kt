@@ -226,11 +226,11 @@ internal fun SkillDetailPage(vm: ChatViewModel, skill: ManagedSkill, onEdit: () 
         skill.name,
         onBack = onBack,
         action = {
-            MisulIconButton(
-                Icons.Outlined.Edit,
-                "Edit skill",
+            SettingsSaveAction(
                 enabled = !toggling && deleteOperation?.running != true,
                 onClick = onEdit,
+                contentDescription = "Edit skill",
+                label = "Edit",
             )
         },
     ) {
@@ -447,7 +447,42 @@ internal fun SkillEditorPage(
         error = null
     }
 
-    SettingsPageShell(if (isNew) "New skill" else "Edit $name", onBack) {
+    val parsedDraft = parseSkillMarkdown(content)
+    val draftIsValid = if (advancedSource) {
+        parsedDraft != null &&
+            parsedDraft.name == name &&
+            parsedDraft.description.isNotBlank() &&
+            parsedDraft.body.isNotBlank()
+    } else {
+        name.isNotBlank() && description.isNotBlank() && instructions.isNotBlank()
+    }
+    fun save() {
+        val parsed = parseSkillMarkdown(content)
+        if (parsed == null || parsed.name != name || parsed.description.isBlank() || parsed.body.isBlank()) {
+            error = "Add a valid name, when-to-use description, and instructions before saving."
+            return
+        }
+        scope.launch {
+            saving = true
+            vm.saveSkillAndWait(skillId, skillScope, name, content, baseline.takeUnless { isNew }).fold(
+                onSuccess = { withContext(Dispatchers.Main.immediate) { onSaved() } },
+                onFailure = { error = it.message ?: "Skill could not be saved" },
+            )
+            saving = false
+        }
+    }
+
+    SettingsPageShell(
+        if (isNew) "New skill" else "Edit $name",
+        onBack,
+        action = {
+            SettingsSaveAction(
+                enabled = !loading && !saving && !unavailable && !conflict && baselineReady && draftIsValid,
+                onClick = ::save,
+                contentDescription = "Save skill",
+            )
+        },
+    ) {
         if (isNew) {
             MisulSectionLabel("Identity")
             MisulField(
@@ -543,39 +578,6 @@ internal fun SkillEditorPage(
             }
         }
         error?.let { SettingsErrorText(it, style = MaterialTheme.typography.bodySmall) }
-        Spacer(Modifier.height(Spacing.s))
-        val parsedDraft = parseSkillMarkdown(content)
-        val draftIsValid = if (advancedSource) {
-            parsedDraft != null &&
-                parsedDraft.name == name &&
-                parsedDraft.description.isNotBlank() &&
-                parsedDraft.body.isNotBlank()
-        } else {
-            name.isNotBlank() && description.isNotBlank() && instructions.isNotBlank()
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            MisulActionButton(
-                label = "Save",
-                role = ActionRole.PRIMARY,
-                loading = saving,
-                enabled = !loading && !saving && !unavailable && !conflict && baselineReady && draftIsValid,
-                onClick = {
-                    val parsed = parseSkillMarkdown(content)
-                    if (parsed == null || parsed.name != name || parsed.description.isBlank() || parsed.body.isBlank()) {
-                        error = "Add a valid name, when-to-use description, and instructions before saving."
-                        return@MisulActionButton
-                    }
-                    scope.launch {
-                        saving = true
-                        vm.saveSkillAndWait(skillId, skillScope, name, content, baseline.takeUnless { isNew }).fold(
-                            onSuccess = { withContext(Dispatchers.Main.immediate) { onSaved() } },
-                            onFailure = { error = it.message ?: "Skill could not be saved" },
-                        )
-                        saving = false
-                    }
-                },
-            )
-        }
     }
 }
 

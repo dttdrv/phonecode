@@ -185,7 +185,7 @@ internal fun GitPage(
                 // Rows now paint their own card surface, so freeform group content does too.
                 MisulGroup {
                     Column(
-                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(Spacing.m),
+                        Modifier.fillMaxWidth().padding(Spacing.m),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text("Enter this code on GitHub", style = MaterialTheme.typography.labelMedium, color = colors.secondary)
@@ -210,6 +210,7 @@ internal fun GitPage(
             state.githubLogin != null -> {
                 MisulGroup {
                     MisulContentRow(showDivider = false) {
+                        PluginTile("GitHub", androidx.compose.ui.graphics.Color(0xFF24292F), 36.dp)
                         Column(Modifier.weight(1f)) {
                             Text("@${state.githubLogin}", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
                             Text("GitHub account connected", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
@@ -220,8 +221,16 @@ internal fun GitPage(
                 SettingsNote("Push and pull also require a local Git repository with a valid HTTPS origin.")
             }
             else -> {
-                MisulActionButton("Sign in with GitHub", onClick = vm::startGitHubSignIn, role = ActionRole.PRIMARY)
-                Spacer(Modifier.height(6.dp))
+                MisulGroup {
+                    MisulContentRow(showDivider = false) {
+                        PluginTile("GitHub", androidx.compose.ui.graphics.Color(0xFF24292F), 36.dp)
+                        Column(Modifier.weight(1f)) {
+                            Text("GitHub", style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
+                            Text("Push, pull and clone private repositories", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        }
+                        MisulActionButton("Sign in", onClick = vm::startGitHubSignIn, role = ActionRole.PRIMARY)
+                    }
+                }
             }
         }
         browserError?.let {

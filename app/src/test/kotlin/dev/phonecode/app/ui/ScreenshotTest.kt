@@ -384,7 +384,7 @@ class ScreenshotTest {
         shoot("01-chat-conversation")
 
         compose.onNodeWithContentDescription("Switch model").performClick()
-        shootScreen("03-model-picker", "Model & reasoning")
+        shootScreen("03-model-picker", "Search models")
         compose.onAllNodesWithText("Done").onFirst().performClick()
         compose.waitForIdle()
 
@@ -406,6 +406,48 @@ class ScreenshotTest {
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Git").performClick()
         shootPage("10-settings-git", "Git")
+    }
+
+    @Test
+    fun attachSheetAndResponseInfo() {
+        awaitConversation()
+        compose.onNodeWithContentDescription("Add attachment").performClick()
+        settleAnimation()
+        shoot("53-attach-sheet")
+        compose.onNodeWithText("Photos").assertIsDisplayed()
+        compose.onNodeWithText("Files").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        settleAnimation()
+        compose.onAllNodesWithContentDescription("Response info").onLast().performClick()
+        settleAnimation()
+        shoot("54-response-info")
+        compose.onNodeWithText("Report response").assertIsDisplayed()
+    }
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun darkSurfaces() {
+        awaitConversation()
+        compose.onNodeWithContentDescription("Switch model").performClick()
+        settleAnimation()
+        shoot("55-model-picker-dark")
+        androidx.test.espresso.Espresso.pressBack()
+        settleAnimation()
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("Plugins").performClick()
+        shootPage("56-plugins-dark", "Plugins")
+    }
+
+    @Test
+    fun pluginsDirectoryAndDetail() {
+        awaitConversation()
+        compose.onNodeWithContentDescription("Menu").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("Plugins").performClick()
+        shootPage("51-plugins-directory", "Plugins")
+        compose.onNodeWithText("GitHub").performClick()
+        shootPage("52-plugin-detail-github", "Plugin")
     }
 
     @Test
@@ -685,9 +727,9 @@ class ScreenshotTest {
         compose.onNodeWithContentDescription("Back").performClick()
 
         compose.onNodeWithText("Plugins").performClick()
-        compose.onNodeWithText("MCP servers").performClick()
+        compose.onNodeWithText("MCP servers").performScrollTo().performClick()
         compose.onNodeWithText("Add server").performClick()
-        compose.onNodeWithText("Test").performClick()
+        compose.onNodeWithText("Test connection").performClick()
         shootFullPage("23-mcp-validation", "Add MCP server")
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
@@ -936,7 +978,7 @@ class ScreenshotTest {
             compose.waitForIdle()
 
             compose.onNodeWithText("Add server").performScrollTo().performClick()
-            compose.onNodeWithText("Test").performScrollTo().performClick()
+            compose.onNodeWithText("Test connection").performScrollTo().performClick()
             compose.onNodeWithText("Name is required").assertIsDisplayed()
             shootFullPage("23-mcp-validation", "Add MCP server")
             compose.onNodeWithContentDescription("Server name").performTextInput("matrix-draft")
@@ -1004,7 +1046,7 @@ class ScreenshotTest {
             // Git: signed-out, device authorization, connected, a dirty manual-credential
             // draft, and guarded sign-out without mutating the real credential store.
             show(SettingsRoute.Git)
-            compose.onNodeWithText("Sign in with GitHub").assertIsDisplayed()
+            compose.onNodeWithText("Push, pull and clone private repositories").assertIsDisplayed()
             shootFullPage("48-task10-git-clean", "Git")
             state.value = state.value.copy(
                 githubAuthCode = "MATRIX-9QW2",
@@ -1164,7 +1206,7 @@ class ScreenshotTest {
             compose.onNodeWithContentDescription("Menu").performClick()
             compose.onNodeWithContentDescription("Settings").performClick()
             compose.onNodeWithText("Plugins").performClick()
-            compose.onNodeWithText("MCP servers").performClick()
+            compose.onNodeWithText("MCP servers").performScrollTo().performClick()
 
             compose.onNodeWithText("Workspace Index").assertIsDisplayed()
             compose.onNodeWithText("Connected · 3 reported tools").assertIsDisplayed()

@@ -1,5 +1,7 @@
 package dev.phonecode.app.ui.onboarding
 
+import dev.phonecode.app.ui.components.PhoneIcons
+import dev.phonecode.app.ui.components.FloatingIconButton
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -75,13 +77,7 @@ fun OnboardingScreen(
     androidx.activity.compose.BackHandler(enabled = step > 0) { onStepChange(0) }
 
     Box(
-        Modifier.fillMaxSize()
-            .background(colors.background)
-            .background(
-                Brush.linearGradient(
-                    listOf(accent.copy(alpha = 0.12f), Color.Transparent, Color.Transparent),
-                ),
-            ),
+        Modifier.fillMaxSize().background(colors.background),
     ) {
         AnimatedContent(
             targetState = step,
@@ -125,57 +121,43 @@ private fun Welcome(onNext: () -> Unit) {
         Modifier.fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(horizontal = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(horizontal = 24.dp),
     ) {
         Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(vertical = 32.dp),
             verticalArrangement = Arrangement.Center,
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_phonecode_mark),
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(36.dp),
-                    )
-                }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_phonecode_mark),
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(32.dp),
+                )
                 Text(
                     "PhoneCode",
-                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.onBackground,
                 )
             }
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(24.dp))
             Text(
                 "Build real projects from your phone",
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                 color = colors.onBackground,
-                textAlign = TextAlign.Center,
                 modifier = Modifier.semantics { heading() },
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             Text(
                 "Run PhoneCode in a private local workspace, with the models and tools you trust and access to phone folders you choose.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
-                textAlign = TextAlign.Center,
             )
-            Spacer(Modifier.height(28.dp))
-            MisulGroup {
+            Spacer(Modifier.height(36.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
                 FeatureRow(Icons.Outlined.Folder, "Private project workspaces", "Keep each project and its chats together")
                 FeatureRow(Icons.Outlined.AccountTree, "Local tools and Git", "Build, test, and manage source control on device")
-                FeatureRow(
-                    Icons.Outlined.Cloud,
-                    "Your choice of model",
-                    "Sign in or add provider access",
-                    showDivider = false,
-                )
+                FeatureRow(Icons.Outlined.Cloud, "Your choice of model", "Sign in or add provider access")
             }
         }
         MisulActionButton(
@@ -184,7 +166,7 @@ private fun Welcome(onNext: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             onClick = onNext,
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
     }
 }
 
@@ -211,12 +193,12 @@ private fun Connect(
             Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MisulIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClick = onBack)
+            FloatingIconButton(PhoneIcons.Back, "Back", onClick = onBack)
             Text(
                 "Setup",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.onBackground,
-                modifier = Modifier.weight(1f).padding(start = 4.dp),
+                modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
             Text(
                 "Step 2 of 2",
@@ -319,11 +301,11 @@ private fun FeatureRow(
     showDivider: Boolean = true,
 ) {
     val colors = MaterialTheme.colorScheme
-    MisulContentRow(showDivider = showDivider) {
-        Icon(icon, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(22.dp))
-        Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-            Text(sub, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Icon(icon, null, tint = colors.onBackground, modifier = Modifier.padding(top = 1.dp).size(24.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = colors.onBackground)
+            Text(sub, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }

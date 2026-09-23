@@ -200,8 +200,7 @@ internal fun ProfilePage(
         title = "Your profile",
         onBack = onBack,
         action = {
-            MisulIconButton(
-                icon = Icons.Filled.Check,
+            SettingsSaveAction(
                 contentDescription = "Save profile",
                 enabled = changed && !saving,
                 onClick = {
@@ -276,8 +275,7 @@ internal fun CustomInstructionsPage(
         title = "Custom instructions",
         onBack = onBack,
         action = {
-            MisulIconButton(
-                icon = Icons.Filled.Check,
+            SettingsSaveAction(
                 contentDescription = "Save custom instructions",
                 enabled = changed && !saving,
                 onClick = {

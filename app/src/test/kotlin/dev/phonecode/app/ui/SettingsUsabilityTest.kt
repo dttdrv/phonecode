@@ -1,5 +1,6 @@
 package dev.phonecode.app.ui
 
+import androidx.compose.ui.test.performScrollTo
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
@@ -244,8 +245,8 @@ class SettingsUsabilityTest {
     @Test
     fun personalizationStyleAndUseTogglePersistLocally() {
         showSettings("personal")
-        compose.onNodeWithText("Concise").performClick()
-        compose.onNodeWithText("Use personalization").performClick()
+        compose.onNodeWithText("Concise").performScrollTo().performClick()
+        compose.onNodeWithText("Use personalization").performScrollTo().performClick()
 
         val store = AppSettingsStore(java.io.File(app().filesDir, "app_settings.json"))
         compose.waitUntil(5_000) {

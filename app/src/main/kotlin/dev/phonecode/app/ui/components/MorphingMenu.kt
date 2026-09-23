@@ -18,6 +18,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -48,8 +51,11 @@ fun MorphingMenu(
     val anchorPixels = with(density) { anchorSize.toPx() }
     val finalCorner = with(density) { 24.dp.toPx() }
     val outlineWidth = with(density) { 1.dp.toPx() }
-    val background = MaterialTheme.colorScheme.surfaceContainerHigh
-    val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    val background = dialogContainerColor()
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    // Light menus float on a soft shadow; dark menus need the hairline because shadows vanish.
+    val outline = if (dark) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f) else Color.Transparent
+    val menuShape = RoundedCornerShape(24.dp)
     val positionProvider = remember(above, alignEnd, margin) {
         object : PopupPositionProvider {
             override fun calculatePosition(
@@ -84,7 +90,13 @@ fun MorphingMenu(
             properties = PopupProperties(focusable = true),
         ) {
             Box(
-                modifier.drawWithContent {
+                modifier.graphicsLayer {
+                    shadowElevation = if (dark) 0f else 18.dp.toPx() * progress.value
+                    shape = menuShape
+                    this.clip = false
+                    ambientShadowColor = Color.Black.copy(alpha = 0.18f)
+                    spotShadowColor = Color.Black.copy(alpha = 0.18f)
+                }.drawWithContent {
                     val value = progress.value
                     val width = anchorPixels + (size.width - anchorPixels) * value
                     val height = anchorPixels + (size.height - anchorPixels) * value

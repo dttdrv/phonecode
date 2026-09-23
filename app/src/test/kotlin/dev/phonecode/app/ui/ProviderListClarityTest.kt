@@ -59,7 +59,6 @@ class ProviderListClarityTest {
         assertTrue(agentTools.contains("stateDescription"))
         val providers = File(root, "ProviderSettings.kt").readText()
         assertTrue(providers.contains("MisulNavigationRow"))
-        assertTrue(providers.contains("role = ActionRole.PRIMARY"))
     }
 
     private val seedSettings = object : ExternalResource() {

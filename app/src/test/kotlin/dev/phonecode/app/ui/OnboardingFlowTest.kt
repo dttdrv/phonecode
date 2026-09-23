@@ -131,16 +131,16 @@ class OnboardingFlowTest {
         compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("screenshots/25-model-setup.png")
-        compose.onNodeWithText("OpenAI").performClick()
+        compose.onNodeWithText("OpenRouter").performClick()
         compose.mainClock.advanceTimeBy(300)
         compose.waitForIdle()
         compose.onNodeWithText("Save and continue").assertIsNotEnabled()
         compose.onNodeWithContentDescription("Show API key").assertIsDisplayed()
-        assertStableDetailChrome("OpenAI")
+        assertStableDetailChrome("OpenRouter")
         captureScreenRoboImage("screenshots/27-model-setup-api-key.png")
-        compose.onNodeWithContentDescription("OpenAI API key").performTextInput("test-key")
-        compose.onNodeWithContentDescription("OpenAI API key").assertIsDisplayed()
-        assertNull(UiTestSecureKeyStore.stored("openai"))
+        compose.onNodeWithContentDescription("OpenRouter API key").performTextInput("test-key")
+        compose.onNodeWithContentDescription("OpenRouter API key").assertIsDisplayed()
+        assertNull(UiTestSecureKeyStore.stored("openrouter"))
         compose.onNodeWithText("Save and continue").performClick()
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText("What should we build?").fetchSemanticsNodes().isNotEmpty()
@@ -206,8 +206,8 @@ class OnboardingFlowTest {
             }
         }
 
-        compose.onNodeWithText("OpenAI").performClick()
-        compose.onNodeWithContentDescription("OpenAI API key").assertIsDisplayed()
+        compose.onNodeWithText("OpenRouter").performClick()
+        compose.onNodeWithContentDescription("OpenRouter API key").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Choose how to connect").assertIsDisplayed()
         assertEquals(0, rootBackCount)

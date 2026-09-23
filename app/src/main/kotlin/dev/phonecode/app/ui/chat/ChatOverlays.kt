@@ -1,5 +1,19 @@
 package dev.phonecode.app.ui.chat
 
+import dev.phonecode.app.ui.components.raisedFillColor
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Commit
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Info
+import dev.phonecode.app.ui.components.floatingChrome
+import dev.phonecode.app.ui.components.dialogContainerColor
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -289,7 +303,9 @@ private fun PcSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.(clo
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = dialogContainerColor(),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = { SheetHandle() },
     ) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding()) { content(close) }
     }
@@ -565,67 +581,74 @@ private fun ModelSheet(
     val availableReasoningEfforts = reasoningEfforts(configuredSelection)
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 2.dp, bottom = 6.dp),
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Model & reasoning", style = MaterialTheme.typography.titleSmall, color = colors.onBackground, modifier = Modifier.weight(1f))
+            Text(
+                "Model",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.onBackground,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
             Text(
                 "Done",
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.onBackground,
-                modifier = Modifier.clip(ShapePill).clickable(onClick = onDone)
-                    .heightIn(min = Spacing.touchTarget)
-                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                modifier = Modifier.clip(ShapePill).background(raisedFillColor())
+                    .clickable(role = Role.Button, onClick = onDone)
+                    .heightIn(min = 40.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
             )
         }
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Reasoning", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
-                Text(
-                    if (availableReasoningEfforts.isEmpty()) "Not available" else selectedEffort.display(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.tertiary,
-                )
-            }
-            if (availableReasoningEfforts.isNotEmpty()) {
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    availableReasoningEfforts.forEach { effort ->
-                        val selected = selectedEffort == effort
-                        Box(
-                            Modifier.heightIn(min = Spacing.touchTarget).clip(ShapePill)
-                                .background(if (selected) colors.primary else colors.surfaceContainerHigh)
-                                .semantics {
-                                    this.selected = selected
-                                    role = Role.RadioButton
-                                }
-                                .clickable { onSetEffort(effort) }
-                                .padding(horizontal = 14.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                effort.display(),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (selected) colors.onPrimary else colors.onBackground,
-                            )
-                        }
+        if (availableReasoningEfforts.isNotEmpty()) {
+            Text(
+                "Reasoning",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(start = 20.dp, top = 10.dp, bottom = 6.dp),
+            )
+            // Segmented control: one tonal track, the selected effort is a raised pill.
+            Row(
+                Modifier.padding(horizontal = 16.dp).fillMaxWidth()
+                    .clip(ShapePill).background(raisedFillColor())
+                    .horizontalScroll(rememberScrollState())
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                availableReasoningEfforts.forEach { effort ->
+                    val selected = selectedEffort == effort
+                    Box(
+                        Modifier.heightIn(min = 40.dp).widthIn(min = 64.dp)
+                            .then(if (selected) Modifier.floatingChrome(ShapePill) else Modifier.clip(ShapePill))
+                            .semantics {
+                                this.selected = selected
+                                role = Role.RadioButton
+                            }
+                            .clickable { onSetEffort(effort) }
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            effort.display(),
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal),
+                            color = if (selected) colors.onBackground else colors.onSurfaceVariant,
+                            maxLines = 1,
+                        )
                     }
                 }
             }
         }
         Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().heightIn(min = Spacing.touchTarget)
-                .clip(ShapePill).background(colors.surfaceContainerHigh),
+            Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp).fillMaxWidth().heightIn(min = 44.dp)
+                .clip(ShapePill).background(raisedFillColor()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Outlined.Search, null, tint = colors.tertiary, modifier = Modifier.padding(start = 12.dp).size(17.dp))
-            Box(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                if (query.isEmpty()) Text("Search models", style = MaterialTheme.typography.bodySmall, color = colors.tertiary)
+            Icon(Icons.Outlined.Search, null, tint = colors.onSurfaceVariant, modifier = Modifier.padding(start = 14.dp).size(18.dp))
+            Box(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                if (query.isEmpty()) Text("Search models", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
                 BasicTextField(
                     value = query, onValueChange = { query = it },
-                    textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onBackground),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onBackground),
                     cursorBrush = SolidColor(LocalMisulAccent.current), singleLine = true,
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Search models" },
                 )
@@ -637,11 +660,14 @@ private fun ModelSheet(
                 (it.providerId != "codex" || codexConnected) &&
                 (query.isBlank() || it.label.contains(query, ignoreCase = true) || it.modelId.contains(query, ignoreCase = true))
         }
-        val grouped = visible.groupBy { it.providerId }
         val names = remember(models) { providerNames() }
-        val favouriteModels = visible.filter { keyOf(it) in favourites }
+        val readyGroups = visible.filter { providerConfigured(it.providerId) }.groupBy { it.providerId }
+        // Without a search, providers that still need setup collapse to one row each; a search
+        // reaches their individual models so nothing is hidden.
+        val pendingGroups = visible.filterNot { providerConfigured(it.providerId) }.groupBy { it.providerId }
+        val favouriteModels = visible.filter { keyOf(it) in favourites && providerConfigured(it.providerId) }
         LazyColumn(
-            Modifier.heightIn(max = 480.dp).padding(horizontal = 6.dp, vertical = 4.dp)
+            Modifier.heightIn(max = 480.dp).padding(horizontal = 8.dp, vertical = 4.dp)
                 .fillMaxWidth(),
         ) {
             if (visible.isEmpty()) {
@@ -655,56 +681,104 @@ private fun ModelSheet(
                 }
             }
             if (favouriteModels.isNotEmpty()) {
-                item("favourites-header") {
-                    Text(
-                        "Favourites",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 14.dp, top = 12.dp, bottom = 4.dp),
-                    )
-                }
+                item("favourites-header") { ModelGroupHeader("Favourites") }
                 items(favouriteModels, key = { "favourite:${keyOf(it)}" }) { option ->
-                    val ready = providerConfigured(option.providerId)
                     ModelRow(
                         option = option,
-                        selected = ready && option == selectedModel,
+                        selected = option == selectedModel,
                         isFav = true,
-                        ready = ready,
+                        ready = true,
                         onSelect = { onSelectModel(option) },
                         onSetup = { onConfigureProvider(option.providerId) },
                         onToggleFav = { onToggleFavourite(option) },
                     )
                 }
             }
-            grouped.forEach { (pid, options) ->
-                val ready = providerConfigured(pid)
-                item("provider:$pid") {
-                    Text(
-                        (names[pid] ?: pid) + if (ready) "" else " · Setup required",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (ready) colors.onSurfaceVariant else colors.error,
-                        modifier = Modifier.padding(start = 14.dp, top = 12.dp, bottom = 4.dp),
-                    )
-                }
+            readyGroups.forEach { (pid, options) ->
+                item("provider:$pid") { ModelGroupHeader(names[pid] ?: pid) }
                 items(options, key = { "model:${keyOf(it)}" }) { option ->
                     ModelRow(
                         option = option,
-                        selected = ready && option == selectedModel,
+                        selected = option == selectedModel,
                         isFav = keyOf(option) in favourites,
-                        ready = ready,
+                        ready = true,
                         onSelect = { onSelectModel(option) },
                         onSetup = { onConfigureProvider(option.providerId) },
                         onToggleFav = { onToggleFavourite(option) },
                     )
+                }
+            }
+            if (pendingGroups.isNotEmpty()) {
+                item("pending-header") { ModelGroupHeader("Set up to use") }
+                if (query.isBlank()) {
+                    items(pendingGroups.entries.toList(), key = { "pending:${it.key}" }) { (pid, options) ->
+                        ProviderSetupRow(
+                            name = names[pid] ?: pid,
+                            modelCount = options.size,
+                            onSetup = { onConfigureProvider(pid) },
+                        )
+                    }
+                } else {
+                    pendingGroups.forEach { (pid, options) ->
+                        items(options, key = { "pending-model:${keyOf(it)}" }) { option ->
+                            ModelRow(
+                                option = option,
+                                selected = false,
+                                isFav = keyOf(option) in favourites,
+                                ready = false,
+                                providerName = names[pid] ?: pid,
+                                onSelect = { onSelectModel(option) },
+                                onSetup = { onConfigureProvider(pid) },
+                                onToggleFav = { onToggleFavourite(option) },
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+@Composable
+private fun ModelGroupHeader(label: String) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 4.dp).semantics { heading() },
+    )
+}
+
+@Composable
+private fun ProviderSetupRow(name: String, modelCount: Int, onSetup: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
+            .clickable(role = Role.Button, onClickLabel = "Set up $name", onClick = onSetup)
+            .heightIn(min = 52.dp).padding(start = 12.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+            Text(name, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "$modelCount ${if (modelCount == 1) "model" else "models"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+            )
+        }
+        Text(
+            "Set up",
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = colors.onBackground,
+            modifier = Modifier.clip(ShapePill).background(raisedFillColor())
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+        )
+    }
+}
+
 // DEFAULT reads as "Auto": thinking adapts to the selected model (catalog reasoning capability)
 // instead of one global effort silently applied to everything (round-3 feedback).
-private fun ReasoningEffort.display(): String =
+internal fun ReasoningEffort.display(): String =
     when (this) {
         ReasoningEffort.DEFAULT -> "Auto"
         ReasoningEffort.XHIGH -> "Extra high"
@@ -720,16 +794,17 @@ private fun ModelRow(
     onSelect: () -> Unit,
     onSetup: () -> Unit,
     onToggleFav: () -> Unit,
+    providerName: String? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
-            .background(if (selected) colors.surfaceContainerHigh else Color.Transparent)
+            .background(if (selected) raisedFillColor() else Color.Transparent)
             .semantics {
                 this.selected = selected
                 role = Role.RadioButton
             }
-            .clickable(onClick = if (ready) onSelect else onSetup).heightIn(min = 52.dp).padding(start = 14.dp),
+            .clickable(onClick = if (ready) onSelect else onSetup).heightIn(min = 52.dp).padding(start = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
@@ -741,21 +816,84 @@ private fun ModelRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (!ready) Text("Provider setup required", style = MaterialTheme.typography.bodySmall, color = colors.error)
+            if (!ready) {
+                Text(
+                    listOfNotNull(providerName, "Set up to use").joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+            }
         }
         if (selected) Icon(Icons.Filled.Check, null, tint = colors.onBackground, modifier = Modifier.size(20.dp))
         Box(
-            Modifier.size(Spacing.touchTarget).clip(MaterialTheme.shapes.extraSmall).clickable(onClick = onToggleFav),
+            Modifier.size(Spacing.touchTarget).clip(ShapePill).clickable(onClick = onToggleFav),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 if (isFav) Icons.Filled.Star else Icons.Filled.StarBorder,
                 if (isFav) "Unfavourite" else "Favourite",
-                tint = if (isFav) colors.onBackground else colors.tertiary,
+                tint = if (isFav) colors.onBackground else colors.tertiary.copy(alpha = 0.7f),
                 modifier = Modifier.size(18.dp),
             )
         }
     }
+}
+
+/** The composer's "+" sheet: large tiles for the two ways to attach. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun AttachSheet(onDismiss: () -> Unit, onPhotos: () -> Unit, onFiles: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = dialogContainerColor(),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = { SheetHandle() },
+    ) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+            Text(
+                "Add to chat",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.onBackground,
+                modifier = Modifier.padding(start = 4.dp, bottom = 12.dp).semantics { heading() },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AttachTile(Icons.Outlined.Image, "Photos", "Pick from your library", Modifier.weight(1f), onPhotos)
+                AttachTile(Icons.Outlined.Description, "Files", "Text, code or JSON", Modifier.weight(1f), onFiles)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttachTile(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    detail: String,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Column(
+        modifier.clip(RoundedCornerShape(20.dp)).background(raisedFillColor())
+            .clickable(role = Role.Button, onClick = onClick)
+            .heightIn(min = 96.dp).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(icon, null, tint = colors.onSurface, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(6.dp))
+        Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = colors.onSurface)
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SheetHandle() {
+    Box(
+        Modifier.padding(top = 10.dp, bottom = 12.dp).size(width = 36.dp, height = 5.dp)
+            .clip(ShapePill).background(MaterialTheme.colorScheme.outlineVariant),
+    )
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -916,34 +1054,42 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
                     traversalIndex = -1f
                 },
         ) {
-            Text(
-                "Approve agent action?",
-                style = MaterialTheme.typography.titleLarge,
-                color = colors.onBackground,
-                modifier = Modifier.testTag("approval-intro").semantics {
-                    heading()
-                    traversalIndex = 0f
-                },
-            )
-            Text(
-                "Review this action before it runs.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(44.dp).clip(ShapePill).background(raisedFillColor()),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(approvalIcon(request.tool), null, tint = colors.onSurface, modifier = Modifier.size(22.dp))
+                }
+                Column(Modifier.padding(start = 14.dp)) {
+                    Text(
+                        "Approve agent action?",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.onBackground,
+                        modifier = Modifier.testTag("approval-intro").semantics {
+                            heading()
+                            traversalIndex = 0f
+                        },
+                    )
+                    Text(
+                        "Review this action before it runs.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
             Spacer(Modifier.height(Spacing.m))
-            Text("Action", style = MaterialTheme.typography.labelSmall, color = colors.tertiary)
             Text(
                 presentation.action,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.onBackground,
-                modifier = Modifier.padding(top = 2.dp),
             )
             Text(
-                "Tool · ${request.tool}",
+                request.tool,
                 style = MaterialTheme.typography.labelMedium.copy(fontFamily = PcMono),
                 color = colors.onSurfaceVariant,
-                modifier = Modifier.padding(top = 3.dp),
+                modifier = Modifier.padding(top = 2.dp).semantics { contentDescription = "Tool ${request.tool}" },
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -955,18 +1101,24 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
                         isTraversalGroup = true
                         traversalIndex = 1f
                     }
-                    .padding(vertical = 4.dp),
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(raisedFillColor().copy(alpha = 0.6f))
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
-                Text(
-                    presentation.risk,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = colors.onBackground,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Info, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    Text(
+                        presentation.risk,
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.onBackground,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
                 Text(
                     presentation.guidance,
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
+                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
             Spacer(Modifier.height(Spacing.s))
@@ -980,8 +1132,8 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
             ) {
                 Text(
                     "Details",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.tertiary,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant,
                 )
                 if (detailsPageCount > 1) {
                     Row(
@@ -1037,9 +1189,9 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
                 Box(
                     Modifier.fillMaxWidth().padding(top = 5.dp)
                         .heightIn(min = Spacing.touchTarget)
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(colors.surface)
-                        .padding(Spacing.s),
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(raisedFillColor())
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
                 ) {
                     SelectionContainer {
                         Text(
@@ -1061,21 +1213,34 @@ private fun PermissionDialog(request: PermissionRequest, onApprove: () -> Unit, 
                 },
             horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
         ) {
-            MisulTextAction(
+            MisulActionButton(
                 label = "Deny",
-                destructive = true,
+                role = ActionRole.SECONDARY,
                 enabled = !submitted,
                 onClick = { resolve(onDeny) },
+                modifier = Modifier.weight(1f),
             )
-            Spacer(Modifier.weight(1f))
             MisulActionButton(
                 label = "Approve once",
                 role = ActionRole.PRIMARY,
                 enabled = !submitted,
                 onClick = { resolve(onApprove) },
+                modifier = Modifier.weight(1f),
             )
         }
         }
+    }
+}
+
+private fun approvalIcon(tool: String): androidx.compose.ui.graphics.vector.ImageVector {
+    val normalized = tool.lowercase()
+    return when {
+        normalized == "bash" || normalized.contains("shell") || normalized.contains("terminal") || normalized.contains("process") -> Icons.Outlined.Terminal
+        normalized.startsWith("write") || normalized.startsWith("edit") || normalized.startsWith("apply") -> Icons.Outlined.Edit
+        normalized.startsWith("git") -> Icons.Outlined.Commit
+        normalized.startsWith("mcp_") -> Icons.Outlined.Extension
+        normalized.startsWith("web") -> Icons.Outlined.Language
+        else -> Icons.Outlined.Shield
     }
 }
 
@@ -1246,9 +1411,11 @@ private fun QuestionDialog(request: QuestionRequest, onSubmit: (List<UserAnswer>
         }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             DialogAction("Skip all", emphasized = false, onClick = onDismiss)
-            Spacer(Modifier.weight(1f))
-            if (page > 0) DialogAction("Back", emphasized = false) { page-- }
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(8.dp))
+            if (page > 0) {
+                DialogAction("Back", emphasized = false) { page-- }
+                Spacer(Modifier.width(8.dp))
+            }
             if (page < request.questions.lastIndex) {
                 DialogAction("Next", emphasized = true, enabled = currentAnswered) { page++ }
             } else {

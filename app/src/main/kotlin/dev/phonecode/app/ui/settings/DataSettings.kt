@@ -115,7 +115,6 @@ private fun ConfirmImportDialog(
         body = { Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         actions = {
             MisulDialogAction("Cancel", onDismiss)
-            Spacer(Modifier.weight(1f))
             MisulDialogAction(secondaryAction, onSecondary)
             MisulDialogAction(action, onConfirm, destructive = true)
         },

@@ -294,9 +294,9 @@ class McpWorkflowPolishTest {
             showMcp()
             compose.onNodeWithText("Docs").performClick()
 
-            compose.onNodeWithText("Test").performClick()
+            compose.onNodeWithText("Test connection").performClick()
             val loading = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Loading")
-            compose.onNodeWithText("Test").assert(loading)
+            compose.onNodeWithText("Test connection").assert(loading)
             compose.onNodeWithContentDescription("Remote URL")
                 .performTextReplacement("https://draft-b.example/mcp")
             compose.waitUntil(5_000) {
@@ -341,9 +341,9 @@ class McpWorkflowPolishTest {
             showMcp()
             compose.onNodeWithText("Docs").performClick()
 
-            compose.onNodeWithText("Test").performClick()
+            compose.onNodeWithText("Test connection").performClick()
             val loading = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Loading")
-            compose.onNodeWithText("Test").assert(loading)
+            compose.onNodeWithText("Test connection").assert(loading)
             compose.waitUntil(5_000) {
                 compose.onAllNodesWithText("I reviewed the reported tools").fetchSemanticsNodes().isNotEmpty()
             }

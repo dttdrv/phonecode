@@ -97,6 +97,8 @@ import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Info
+import dev.phonecode.app.ui.components.PhoneIcons
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Search
@@ -115,6 +117,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -255,11 +263,14 @@ internal fun AssistantTurn(
     streaming: Boolean,
     showActions: Boolean,
     showReport: Boolean,
+    showRedo: Boolean = true,
     completedAt: Long?,
     onCopy: () -> Unit,
     onRedo: () -> Unit,
     onReport: () -> Unit,
     copyText: String,
+    model: String? = null,
+    onBranch: (() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val clipboard = LocalClipboardManager.current
@@ -268,24 +279,27 @@ internal fun AssistantTurn(
     // Keep the live state legible without scheduling continuous decorative animation.
     Column(Modifier.fillMaxWidth()) {
         if (reasoning != null) {
-            // "Thinking" row: compact disclosure for the reasoning trace.
+            // ChatGPT-style disclosure: a quiet line of text with a chevron, no container.
+            val isThinking = streaming && text.isEmpty()
+            val chevronTurn by animateFloatAsState(if (open) 90f else 0f, PhoneTweens.popEnter, label = "reasoningChevron")
             Row(
                 Modifier.clip(MaterialTheme.shapes.extraSmall).heightIn(min = Spacing.touchTarget)
                     .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
                     .clickable { open = !open }.padding(vertical = 3.dp, horizontal = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                ThinkingDot(active = streaming, open = open)
-                if (!open) {
-                    val isThinking = streaming && text.isEmpty()
-                    Text(
-                        if (isThinking) "Thinking" else "Done",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (isThinking) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (isThinking) LocalMisulAccent.current else colors.tertiary,
-                    )
-                }
+                Text(
+                    if (isThinking) "Thinking" else "Thought process",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isThinking) LocalMisulAccent.current else colors.onSurfaceVariant,
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    null,
+                    tint = colors.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp).rotate(chevronTurn),
+                )
             }
             AnimatedVisibility(
                 visible = open,
@@ -325,37 +339,91 @@ internal fun AssistantTurn(
             }
         }
 
-        AnimatedVisibility(visible = showActions || showReport, enter = fadeIn(PhoneTweens.popEnter), exit = fadeOut(PhoneTweens.popExit)) {
-            Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (showActions) {
-                    var copied by remember { mutableStateOf(false) }
-                    LaunchedEffect(copied) { if (copied) { kotlinx.coroutines.delay(1800); copied = false } }
-                    AnimatedContent(
-                        targetState = copied,
-                        transitionSpec = { fadeIn(tween(140)) togetherWith fadeOut(tween(120)) },
-                        label = "copyCheck",
-                    ) { isCopied ->
-                        ActionIcon(if (isCopied) Icons.Filled.Check else Icons.Filled.ContentCopy, "Copy") {
-                            clipboard.setText(AnnotatedString(copyText)); copied = true; onCopy()
-                        }
+        AnimatedVisibility(visible = showActions, enter = fadeIn(PhoneTweens.popEnter), exit = fadeOut(PhoneTweens.popExit)) {
+            // Copy, retry, branch and info, in that order. Reporting lives inside Info.
+            Row(Modifier.padding(top = 2.dp).offset(x = (-12).dp), verticalAlignment = Alignment.CenterVertically) {
+                var copied by remember { mutableStateOf(false) }
+                var infoOpen by remember { mutableStateOf(false) }
+                LaunchedEffect(copied) { if (copied) { kotlinx.coroutines.delay(1800); copied = false } }
+                AnimatedContent(
+                    targetState = copied,
+                    transitionSpec = { fadeIn(tween(140)) togetherWith fadeOut(tween(120)) },
+                    label = "copyCheck",
+                ) { isCopied ->
+                    ActionIcon(if (isCopied) Icons.Filled.Check else Icons.Outlined.ContentCopy, "Copy") {
+                        clipboard.setText(AnnotatedString(copyText)); copied = true; onCopy()
                     }
-                    ActionIcon(Icons.Filled.Refresh, "Redo", onRedo)
                 }
-                if (showReport) ActionIcon(Icons.Outlined.Flag, "Send safety feedback", onReport)
-                if (showActions && completedAt != null) {
-                    Text(
-                        formatCompletionDate(completedAt),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.tertiary,
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
+                if (showRedo) ActionIcon(Icons.Outlined.Refresh, "Retry", onRedo)
+                onBranch?.let { ActionIcon(PhoneIcons.Branch, "Branch in new chat", it) }
+                Box {
+                    ActionIcon(Icons.Outlined.Info, "Response info") { infoOpen = true }
+                    MorphingMenu(
+                        expanded = infoOpen,
+                        onDismiss = { infoOpen = false },
+                        above = true,
+                        modifier = Modifier.width(272.dp),
+                    ) {
+                        ResponseInfo(
+                            model = model,
+                            completedAt = completedAt,
+                            words = remember(text) { text.split(Regex("\\s+")).count { it.isNotBlank() } },
+                            showReport = showReport,
+                            onReport = { infoOpen = false; onReport() },
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-
+@Composable
+private fun ResponseInfo(
+    model: String?,
+    completedAt: Long?,
+    words: Int,
+    showReport: Boolean,
+    onReport: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        @Composable
+        fun InfoLine(label: String, value: String) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp)
+                    .semantics(mergeDescendants = true) {},
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                Text(
+                    value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurface,
+                    textAlign = TextAlign.End,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        model?.let { InfoLine("Model", it.substringAfterLast(" · ")) }
+        completedAt?.let { InfoLine("Finished", formatCompletionDate(it)) }
+        InfoLine("Length", "$words ${if (words == 1) "word" else "words"}")
+        if (showReport) {
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
+            Row(
+                Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onReport)
+                    .heightIn(min = Spacing.touchTarget).padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(Icons.Outlined.Flag, null, tint = colors.onSurface, modifier = Modifier.size(20.dp))
+                Text("Report response", style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
+            }
+        }
+    }
+}
 
 @Composable
 private fun ThinkingDot(active: Boolean, open: Boolean) {
@@ -573,7 +641,7 @@ internal fun ToolActivityView(line: ChatLine.ToolActivity) {
     }
     Column(
         Modifier.fillMaxWidth().pressFeedback(interaction, pressedScale = 0.99f)
-            .heightIn(min = Spacing.touchTarget)
+            .heightIn(min = 44.dp)
             .semantics {
                 contentDescription = "${toolAction(line.name, line.status)}, $statusLabel"
                 stateDescription = statusLabel
@@ -582,48 +650,34 @@ internal fun ToolActivityView(line: ChatLine.ToolActivity) {
             .clickable(interactionSource = interaction, indication = ripple()) { detailsOpen = true },
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Spacer(
-                Modifier.width(1.dp).height(30.dp).background(
-                    when {
-                        error -> colors.error
-                        running || line.status == ToolStatus.AWAITING_APPROVAL -> accent
-                        else -> colors.outlineVariant
-                    },
-                ),
-            )
-            Icon(
-                toolIcon(line.name), null,
-                tint = when {
-                    error -> colors.error
-                    running || line.status == ToolStatus.AWAITING_APPROVAL -> accent
-                    else -> colors.secondary
-                },
-                modifier = Modifier.size(18.dp),
-            )
-            Column(Modifier.weight(1f)) {
-                Text(
-                    toolAction(line.name, line.status),
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
-                    color = if (error) colors.error else colors.onSurface,
-                )
-                if (line.detail.isNotBlank()) {
-                    Text(
-                        line.detail.lineSequence().firstOrNull().orEmpty(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+            val tone = when {
+                error -> colors.error
+                running || line.status == ToolStatus.AWAITING_APPROVAL -> accent
+                else -> colors.onSurfaceVariant
             }
+            Icon(toolIcon(line.name), null, tint = tone, modifier = Modifier.size(17.dp))
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = tone)) { append(toolAction(line.name, line.status)) }
+                    val detail = line.detail.lineSequence().firstOrNull().orEmpty().trim()
+                    if (detail.isNotEmpty()) {
+                        append("  ")
+                        withStyle(SpanStyle(color = colors.tertiary)) { append(detail) }
+                    }
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
             if (line.status != ToolStatus.DONE) {
                 Text(
                     statusLabel,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = if (error) colors.error else colors.tertiary,
                 )
             }
@@ -631,7 +685,7 @@ internal fun ToolActivityView(line: ChatLine.ToolActivity) {
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 "Open tool details",
                 tint = colors.tertiary,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(16.dp),
             )
         }
     }
@@ -752,6 +806,7 @@ internal fun ChatTurn(
     completedAt: Long?,
     onRedo: () -> Unit,
     onReport: () -> Unit,
+    onBranch: (() -> Unit)? = null,
 ) {
     when (line) {
         is ChatLine.User -> UserBubble(line.text, line.images)
@@ -759,13 +814,16 @@ internal fun ChatTurn(
             text = line.text,
             reasoning = reasoning,
             streaming = false,
-            showActions = isLatestAssistant && !isRunning && turnOutcome == null,
-            showReport = !isRunning,
-            completedAt = completedAt,
+            showActions = !isRunning,
+            showRedo = isLatestAssistant && turnOutcome == null,
+            showReport = true,
+            completedAt = line.completedAt ?: completedAt.takeIf { isLatestAssistant },
             onCopy = {},
             onRedo = onRedo,
             onReport = onReport,
             copyText = line.text,
+            model = line.model,
+            onBranch = onBranch,
         )
         is ChatLine.Reasoning -> AssistantTurn(
             text = "",

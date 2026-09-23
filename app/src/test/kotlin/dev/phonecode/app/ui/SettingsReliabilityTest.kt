@@ -1,5 +1,6 @@
 package dev.phonecode.app.ui
 
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -93,7 +94,7 @@ class SettingsReliabilityTest {
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
         if (page == "MCP servers") compose.onNodeWithText("Plugins").performClick()
-        compose.onNodeWithText(page).performClick()
+        compose.onNodeWithText(page).performScrollTo().performClick()
     }
 
     @Test
@@ -158,7 +159,7 @@ class SettingsReliabilityTest {
             compose.onNodeWithContentDescription("Menu").performClick()
             compose.onNodeWithContentDescription("Settings").performClick()
             compose.onNodeWithText("Plugins").performClick()
-            compose.onNodeWithText("MCP servers").performClick()
+            compose.onNodeWithText("MCP servers").performScrollTo().performClick()
             compose.onNodeWithText("fragile-server").performClick()
             compose.onNodeWithText("Delete server").performClick()
             compose.onAllNodesWithText("Delete server").onLast().performClick()
@@ -190,7 +191,7 @@ class SettingsReliabilityTest {
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithText("Plugins").performClick()
-        compose.onNodeWithText("MCP servers").performClick()
+        compose.onNodeWithText("MCP servers").performScrollTo().performClick()
         compose.onNodeWithText("temporary-server").performClick()
         compose.onNodeWithText("Delete server").performClick()
 

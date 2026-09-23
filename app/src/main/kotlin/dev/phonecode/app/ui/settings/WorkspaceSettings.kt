@@ -1,5 +1,7 @@
 package dev.phonecode.app.ui.settings
 
+import androidx.compose.material.icons.filled.Add
+import dev.phonecode.app.ui.components.MisulActionRow
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -62,8 +64,8 @@ internal fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
             FolderStatusRow("Private project workspace", "Permanent and fully available to the agent", showDivider = false)
         }
         SettingsSection("Phone folders")
-        if (state.sharedFolders.isNotEmpty()) {
-            MisulGroup {
+        MisulGroup {
+            run {
                 state.sharedFolders.forEachIndexed { index, folder ->
                     androidx.compose.foundation.layout.Row(
                         Modifier.fillMaxWidth().padding(start = Spacing.m, end = Spacing.xs),
@@ -76,19 +78,19 @@ internal fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
                         }
                         MisulIconButton(Icons.Filled.Delete, "Remove ${folder.name}", onClick = { pendingUnlinkId = folder.id })
                     }
-                    if (index != state.sharedFolders.lastIndex) androidx.compose.material3.HorizontalDivider(
+                    androidx.compose.material3.HorizontalDivider(
                         Modifier.padding(start = Spacing.m),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.52f),
                     )
                 }
             }
-            Spacer(Modifier.height(Spacing.s))
+            MisulActionRow(
+                label = "Link a folder",
+                icon = Icons.Filled.Add,
+                showDivider = false,
+                onClick = { picker.launch(null) },
+            )
         }
-        MisulActionButton(
-            label = "Link a folder",
-            role = if (state.sharedFolders.isEmpty()) ActionRole.PRIMARY else ActionRole.SECONDARY,
-            onClick = { picker.launch(null) },
-        )
         SettingsNote("The system picker grants access only to the folder you choose. Linked access survives app restarts and can be removed here or in system settings.")
         SettingsSection("Approval policy")
         MisulGroup(Modifier.selectableGroup()) {

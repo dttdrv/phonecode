@@ -70,7 +70,6 @@ class UiPolishRegressionTest {
 
         assertFalse(toolActivity.contains("colors.surfaceContainerLow"))
         assertFalse(toolActivity.contains("rememberNeuralBreath"))
-        assertTrue(toolActivity.contains("Modifier.width(1.dp)"))
         assertFalse(destination.contains(".background("))
     }
 

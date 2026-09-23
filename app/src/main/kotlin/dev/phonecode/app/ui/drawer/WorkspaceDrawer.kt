@@ -1,5 +1,16 @@
 package dev.phonecode.app.ui.drawer
 
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import dev.phonecode.app.ui.components.PhoneIcons
+import dev.phonecode.app.ui.components.floatingChrome
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -242,8 +253,23 @@ internal fun WorkspaceDrawer(
                     overscrollEffect = listOverscroll.takeIf { listCanScroll },
                     userScrollEnabled = listCanScroll,
                 ) {
-            item {
-                Text("Projects", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 6.dp))
+            if (query.isBlank()) {
+                item(key = "skills") {
+                    DrawerDestination(icon = Icons.Outlined.AutoAwesome, label = "Skills", value = state.activeSkillCount.takeIf { it > 0 }?.let { "$it active" }, onClick = onOpenSkills)
+                }
+                item(key = "mcp") {
+                    DrawerDestination(icon = Icons.Outlined.Extension, label = "Plugins", value = state.mcpServerCount.takeIf { it > 0 }?.let { "$it connected" }, onClick = onOpenMcp)
+                }
+            }
+            item(key = "h_projects") { SectionHeader("Projects") }
+            if (query.isBlank()) {
+                item(key = "new_project") {
+                    DrawerDestination(
+                        icon = Icons.Outlined.CreateNewFolder,
+                        label = if (state.projects.isEmpty()) "Link a folder" else "New project",
+                        onClick = onCreateProject,
+                    )
+                }
             }
             if (query.isNotBlank() && matchingProjects.isEmpty() && filtered.isEmpty()) {
                 item(key = "search_empty") {
@@ -256,53 +282,40 @@ internal fun WorkspaceDrawer(
                     }
                 }
             }
-            if (state.projects.isEmpty() && query.isBlank()) {
-                item(key = "projects_empty") {
-                    Row(
-                        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onCreateProject)
-                            .heightIn(min = Spacing.touchTarget)
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Icon(Icons.Outlined.Folder, null, tint = colors.secondary, modifier = Modifier.size(19.dp))
-                        Text("Link a folder", style = MaterialTheme.typography.bodyMedium, color = colors.onBackground)
-                    }
-                }
-            }
             matchingProjects.forEach { project ->
                 // Search is a temporary reveal layer: matching chats remain reachable without
                 // changing the user's saved project-collapse choice.
                 val open = query.isNotBlank() || project.id !in collapsed
                 item(key = "p_${project.id}") {
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = Spacing.touchTarget).padding(end = 2.dp)
+                        Modifier.fillMaxWidth().heightIn(min = Spacing.touchTarget)
                             .semantics { stateDescription = if (open) "Expanded" else "Collapsed" },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         val rotation by animateFloatAsState(if (open) 90f else 0f, PhoneSprings.standard, label = "chev")
-                        MisulIconButton(
-                            icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = if (open) "Collapse ${project.name}" else "Expand ${project.name}",
-                            onClick = { onToggleProjectCollapse(project.id) },
-                            modifier = Modifier.graphicsLayer { rotationZ = rotation },
-                        )
                         Row(
-                            Modifier.weight(1f).clip(MaterialTheme.shapes.small)
+                            Modifier.weight(1f).clip(MaterialTheme.shapes.medium)
                                 .combinedClickable(
+                                    onClickLabel = if (open) "Collapse ${project.name}" else "Expand ${project.name}",
                                     onClick = { onToggleProjectCollapse(project.id) },
                                     onLongClick = { projectMenu = project },
                                 )
-                                .heightIn(min = Spacing.touchTarget).padding(horizontal = 4.dp),
+                                .heightIn(min = Spacing.touchTarget).padding(start = 12.dp, end = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(11.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Icon(Icons.Outlined.Folder, null, tint = colors.secondary, modifier = Modifier.size(21.dp))
-                            Text(project.name, style = MaterialTheme.typography.titleSmall, color = colors.onBackground, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${byProject[project.id]?.size ?: 0}", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
+                            Icon(Icons.Outlined.Folder, null, tint = colors.onBackground, modifier = Modifier.size(20.dp))
+                            Text(project.name, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, modifier = Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                null,
+                                tint = colors.tertiary,
+                                modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = rotation },
+                            )
+                            Spacer(Modifier.weight(0.001f))
                         }
                         Box {
-                            MisulIconButton(Icons.Filled.MoreVert, "Project options", onClick = { projectMenu = project })
+                            MisulIconButton(Icons.Filled.MoreHoriz, "Project options", iconSize = 20.dp, tint = colors.tertiary, onClick = { projectMenu = project })
                             WorkspaceDrawerMenu(
                                 expanded = projectMenu?.id == project.id,
                                 onDismiss = { projectMenu = null },
@@ -324,11 +337,11 @@ internal fun WorkspaceDrawer(
                 if (open) {
                     val chats = byProject[project.id].orEmpty()
                     if (chats.isEmpty()) item(key = "pe_${project.id}") {
-                        Text("No chats", style = MaterialTheme.typography.labelMedium, color = colors.tertiary, modifier = Modifier.padding(start = 40.dp, bottom = 8.dp, top = 2.dp))
+                        Text("No chats", style = MaterialTheme.typography.bodyMedium, color = colors.tertiary, modifier = Modifier.padding(start = 44.dp, bottom = 8.dp, top = 2.dp))
                     }
                     chats.forEach { meta ->
                         item(key = "c_${meta.id}") {
-                            SessionItem(meta, 40.dp)
+                            SessionItem(meta, 44.dp)
                         }
                     }
                 }
@@ -343,7 +356,7 @@ internal fun WorkspaceDrawer(
             }
             timeBuckets(loose).forEach { (label, chats) ->
                 item(key = "h_$label") {
-                    Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 4.dp))
+                    SectionHeader(label)
                 }
                 chats.forEach { meta ->
                     item(key = "u_${meta.id}") {
@@ -362,7 +375,7 @@ internal fun WorkspaceDrawer(
                     ) {
                         val rotation by animateFloatAsState(if (archivedVisible) 90f else 0f, PhoneSprings.standard, label = "arch")
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = rotation })
-                        Text("Archived", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
+                        Text("Archived", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
                         Text("${archived.size}", style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
                     }
                 }
@@ -372,42 +385,15 @@ internal fun WorkspaceDrawer(
                     }
                 }
             }
-            item(key = "h_capabilities") { SectionHeader("Capabilities") }
-            item(key = "skills") {
-                DrawerDestination(
-                    icon = Icons.Outlined.AutoAwesome,
-                    label = "Skills",
-                    value = state.activeSkillCount.toString(),
-                    onClick = onOpenSkills,
-                )
-            }
-            item(key = "mcp") {
-                DrawerDestination(
-                    icon = Icons.Outlined.Extension,
-                    label = "Plugins",
-                    value = state.mcpServerCount.toString(),
-                    onClick = onOpenMcp,
-                )
-            }
                 }
             }
         }
 
-        Row(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            MisulIconButton(Icons.Outlined.Settings, "Settings", onClick = onOpenSettings)
-            Spacer(Modifier.weight(1f))
-            Box(contentAlignment = Alignment.Center) {
-                Box(Modifier.size(40.dp).clip(CircleShape).background(colors.surfaceContainerHigh))
-                MisulIconButton(Icons.Outlined.CreateNewFolder, "New project", onClick = onCreateProject)
-            }
-            MisulIconButton(Icons.Outlined.Edit, "New chat", onClick = { onNewChat(null) }, filled = true)
-        }
+        NewChatPill(
+            onClick = { onNewChat(null) },
+            modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding()
+                .padding(end = 16.dp, bottom = 12.dp),
+        )
 
         Column(
             Modifier.align(Alignment.TopCenter).fillMaxWidth()
@@ -415,33 +401,40 @@ internal fun WorkspaceDrawer(
         ) {
             Row(
                 Modifier.fillMaxWidth().padding(top = statusInset).height(56.dp)
-                    .padding(start = 18.dp, end = 8.dp),
+                    .padding(start = 20.dp, end = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_phonecode_mark),
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(24.dp),
-                )
-                Box(Modifier.weight(1f).height(40.dp), contentAlignment = Alignment.CenterStart) {
+                if (!searchExpanded) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_phonecode_mark),
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(26.dp),
+                    )
+                }
+                Box(Modifier.weight(1f).height(44.dp), contentAlignment = Alignment.CenterStart) {
                     DrawerTitleSearch(searchExpanded, query, { query = it }, searchFocus)
                 }
-                val searchInteraction = remember { MutableInteractionSource() }
-                Box(
-                    Modifier.size(48.dp).pressFeedback(searchInteraction, pressedScale = 0.96f)
-                        .clip(CircleShape)
-                        .clickable(interactionSource = searchInteraction, indication = ripple()) {
-                            if (searchExpanded) closeSearch() else searchExpanded = true
-                        },
-                    contentAlignment = Alignment.Center,
+                Row(
+                    Modifier.height(44.dp).floatingChrome(ShapePill).padding(horizontal = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
+                    MisulIconButton(
                         if (searchExpanded) Icons.Filled.Close else Icons.Outlined.Search,
                         if (searchExpanded) "Close search" else "Search chats and projects",
-                        tint = colors.onBackground,
-                        modifier = Modifier.size(21.dp),
+                        visualSize = 40.dp,
+                        iconSize = 21.dp,
+                        onClick = { if (searchExpanded) closeSearch() else searchExpanded = true },
+                        modifier = Modifier.size(44.dp),
+                    )
+                    MisulIconButton(
+                        Icons.Outlined.Settings,
+                        "Settings",
+                        visualSize = 40.dp,
+                        iconSize = 21.dp,
+                        onClick = onOpenSettings,
+                        modifier = Modifier.size(44.dp),
                     )
                 }
             }
@@ -496,7 +489,7 @@ private fun DrawerTitleSearch(
         ) {
             Text(
                 "PhoneCode",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.onBackground,
             )
         }
@@ -534,21 +527,20 @@ private fun DrawerTitleSearch(
 private fun DrawerDestination(
     icon: ImageVector,
     label: String,
-    value: String,
     onClick: () -> Unit,
+    value: String? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().heightIn(min = Spacing.touchTarget).clip(MaterialTheme.shapes.small)
-            .clickable(onClick = onClick)
+        Modifier.fillMaxWidth().heightIn(min = Spacing.touchTarget).clip(MaterialTheme.shapes.medium)
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(icon, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = colors.onBackground, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.tertiary, modifier = Modifier.size(18.dp))
+        Icon(icon, null, tint = colors.onBackground, modifier = Modifier.size(20.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground, modifier = Modifier.weight(1f))
+        value?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = colors.tertiary) }
     }
 }
 
@@ -574,9 +566,9 @@ private fun timeBuckets(sessions: List<SessionMeta>): List<Pair<String, List<Ses
 private fun SectionHeader(label: String) {
     Text(
         label,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 4.dp),
+        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.padding(start = 12.dp, top = 22.dp, bottom = 6.dp).semantics { heading() },
     )
 }
 
@@ -598,46 +590,42 @@ private fun ChatRow(
         Modifier.fillMaxWidth().padding(vertical = 1.dp).clip(MaterialTheme.shapes.medium)
             .background(if (active) colors.surfaceContainerHigh else androidx.compose.ui.graphics.Color.Transparent)
             .semantics { selected = active }
-            .heightIn(min = 50.dp).padding(start = indent, end = 2.dp),
+            .padding(start = indent, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Two lines: title + a one-line preview. Selection is a quiet tone pill (grok-design.md).
         Row(
             Modifier.weight(1f).clip(MaterialTheme.shapes.small)
                 .combinedClickable(onClick = onClick, onLongClick = onMenu)
-                .padding(vertical = 7.dp),
+                .semantics {
+                    customActions = listOf(CustomAccessibilityAction("Chat options") { onMenu(); true })
+                }
+                .heightIn(min = 44.dp).padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    meta.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onBackground,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                if (meta.preview.isNotEmpty()) {
-                    Text(
-                        meta.preview,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.tertiary,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 1.dp),
-                    )
-                }
-            }
             Text(
-                if (running) "Running" else formatSessionDate(meta.updatedAt),
-                style = MaterialTheme.typography.labelSmall,
-                color = if (running) LocalMisulAccent.current else colors.tertiary,
-                modifier = Modifier.padding(start = 8.dp),
+                meta.title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = colors.onBackground,
+                fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
+            if (running) {
+                Text(
+                    "Running",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = LocalMisulAccent.current,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
         }
-        // Three-dot overflow: pin / move / archive / delete (also reachable via long-press).
-        Box(
-            contentAlignment = Alignment.Center,
-        ) {
-            MisulIconButton(Icons.Filled.MoreVert, "Chat options", onClick = onMenu)
+        // Options stay on the selected row (and on long-press / accessibility actions elsewhere).
+        Box(contentAlignment = Alignment.Center) {
+            if (active || menuExpanded) {
+                MisulIconButton(Icons.Filled.MoreHoriz, "Chat options", iconSize = 20.dp, tint = colors.onSurfaceVariant, onClick = onMenu)
+            } else {
+                Spacer(Modifier.width(8.dp))
+            }
             WorkspaceDrawerMenu(
                 expanded = menuExpanded,
                 onDismiss = onDismissMenu,
@@ -645,5 +633,27 @@ private fun ChatRow(
                 content = menuContent,
             )
         }
+    }
+}
+
+/** Floating ink capsule for the drawer's primary action. */
+@Composable
+private fun NewChatPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        modifier.height(48.dp)
+            .pressFeedback(interaction, pressedScale = 0.96f)
+            .shadow(10.dp, ShapePill, ambientColor = Color.Black.copy(alpha = 0.2f), spotColor = Color.Black.copy(alpha = 0.2f))
+            .clip(ShapePill)
+            .background(colors.onBackground)
+            .clickable(interactionSource = interaction, indication = ripple(), role = Role.Button, onClick = onClick)
+            .clearAndSetSemantics { contentDescription = "New chat"; role = Role.Button }
+            .padding(start = 16.dp, end = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(PhoneIcons.NewChat, null, tint = colors.background, modifier = Modifier.size(20.dp))
+        Text("New chat", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), color = colors.background)
     }
 }

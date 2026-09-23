@@ -245,6 +245,7 @@ internal fun McpServerPage(
     initialName: String,
     suggestedName: String = "",
     introduction: String? = null,
+    catalogEntry: PluginCatalogEntry? = null,
     initial: McpServerConfig,
     existingNames: Set<String>,
     snapshot: McpServerSnapshot?,
@@ -270,7 +271,9 @@ internal fun McpServerPage(
     var testResult by remember(initialName) { mutableStateOf<TestedMcpDraft?>(null) }
     var reviewedDraftRevision by remember(initialName) { mutableStateOf<String?>(null) }
     var toolQuery by rememberSaveable(initialName) { mutableStateOf("") }
-    var showAllTools by rememberSaveable(initialName) { mutableStateOf(false) }
+    // Plugins show their whole tool inventory: adding one is the review.
+    var showAllTools by rememberSaveable(initialName) { mutableStateOf(catalogEntry != null) }
+    var token by rememberSaveable(initialName) { mutableStateOf("") }
     var confirmDelete by rememberSaveable(initialName) { mutableStateOf(false) }
     var showAdvanced by rememberSaveable(initialName, suggestedName) { mutableStateOf(introduction == null) }
     val deleteOperationKey = mcpDeleteOperationKey(initialName)
@@ -363,11 +366,104 @@ internal fun McpServerPage(
     val shownSnapshot = currentTestResult?.snapshot ?: snapshot.takeUnless { changed }
     val pageTitle = when {
         !isNew -> initialName
+        catalogEntry != null -> "Plugin"
         introduction != null -> "Add plugin"
         else -> "Add MCP server"
     }
-    SettingsPageShell(pageTitle, onBack) {
-        introduction?.let { SettingsNote(it) }
+    fun saveDraft() {
+        draft()?.let { (draftName, server) ->
+            scope.launch {
+                saving = true
+                vm.saveMcpServerAndWait(draftName, server, baseline.takeUnless { isNew }).fold(
+                    onSuccess = { withContext(Dispatchers.Main.immediate) { onSaved() } },
+                    onFailure = { error = it.message ?: "MCP configuration could not be saved" },
+                )
+                saving = false
+            }
+        }
+    }
+    SettingsPageShell(
+        pageTitle,
+        onBack,
+        action = if (introduction != null) null else {
+            { SettingsSaveAction(enabled = canSave && !saving, onClick = ::saveDraft, contentDescription = "Save server") }
+        },
+    ) {
+        if (catalogEntry != null) {
+            PluginHero(catalogEntry)
+            val auth = catalogEntry.auth
+            if (auth is PluginAuth.BearerToken) {
+                Spacer(Modifier.height(Spacing.m))
+                MisulField(
+                    token,
+                    { value ->
+                        token = value.trim()
+                        headers = if (token.isEmpty()) "" else headerRowsToEditor(listOf("Authorization" to "Bearer $token"))
+                        error = null
+                        invalidateProbeReview()
+                    },
+                    auth.label,
+                    secure = true,
+                    supportingText = auth.help,
+                    contentDescription = auth.label,
+                )
+            }
+            Spacer(Modifier.height(Spacing.m))
+            val connected = currentTestResult?.snapshot?.connected == true
+            if (!connected) {
+                MisulActionButton(
+                    if (currentTestResult?.snapshot?.error?.isNotBlank() == true) "Try again" else "Connect",
+                    role = ActionRole.PRIMARY,
+                    loading = testing,
+                    enabled = canTest && (auth !is PluginAuth.BearerToken || token.isNotEmpty()),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    draft()?.let { (draftName, server) ->
+                        scope.launch {
+                            val testedRevision = mcpConnectionDraftRevision(draftName, server)
+                            testing = true
+                            invalidateProbeReview()
+                            val result = vm.testMcpServer(draftName, server)
+                            if (latestDraftRevision == testedRevision) {
+                                testResult = TestedMcpDraft(testedRevision, result)
+                            }
+                            testing = false
+                        }
+                    }
+                }
+            } else {
+                val tools = currentTestResult?.snapshot?.tools.orEmpty()
+                MisulActionButton(
+                    "Add plugin",
+                    role = ActionRole.PRIMARY,
+                    loading = saving,
+                    enabled = !saving && validationError == null,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    // The full inventory is listed below this button; adding is the review.
+                    enabled = true
+                    reviewedDraftRevision = currentDraftRevision
+                    draft()?.let { (draftName, server) ->
+                        scope.launch {
+                            saving = true
+                            vm.saveMcpServerAndWait(draftName, server, baseline.takeUnless { isNew }).fold(
+                                onSuccess = { withContext(Dispatchers.Main.immediate) { onSaved() } },
+                                onFailure = { error = it.message ?: "Plugin could not be added" },
+                            )
+                            saving = false
+                        }
+                    }
+                }
+                SettingsNote(
+                    "Adds ${tools.size} ${if (tools.size == 1) "tool" else "tools"}. Tool calls that change data follow your approval setting.",
+                )
+            }
+            error?.takeIf { catalogEntry.auth !is PluginAuth.BearerToken || !it.startsWith("Each header") }?.let {
+                SettingsErrorText(it, modifier = Modifier.padding(top = Spacing.xs))
+            }
+        } else {
+            introduction?.let { SettingsNote(it) }
+        }
         if (externalChange) {
             SettingsErrorText("This server changed elsewhere. Reload before saving.")
             Spacer(Modifier.height(Spacing.xs))
@@ -389,8 +485,8 @@ internal fun McpServerPage(
             shownSnapshot?.error?.isNotBlank() == true -> SettingsErrorText(shownSnapshot.error)
             !isNew && !changed -> SettingsNote(if (enabled) "Not tested" else "Off")
         }
-        MisulSectionLabel("Connection")
-        if (introduction != null) SettingsNote("Official service endpoint. Open connection details to inspect or change it.")
+        if (catalogEntry == null) MisulSectionLabel("Connection")
+        if (introduction != null && catalogEntry == null) SettingsNote("Official service endpoint. Open connection details to inspect or change it.")
         if (isNew && (introduction == null || showAdvanced)) {
             MisulField(
                 name,
@@ -546,12 +642,13 @@ internal fun McpServerPage(
                 )
             }
             Spacer(Modifier.height(Spacing.s))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xs, Alignment.End)) {
+            Row(Modifier.fillMaxWidth()) {
                 MisulActionButton(
-                    "Test",
+                    "Test connection",
                     role = ActionRole.SECONDARY,
                     loading = testing,
                     enabled = canTest,
+                    modifier = Modifier.weight(1f),
                 ) {
                     if (!testing) draft()?.let { (draftName, server) ->
                         scope.launch {
@@ -566,26 +663,9 @@ internal fun McpServerPage(
                         }
                     }
                 }
-                MisulActionButton(
-                    "Save",
-                    role = ActionRole.PRIMARY,
-                    loading = saving,
-                    enabled = canSave,
-                ) {
-                    draft()?.let { (draftName, server) ->
-                        scope.launch {
-                            saving = true
-                            vm.saveMcpServerAndWait(draftName, server, baseline.takeUnless { isNew }).fold(
-                                onSuccess = { withContext(Dispatchers.Main.immediate) { onSaved() } },
-                                onFailure = { error = it.message ?: "MCP configuration could not be saved" },
-                            )
-                            saving = false
-                        }
-                    }
-                }
             }
         }
-        if (introduction != null) {
+        if (introduction != null && catalogEntry == null) {
             Spacer(Modifier.height(Spacing.s))
             MisulActionButton(
                 "Test connection",
@@ -683,7 +763,7 @@ internal fun McpServerPage(
                     }
                 }
             }
-            if (currentTestResult?.snapshot?.connected == true) {
+            if (currentTestResult?.snapshot?.connected == true && catalogEntry == null) {
                 val completeInventoryVisible =
                     toolQuery.isBlank() &&
                         (connectedSnapshot.tools.size <= 8 || showAllTools)
@@ -710,7 +790,7 @@ internal fun McpServerPage(
                 }
             }
         }
-        if (introduction != null) {
+        if (introduction != null && catalogEntry == null) {
             MisulSectionLabel("Enable")
             MisulGroup {
                 SettingsToggleRow(

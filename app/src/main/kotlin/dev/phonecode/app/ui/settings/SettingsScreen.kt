@@ -282,7 +282,6 @@ internal fun ConfirmDiscardDialog(
         },
         actions = {
             MisulDialogAction("Keep editing", onKeepEditing)
-            Spacer(Modifier.weight(1f))
             MisulDialogAction("Discard", onDiscard, destructive = true)
         },
     )
@@ -319,7 +318,6 @@ internal fun ConfirmActionDialog(
             if (secondaryAction != null && onSecondary != null) {
                 MisulDialogAction(secondaryAction, onSecondary, enabled = !inProgress)
             }
-            Spacer(Modifier.weight(1f))
             MisulDialogAction(
                 if (inProgress) progressAction else action,
                 onConfirm,

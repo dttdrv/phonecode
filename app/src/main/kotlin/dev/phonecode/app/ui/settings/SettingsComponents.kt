@@ -1,5 +1,10 @@
 package dev.phonecode.app.ui.settings
 
+import dev.phonecode.app.ui.components.floatingChrome
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +25,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
@@ -43,7 +47,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import dev.phonecode.app.ui.components.MisulIconButton
+import dev.phonecode.app.ui.components.FloatingIconButton
+import dev.phonecode.app.ui.components.PhoneIcons
+import androidx.compose.ui.text.font.FontWeight
 import dev.phonecode.app.ui.components.MisulNavigationRow
 import dev.phonecode.app.ui.components.MisulSelectionRow
 import dev.phonecode.app.ui.components.MisulToggleRow
@@ -98,25 +104,59 @@ internal fun SettingsPageShell(
                     Spacer(Modifier.height(Spacing.xxl + bottomInset))
                 }
             }
-            Row(
+            Box(
                 Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth()
                     .height(statusInset + Spacing.navBarHeight)
                     .zIndex(1f)
-                    .padding(start = 8.dp, top = statusInset, end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(start = 10.dp, top = statusInset, end = 10.dp),
             ) {
-                MisulIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack, enabled = backEnabled)
+                FloatingIconButton(
+                    PhoneIcons.Back,
+                    "Back",
+                    onBack,
+                    enabled = backEnabled,
+                    modifier = Modifier.align(Alignment.CenterStart),
+                )
                 Text(
                     title,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f).semantics { heading() },
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 84.dp).semantics { heading() },
                 )
-                if (action == null) Spacer(Modifier.width(Spacing.touchTarget)) else Box(Modifier.width(Spacing.touchTarget)) { action() }
+                if (action != null) Box(Modifier.align(Alignment.CenterEnd)) { action() }
             }
+        }
+    }
+}
+
+/** The header's Save pill: raised when there is something to save, quiet grey text otherwise. */
+@Composable
+internal fun SettingsSaveAction(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    contentDescription: String = "Save",
+    label: String = "Save",
+) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        Modifier.height(Spacing.touchTarget)
+            .semantics(mergeDescendants = true) { this.contentDescription = contentDescription }
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.height(40.dp).then(if (enabled) Modifier.floatingChrome(RoundedCornerShape(50)) else Modifier)
+                .padding(horizontal = 18.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = if (enabled) colors.onBackground else colors.onSurfaceVariant.copy(alpha = 0.55f),
+            )
         }
     }
 }

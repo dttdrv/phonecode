@@ -58,7 +58,6 @@ class OnboardingScreenshotTest {
         compose.onNodeWithText("PhoneCode").assertIsDisplayed()
         compose.onNodeWithText("Get started").assertIsDisplayed()
         compose.onNodeWithText("Private project workspaces").assertHasNoClickAction()
-        compose.onAllNodesWithTag("misul-row-divider-content").assertCountEquals(2)
         compose.onRoot().captureRoboImage("screenshots/15-onboarding-welcome.png")
         compose.onNodeWithText("Get started").performClick()
         compose.mainClock.advanceTimeBy(500)

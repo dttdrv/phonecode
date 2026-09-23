@@ -184,6 +184,8 @@ import dev.phonecode.app.agent.TurnOutcome
 import dev.phonecode.app.ui.components.ContextRing
 import dev.phonecode.app.ui.components.ActionRole
 import dev.phonecode.app.ui.components.MisulActionButton
+import dev.phonecode.app.ui.components.floatingChrome
+import androidx.compose.material.icons.outlined.ErrorOutline
 import dev.phonecode.app.ui.components.MisulDialogAction
 import dev.phonecode.app.ui.components.MisulIconButton
 import dev.phonecode.app.ui.components.MisulTextAction
@@ -284,10 +286,8 @@ internal fun QueuedMessages(
 ) {
     val colors = MaterialTheme.colorScheme
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)
-            .clip(MaterialTheme.shapes.small)
-            .background(colors.surface)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+        Modifier.statusSurface()
+            .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -297,9 +297,9 @@ internal fun QueuedMessages(
                 } else {
                     "${queued.size} queued ${if (queued.size == 1) "follow-up" else "follow-ups"}"
                 },
-                style = MaterialTheme.typography.labelSmall,
-                color = if (recoverable) colors.onSurface else colors.secondary,
-                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (recoverable) colors.onSurface else colors.onSurfaceVariant,
+                modifier = Modifier.weight(1f).padding(vertical = 12.dp),
             )
             if (recoverable) {
                 TextButton(onClick = onRestore, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
@@ -343,15 +343,21 @@ internal fun QueuedMessages(
 
 
 
+/** Status cards float above the composer with the same chrome, never a tinted alarm slab. */
+@Composable
+private fun Modifier.statusSurface(): Modifier =
+    fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+        .floatingChrome(RoundedCornerShape(20.dp))
+
 @Composable
 internal fun NoticeBanner(text: String) {
     val colors = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).clip(MaterialTheme.shapes.small)
-            .background(colors.surface).semantics { liveRegion = LiveRegionMode.Polite }.padding(10.dp),
+        Modifier.statusSurface().semantics { liveRegion = LiveRegionMode.Polite }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium, color = colors.secondary)
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
     }
 }
 
@@ -368,9 +374,7 @@ internal fun TurnOutcomeBanner(
         TurnOutcome.FAILED -> if (hasPartialOutput) "Turn failed · Partial output may be incomplete." else "Turn failed."
     }
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)
-            .clip(MaterialTheme.shapes.small)
-            .background(colors.surface)
+        Modifier.statusSurface()
             .semantics {
                 stateDescription = when (outcome) {
                     TurnOutcome.STOPPED -> "Stopped"
@@ -378,21 +382,19 @@ internal fun TurnOutcomeBanner(
                 }
                 liveRegion = LiveRegionMode.Polite
             }
-            .padding(10.dp),
+            .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp).heightIn(min = 48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            if (outcome == TurnOutcome.STOPPED) Icons.Filled.Stop else Icons.Outlined.Flag,
+            if (outcome == TurnOutcome.STOPPED) Icons.Filled.Stop else Icons.Outlined.ErrorOutline,
             null,
             tint = if (outcome == TurnOutcome.FAILED) colors.error else colors.secondary,
             modifier = Modifier.size(18.dp),
         )
-        Spacer(Modifier.width(8.dp))
-        Text(text, style = MaterialTheme.typography.labelMedium, color = colors.secondary, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(10.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = colors.onSurface, modifier = Modifier.weight(1f))
         if (canRetry) {
-            TextButton(onClick = onRetry, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
-                Text("Retry")
-            }
+            MisulActionButton("Retry", role = ActionRole.SECONDARY, icon = Icons.Filled.Refresh, onClick = onRetry)
         }
     }
 }
@@ -406,20 +408,25 @@ internal fun ErrorBanner(
 ) {
     val colors = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).clip(MaterialTheme.shapes.small)
-            .background(colors.errorContainer).semantics {
-                error(text)
-                liveRegion = LiveRegionMode.Polite
-            }.padding(10.dp),
+        Modifier.statusSurface().semantics {
+            error(text)
+            liveRegion = LiveRegionMode.Polite
+        }.padding(start = 16.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium, color = colors.onErrorContainer, modifier = Modifier.weight(1f))
+        Icon(Icons.Outlined.ErrorOutline, null, tint = colors.error, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurface,
+            modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+        )
         actionLabel?.let {
-            TextButton(onClick = onAction, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)) {
-                Text(it, color = colors.onErrorContainer)
-            }
+            Spacer(Modifier.width(8.dp))
+            MisulActionButton(it, role = ActionRole.SECONDARY, onClick = onAction)
         }
-        MisulIconButton(Icons.Filled.Close, "Dismiss", onClick = onDismiss)
+        MisulIconButton(Icons.Filled.Close, "Dismiss", iconSize = 20.dp, tint = colors.onSurfaceVariant, onClick = onDismiss)
     }
 }
 
@@ -450,8 +457,7 @@ internal fun TodoPanel(todos: List<TodoItem>) {
     val active = todos.firstOrNull { it.status == TodoStatus.IN_PROGRESS }
         ?: todos.firstOrNull { it.status == TodoStatus.PENDING }
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).clip(MaterialTheme.shapes.small)
-            .background(colors.surface),
+        Modifier.statusSurface(),
     ) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = Spacing.touchTarget)

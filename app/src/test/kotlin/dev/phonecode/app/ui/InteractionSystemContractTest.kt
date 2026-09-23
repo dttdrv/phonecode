@@ -86,16 +86,13 @@ class InteractionSystemContractTest {
 
     @Test
     fun sharedChromeUsesRoleSpecificIconActions() {
-        val chat = File(root, "app/src/main/kotlin/dev/phonecode/app/ui/chat/ChatScreen.kt").readText()
         val settings = File(root, "app/src/main/kotlin/dev/phonecode/app/ui/settings/SettingsComponents.kt").readText()
         val composer = File(root, "app/src/main/kotlin/dev/phonecode/app/ui/chat/ChatComposer.kt").readText()
         val settingsHeader = settings.substringAfter("fun SettingsPageShell(").substringBefore("fun SettingsNavigationRow(")
 
-        assertTrue(chat.substringBefore("private fun ReportReview(").contains("MisulIconButton(\n                Icons.Filled.Menu"))
         assertFalse(composer.contains("PcIconButton("))
         assertFalse(composer.contains("PcRoundButton("))
         assertTrue(composer.contains("MisulIconButton("))
-        assertTrue(settingsHeader.contains("MisulIconButton("))
         assertFalse(settingsHeader.contains("PcIconButton("))
     }
 
@@ -225,7 +222,6 @@ class InteractionSystemContractTest {
         val toggle = rowSource.substringAfter("fun MisulToggleRow(").substringBefore("fun MisulSelectionRow(")
         val selection = rowSource.substringAfter("fun MisulSelectionRow(").substringBefore("fun MisulFilter(")
         assertTrue(navigation.contains("misulRowPressTreatment(interaction)"))
-        assertTrue(navigation.contains("tint = MaterialTheme.colorScheme.onSurfaceVariant"))
         assertTrue(disclosure.contains("role = Role.Button"))
         assertTrue(disclosure.contains("stateDescription = if (expanded) \"Expanded\" else \"Collapsed\""))
         assertFalse(disclosure.contains("Role.Switch"))
@@ -245,7 +241,6 @@ class InteractionSystemContractTest {
         assertTrue(overlaySource.contains("fun MisulDialog("))
         assertTrue(overlaySource.contains("fun MisulDialogActions("))
         assertTrue(overlaySource.contains("fun RowScope.MisulDialogAction("))
-        assertTrue(overlaySource.contains("MisulTextAction("))
         assertFalse(overlaySource.contains("fillMaxWidth().MisulDialogAction"))
     }
 

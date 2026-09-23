@@ -1,5 +1,12 @@
 package dev.phonecode.app.ui.settings
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import dev.phonecode.app.ui.components.MisulDialogAction
+import dev.phonecode.app.ui.components.MisulDialogActions
+import dev.phonecode.app.ui.components.RaisedSurfaceTheme
+import dev.phonecode.app.ui.components.dialogContainerColor
+import dev.phonecode.app.ui.components.MisulStatusRow
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -219,6 +226,7 @@ internal fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, 
                 }
                 MisulNavigationRow(
                     label = preset.displayName,
+                    leading = { PluginTile(preset.displayName, null, 36.dp) },
                     supportingText = status,
                     onClick = { onOpenProvider(preset.id) },
                     showDivider = index != providers.lastIndex,
@@ -262,11 +270,37 @@ internal fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: (
             onBack()
         }
     }
-    SettingsPageShell(preset?.displayName ?: providerId, onBack) {
+    fun saveKey() {
+        if (vm.setKey(providerId, key)) {
+            key = ""
+            hasStoredKey = true
+            keyError = null
+        } else {
+            keyError = "The API key could not be saved securely."
+        }
+    }
+    SettingsPageShell(
+        preset?.displayName ?: providerId,
+        onBack,
+        action = if (providerId == "codex") null else {
+            {
+                SettingsSaveAction(
+                    enabled = key.isNotBlank() && secureStorageAvailable,
+                    onClick = ::saveKey,
+                    contentDescription = "Save key",
+                )
+            }
+        },
+    ) {
         val providerEnabled = providerId !in state.disabledProviders
         val providerAvailable = vm.providerAvailableInMisul(providerId)
-        MisulSectionLabel("Availability")
         MisulGroup {
+            if (providerId != "codex") {
+                MisulStatusRow(
+                    label = "API key",
+                    value = if (hasStoredKey) "Saved" else "Not set",
+                )
+            }
             MisulToggleRow(
                 label = "Show in model picker",
                 checked = providerEnabled,
@@ -300,7 +334,7 @@ internal fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: (
                 }
             }
         } else {
-            Spacer(Modifier.height(16.dp))
+            MisulSectionLabel(if (hasStoredKey) "Replace key" else "API key")
             MisulField(
                 key,
                 { key = it },
@@ -320,22 +354,6 @@ internal fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: (
                 SettingsErrorText("Secure storage is unavailable on this device, so PhoneCode cannot change this key.")
             }
             keyError?.let { SettingsErrorText(it, modifier = Modifier.padding(top = Spacing.xs)) }
-            Spacer(Modifier.height(Spacing.xs))
-            MisulActionButton("Save key", role = ActionRole.PRIMARY, enabled = key.isNotBlank() && secureStorageAvailable) {
-                if (vm.setKey(providerId, key)) {
-                    key = ""
-                    hasStoredKey = true
-                    keyError = null
-                } else {
-                    keyError = "The API key could not be saved securely."
-                }
-            }
-            if (hasStoredKey) {
-                Spacer(Modifier.height(Spacing.xs))
-                MisulTextAction("Remove saved key", destructive = true, enabled = secureStorageAvailable) {
-                    pendingRemoveKey = true
-                }
-            }
         }
         val models = state.models.filter { it.providerId == providerId }
         MisulSectionLabel("Models · ${models.size}")
@@ -367,6 +385,17 @@ internal fun ProviderDetailPage(vm: ChatViewModel, providerId: String, onBack: (
                         )
                         MisulInlineToggle(visible, { vm.toggleModelHidden(option) }, "${option.label} visible")
                     }
+                }
+            }
+        }
+        if (providerId != "codex" && hasStoredKey) {
+            Spacer(Modifier.height(Spacing.l))
+            MisulGroup {
+                MisulContentRow(
+                    onClick = { if (secureStorageAvailable) pendingRemoveKey = true },
+                    showDivider = false,
+                ) {
+                    Text("Remove saved key", style = MaterialTheme.typography.bodyLarge, color = colors.error)
                 }
             }
         }
@@ -531,15 +560,20 @@ internal fun CustomProviderEditor(
         Column(
             Modifier.fillMaxWidth().heightIn(max = maxHeight)
                 .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
-                .shadow(24.dp, MaterialTheme.shapes.extraLarge, clip = false)
-                .clip(MaterialTheme.shapes.extraLarge).background(colors.surfaceContainerHigh)
-                .padding(Spacing.m),
+                .shadow(24.dp, RoundedCornerShape(28.dp), clip = false)
+                .clip(RoundedCornerShape(28.dp)).background(dialogContainerColor())
+                .padding(20.dp),
         ) {
             Column(
                 Modifier.fillMaxWidth().weight(1f, fill = false)
                     .contentVerticalScroll(rememberScrollState()),
             ) {
-                Text("Add custom provider", style = MaterialTheme.typography.titleMedium, color = colors.onBackground, modifier = Modifier.padding(bottom = Spacing.s))
+                Text(
+                    "Add custom provider",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.onBackground,
+                    modifier = Modifier.padding(bottom = Spacing.s),
+                )
                 CustomProviderTextFields(
                     name,
                     { name = it; error = null },
@@ -562,15 +596,14 @@ internal fun CustomProviderEditor(
                 }
             }
             Spacer(Modifier.height(Spacing.s))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                MisulActionButton("Cancel", onClick = requestDismiss, role = ActionRole.QUIET)
-                MisulActionButton(
+            MisulDialogActions {
+                MisulDialogAction("Cancel", onClick = requestDismiss, enabled = !saving)
+                MisulDialogAction(
                     "Save",
-                    role = ActionRole.PRIMARY,
-                    loading = saving,
+                    primary = true,
                     enabled = !saving && validationError == null,
-                ) {
-                        if (validationError != null) return@MisulActionButton
+                    onClick = {
+                        if (validationError != null) return@MisulDialogAction
                         saving = true
                         scope.launch {
                             onSave(id, CustomProvider(
@@ -583,14 +616,15 @@ internal fun CustomProviderEditor(
                             }
                             saving = false
                         }
-                    }
+                    },
+                )
             }
         }
     }
     if (renderAsDialog) {
-        Dialog(onDismissRequest = requestDismiss) { content() }
+        Dialog(onDismissRequest = requestDismiss) { RaisedSurfaceTheme(content) }
     } else {
-        content()
+        RaisedSurfaceTheme(content)
     }
     if (confirmDiscard) {
         ConfirmDiscardDialog(

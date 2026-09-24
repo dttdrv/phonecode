@@ -82,7 +82,9 @@ class ProviderListClarityTest {
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithText("Models & providers").performClick()
 
-        compose.onNodeWithText("API key saved").assertIsDisplayed()
+        // Anthropic and OpenAI both run in Misul now; only ChatGPT sign-in is gated.
+        assertTrue(compose.onAllNodesWithText("API key saved").fetchSemanticsNodes().size == 2)
+        assertTrue(compose.onAllNodesWithText("API key saved · Not yet available").fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("Signed in with ChatGPT · Not yet available")
             .performScrollTo()
             .assertIsDisplayed()
@@ -90,10 +92,6 @@ class ProviderListClarityTest {
             compose.onAllNodesWithText("Setup required")
                 .fetchSemanticsNodes().isNotEmpty(),
         )
-
-        compose.onNodeWithText("API key saved · Not yet available")
-            .performScrollTo()
-            .assertIsDisplayed()
     }
 
     private fun dismissOnboardingIfPresent() {

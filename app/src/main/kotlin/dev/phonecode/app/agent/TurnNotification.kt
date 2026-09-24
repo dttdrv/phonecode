@@ -82,15 +82,11 @@ internal fun buildTurnNotification(context: Context, status: TurnStatus?, starte
                 .setContentTitle(if (approval) "PhoneCode needs approval" else "PhoneCode is working")
                 .setContentText(status.text)
                 .setCategory(if (approval) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_PROGRESS)
-                .setRequestPromotedOngoing(true)
+                // A pending approval is an alert, which Live Updates must not carry: it stays an
+                // ordinary ongoing notification until the turn resumes.
+                .setRequestPromotedOngoing(!approval)
                 // Status-bar chip: Android suggests at most 7 characters.
-                .setShortCriticalText(
-                    when {
-                        approval -> "Approve"
-                        steps -> "${status.done}/${status.total}"
-                        else -> "Running"
-                    },
-                )
+                .setShortCriticalText(if (approval) null else if (steps) "${status.done}/${status.total}" else "Running")
                 .setDeleteIntent(
                     PendingIntent.getBroadcast(
                         context,

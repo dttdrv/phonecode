@@ -61,7 +61,8 @@ class TurnService : Service() {
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PhoneCode:turn")
                 .apply {
                     setReferenceCounted(false)
-                    acquire()
+                    // Bounded: a stuck turn must not keep the CPU awake indefinitely.
+                    acquire(WAKE_LOCK_TIMEOUT_MS)
                 }
         }
         return START_NOT_STICKY
@@ -222,3 +223,5 @@ class TurnService : Service() {
         }
     }
 }
+
+private const val WAKE_LOCK_TIMEOUT_MS = 60 * 60 * 1000L

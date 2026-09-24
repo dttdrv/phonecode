@@ -156,7 +156,7 @@ private fun Welcome(onNext: () -> Unit) {
             Spacer(Modifier.height(36.dp))
             Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
                 FeatureRow(Icons.Outlined.Folder, "Private project workspaces", "Keep each project and its chats together")
-                FeatureRow(Icons.Outlined.AccountTree, "Local tools and Git", "Build, test, and manage source control on device")
+                FeatureRow(Icons.Outlined.AccountTree, "Local tools and Git", "Edit files and manage source control on device")
                 FeatureRow(Icons.Outlined.Cloud, "Your choice of model", "Sign in or add provider access")
             }
         }

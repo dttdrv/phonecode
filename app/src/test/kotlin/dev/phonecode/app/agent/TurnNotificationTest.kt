@@ -54,7 +54,7 @@ class TurnNotificationTest {
     }
 
     @Test
-    fun approvalIsOngoingPromotedAndIndeterminate() {
+    fun approvalIsOngoingUnpromotedAndIndeterminate() {
         val status = turnStatusOf(ChatUiState(isRunning = true, pendingPermission = PermissionRequest("bash", "rm -rf build")))!!
         assertEquals(TurnPhase.NEEDS_APPROVAL, status.phase)
 
@@ -62,7 +62,7 @@ class TurnNotificationTest {
         assertEquals("PhoneCode needs approval", n.extras.getCharSequence(Notification.EXTRA_TITLE))
         assertEquals("rm -rf build", n.extras.getCharSequence(Notification.EXTRA_TEXT))
         assertTrue(n.ongoing)
-        assertTrue(NotificationCompat.isRequestPromotedOngoing(n))
+        assertTrue(!NotificationCompat.isRequestPromotedOngoing(n))
         assertTrue(n.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE))
         assertTrue(n.deleteIntent != null)
     }

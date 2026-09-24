@@ -9,6 +9,7 @@ import dev.phonecode.app.agent.ChatLine
 import dev.phonecode.app.agent.ChatUiState
 import dev.phonecode.app.agent.PermissionRequest
 import dev.phonecode.app.agent.ToolStatus
+import dev.phonecode.app.agent.toChatLines
 import dev.phonecode.app.data.PersistedMessage
 import dev.phonecode.app.data.PersistedPart
 import dev.phonecode.app.data.PersistedRole
@@ -149,13 +150,8 @@ class ApprovalStopPersistenceTest {
         return field.get(this) as SessionStore
     }
 
-    @Suppress("UNCHECKED_CAST")
+    @Suppress("UnusedReceiverParameter")
     private fun dev.phonecode.app.agent.ChatViewModel.restoreLines(
         messages: List<ChatMessage>,
-    ): List<ChatLine> {
-        val method = javaClass.declaredMethods.single { it.name == "toChatLines" }.apply {
-            isAccessible = true
-        }
-        return method.invoke(this, messages) as List<ChatLine>
-    }
+    ): List<ChatLine> = messages.toChatLines()
 }

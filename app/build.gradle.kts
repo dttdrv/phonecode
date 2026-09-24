@@ -670,7 +670,7 @@ androidComponentsExtension.onVariants(
     androidComponentsExtension.selector().withBuildType("sideload"),
 ) { variant ->
     variant.outputs.forEach { output ->
-        output.versionCode.set(61)
+        output.versionCode.set(62)
         output.versionName.set("0.8.7")
     }
 }

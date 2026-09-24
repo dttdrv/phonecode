@@ -1195,7 +1195,7 @@ val verifyMermaidReleaseEvidence by tasks.registering(Exec::class) {
 }
 
 val releaseBundle = layout.buildDirectory.file("outputs/bundle/release/app-release.aab")
-val playSubmissionEvidenceManifest = rootProject.file("play/0.5.1/submission-evidence.json")
+val playSubmissionEvidenceManifest = rootProject.file("play/1.0.0/submission-evidence.json")
 val playSubmissionEvidenceValidator = rootProject.file("play/verify_submission_evidence.py")
 val verifyPlaySubmissionEvidenceSchema by tasks.registering(Exec::class) {
     group = "verification"

@@ -15,7 +15,7 @@ marked blocked has evidence attached to the release commit and artifact.
 | Fonts | Evidence complete | The bundled version 2.305 TTFs match official JetBrains Mono revision `02bb50b082dad9ef8a0f33ac393839202b760223` byte-for-byte. `legal/release/` records immutable source URLs, paths, Git blob IDs, hashes, copyright, and the complete upstream OFL-1.1 text. Upstream did not publish a `v2.305` tag or release archive. |
 | Android and JVM graph | Blocked | The locked `releaseRuntimeClasspath` SBOM and coordinate evidence authenticate every resolved external artifact and record upstream Maven POM declarations. Complete copyright notices and license texts still require independent collection and review. |
 | QEMU VM payload | Not shipping | Publish QEMU, kernel, initramfs, and linked-library source and changes beside any future binary; preserve the executable-process boundary. |
-| Privacy and terms | In progress | Keep `legal/` identical to the in-app assets, publish the public URLs, and make Play Data safety and Apple privacy answers match actual network behavior. |
+| Privacy and terms | In progress | Keep `legal/` identical to the in-app assets, publish the public URLs, and make Play Data safety and Apple privacy answers match actual network behavior. On 24 September 2026 the live privacy page still showed the 13 July 2026 text; `play/1.0.0/READINESS.md` tracks publication. |
 
 GNU GPL v2 section 3 requires object-code distribution to be accompanied by complete corresponding
 source, a qualifying written offer valid for at least three years, or the narrow noncommercial

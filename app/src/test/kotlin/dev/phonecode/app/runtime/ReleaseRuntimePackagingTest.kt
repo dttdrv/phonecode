@@ -106,8 +106,8 @@ class ReleaseRuntimePackagingTest {
         assertTrue(build.contains("""versionName = "0.8.6""""))
         assertTrue(build.contains("""release-evidence/0.5.1/vm-host"""))
         assertTrue(build.contains("""release-evidence/0.5.1/guest/sources"""))
-        assertTrue(build.contains("""play/0.5.1/submission-evidence.json"""))
-        assertTrue(File(root, "play/0.5.1/README.md").isFile)
+        assertTrue(build.contains("""play/1.0.0/submission-evidence.json"""))
+        assertTrue(File(root, "play/1.0.0/README.md").isFile)
 
         listOf(
             "native-runtime/prepare-release-host-evidence.sh",

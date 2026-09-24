@@ -68,6 +68,14 @@ AndroidX, Jetpack Compose, Kotlin, kotlinx, OkHttp, Okio, Haze, Tink, Gson, Atom
 JavaEWAH, Apache Commons Codec, and related components are primarily Apache-2.0. Eclipse JGit uses
 the Eclipse Distribution License 1.0. SLF4J uses MIT.
 
+## Service and provider marks
+
+Provider and plugin glyphs for Anthropic, Cloudflare, GitHub, Google Gemini, Mistral AI, OpenAI,
+OpenRouter, Stripe, and X come from Simple Icons 15.22.0 (https://simpleicons.org), released under
+CC0 1.0. The AWS, DeepSeek, DeepWiki, Microsoft, and OpenCode icons are the services' own site icons.
+All names and marks remain trademarks of their owners and are shown only to identify the service a
+model provider or plugin connects to. No endorsement is implied.
+
 ## Development Linux prototype
 
 The development build contains an Alpine 3.21.7 root filesystem with independently licensed

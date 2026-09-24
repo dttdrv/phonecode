@@ -1,6 +1,6 @@
 # Google Play submission preflight: PhoneCode 0.5.1
 
-Status: **BLOCKED — do not submit or describe this build as Play-ready.**
+Status: **BLOCKED — do not submit or describe this build as Play-ready.** Superseded on 24 September 2026 by [`../1.0.0/`](../1.0.0/README.md); kept as history.
 
 This directory holds draft Play Console copy and the evidence checklist for the 0.5.1 candidate. It
 is not a changelog or a substitute for testing the exact signed Android App Bundle.

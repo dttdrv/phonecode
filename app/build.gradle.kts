@@ -49,8 +49,8 @@ android {
         applicationId = "dev.phonecode"
         minSdk = 26
         targetSdk = 36
-        versionCode = 61
-        versionName = "0.8.6"
+        versionCode = 62
+        versionName = "0.8.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GITHUB_OAUTH_CLIENT_ID", githubOauthClientId.asBuildConfigString())
         buildConfigField("boolean", "CODEX_OAUTH_ENABLED", "false")
@@ -671,7 +671,7 @@ androidComponentsExtension.onVariants(
 ) { variant ->
     variant.outputs.forEach { output ->
         output.versionCode.set(61)
-        output.versionName.set("0.8.6")
+        output.versionName.set("0.8.7")
     }
 }
 

@@ -242,6 +242,6 @@ class UiPolishRegressionTest {
         assertTrue(build.contains("sourceSets.getByName(\"sideload\")"))
         assertTrue(build.contains("withBuildType(\"sideload\")"))
         assertTrue(build.contains("output.versionCode.set(61)"))
-        assertTrue(build.contains("output.versionName.set(\"0.8.6\")"))
+        assertTrue(build.contains("output.versionName.set(\"0.8.7\")"))
     }
 }

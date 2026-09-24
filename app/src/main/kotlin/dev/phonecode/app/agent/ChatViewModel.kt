@@ -42,6 +42,7 @@ import dev.phonecode.app.runtime.MisulRuntimeSpec
 import dev.phonecode.app.runtime.toBoundedMisulImportSession
 import dev.phonecode.app.runtime.userFacingFailure
 import dev.phonecode.app.runtime.isRetryableFailure
+import dev.phonecode.app.runtime.needsApproval
 import dev.phonecode.provider.catalog.Catalog
 import dev.phonecode.provider.catalog.CatalogLoader
 import dev.phonecode.provider.domain.ChatMessage
@@ -123,13 +124,15 @@ enum class TurnOutcome { STOPPED, FAILED }
 
 data class PermissionRequest(val tool: String, val summary: String)
 
-internal fun permissionCanAutoApprove(tool: String, automaticChanges: Boolean): Boolean {
-    if (!automaticChanges) return false
-    val normalized = tool.lowercase()
-    return normalized != "doom_loop" &&
-        normalized != "external_directory" &&
-        !normalized.startsWith("external_directory_")
-}
+// Automatic approval covers edits to files in the active workspace only.
+private val AUTO_APPROVED_FILE_EDITS = setOf("edit_file", "write_file", "apply_patch")
+
+internal fun permissionCanAutoApprove(tool: String, automaticChanges: Boolean): Boolean =
+    automaticChanges && tool in AUTO_APPROVED_FILE_EDITS
+
+/** The user's always-ask tools plus every mutating tool automatic approval does not cover. */
+internal fun alwaysAskTools(userAlwaysAsk: Set<String>, mutatingTools: List<String>): Set<String> =
+    userAlwaysAsk + mutatingTools.filterNot { permissionCanAutoApprove(it, automaticChanges = true) }
 
 data class QuestionRequest(val questions: List<UserQuestion>)
 data class RetryState(val attempt: Int, val message: String)
@@ -159,7 +162,12 @@ private data class BackupRestore(
     val projects: List<Project>,
 )
 
-private data class StreamSnapshot(val text: String, val reasoning: String)
+private data class StreamSnapshot(val text: String, val reasoning: String) {
+    fun parts(): List<MessagePart> = buildList {
+        if (reasoning.isNotBlank()) add(MessagePart.Reasoning(reasoning))
+        if (text.isNotBlank()) add(MessagePart.Text(text))
+    }
+}
 
 private data class RecoveredWorkspace(val source: File, val target: File, val relativePath: String)
 
@@ -2150,7 +2158,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             hostTools = hostTools,
             toolContext = AndroidToolContext({ pinnedWorkspace.absolutePath }, { _, _ -> false }, ::askUser),
             disabledTools = settings.disabledTools,
-            approvalTools = settings.approvalTools,
+            approvalTools = alwaysAskTools(settings.approvalTools, hostTools.filter { it.needsApproval() }.map { it.name }),
         )
     }
 
@@ -2283,8 +2291,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 importActiveSession(runtimeSpec, turnSessionId, startingHistory)
                 var promptText = text
                 while (gen == generation) {
-                    val completeText = StringBuilder()
-                    val completeReasoning = StringBuilder()
                     val settlement = misulRuntime.prompt(
                         spec = runtimeSpec,
                         sessionId = turnSessionId,
@@ -2292,17 +2298,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     ) { event ->
                         if (gen != generation) return@prompt
                         when (event) {
-                            is MisulRuntimeEvent.Text -> {
-                                completeText.append(event.delta)
-                                appendStreaming(text = event.delta, expectedGeneration = gen)
-                            }
-                            is MisulRuntimeEvent.Reasoning -> {
-                                completeReasoning.append(event.delta)
-                                appendStreaming(reasoning = event.delta, expectedGeneration = gen)
-                            }
+                            is MisulRuntimeEvent.Text -> appendStreaming(text = event.delta, expectedGeneration = gen)
+                            is MisulRuntimeEvent.Reasoning -> appendStreaming(reasoning = event.delta, expectedGeneration = gen)
                             is MisulRuntimeEvent.ProtocolError -> throw IllegalStateException(event.message)
                             is MisulRuntimeEvent.ToolStarted -> {
-                                commitStreaming()
+                                history = history.withToolStarted(
+                                    commitStreaming().parts(),
+                                    MessagePart.ToolCall(event.id, event.name, event.input),
+                                )
                                 _state.update { current ->
                                     current.copy(lines = current.lines + ChatLine.ToolActivity(
                                         id = event.id,
@@ -2313,16 +2316,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                     ))
                                 }
                             }
-                            is MisulRuntimeEvent.ToolFinished -> _state.update { current ->
-                                val index = current.lines.indexOfLast {
-                                    it is ChatLine.ToolActivity && it.id == event.id && it.status == ToolStatus.RUNNING
+                            is MisulRuntimeEvent.ToolFinished -> {
+                                val detail = if (event.isError) "Tool failed" else "Completed"
+                                history = history.withToolFinished(MessagePart.ToolResult(event.id, detail, event.isError))
+                                _state.update { current ->
+                                    val index = current.lines.indexOfLast {
+                                        it is ChatLine.ToolActivity && it.id == event.id && it.status == ToolStatus.RUNNING
+                                    }
+                                    if (index < 0) current else current.copy(lines = current.lines.toMutableList().also { lines ->
+                                        lines[index] = (lines[index] as ChatLine.ToolActivity).copy(
+                                            status = if (event.isError) ToolStatus.ERROR else ToolStatus.DONE,
+                                            detail = detail,
+                                        )
+                                    })
                                 }
-                                if (index < 0) current else current.copy(lines = current.lines.toMutableList().also { lines ->
-                                    lines[index] = (lines[index] as ChatLine.ToolActivity).copy(
-                                        status = if (event.isError) ToolStatus.ERROR else ToolStatus.DONE,
-                                        detail = if (event.isError) "Tool failed" else "Completed",
-                                    )
-                                })
                             }
                             is MisulRuntimeEvent.ApprovalRequested -> {
                                 pendingNativeApprovalId.set(event.id)
@@ -2344,12 +2351,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     if (gen != generation) break
 
-                    commitStreaming()
-                    val assistantParts = buildList {
-                        completeReasoning.toString().takeIf(String::isNotBlank)?.let { add(MessagePart.Reasoning(it)) }
-                        settlement.content.ifBlank { completeText.toString() }
-                            .takeIf(String::isNotBlank)?.let { add(MessagePart.Text(it)) }
-                    }
+                    // Earlier text and tool steps are already in history; the runtime streams all
+                    // settled text as deltas, so only the segment after the last tool remains.
+                    val assistantParts = commitStreaming().parts()
                     if (assistantParts.isNotEmpty()) history = history + ChatMessage(Role.ASSISTANT, assistantParts)
 
                     val failed = settlement.status != "completed"
@@ -2563,10 +2567,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             .filterIsInstance<ChatLine.ToolActivity>()
             .filter { it.status == ToolStatus.STOPPED && it.detail == STOPPED_BEFORE_APPROVAL_MESSAGE }
             .mapTo(mutableSetOf()) { it.id }
-        val parts = buildList {
-            if (streamed.reasoning.isNotBlank()) add(MessagePart.Reasoning(streamed.reasoning))
-            if (streamed.text.isNotBlank()) add(MessagePart.Text(streamed.text))
-        }
+        val parts = streamed.parts()
         history = repairInterruptedHistory(history, stoppedApprovalCallIds).let { repaired ->
             if (parts.isEmpty()) repaired else repaired + ChatMessage(Role.ASSISTANT, parts)
         }
@@ -2612,52 +2613,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             )
             _state.update { it.copy(sessions = sessionStore.list()) }
         }
-    }
-
-    /** Rebuild the visible timeline from persisted history, merging each tool result into its tool-call line. */
-    private fun List<ChatMessage>.toChatLines(): List<ChatLine> {
-        val lines = mutableListOf<ChatLine>()
-        for (message in this) {
-            if (message.role == Role.USER) {
-                val text = message.parts.filterIsInstance<MessagePart.Text>().joinToString("\n") { it.text }
-                val images = message.parts.filterIsInstance<MessagePart.Image>()
-                if (text.isNotEmpty() || images.isNotEmpty()) lines += ChatLine.User(text, images)
-            }
-            for (part in message.parts) {
-                when (part) {
-                    is MessagePart.Text ->
-                        if (message.role == Role.ASSISTANT) lines += ChatLine.Assistant(part.text)
-                    is MessagePart.Image -> Unit
-                    is MessagePart.Reasoning -> lines += ChatLine.Reasoning(part.text)
-                    is MessagePart.ToolCall ->
-                        lines += ChatLine.ToolActivity(
-                            part.id,
-                            part.name,
-                            ToolStatus.DONE,
-                            summarizeArgs(part.argsJson),
-                            boundedToolInput(part.argsJson),
-                        )
-                    is MessagePart.ToolResult -> {
-                        val index = lines.indexOfLast { it is ChatLine.ToolActivity && it.id == part.callId }
-                        if (index >= 0) {
-                            lines[index] = (lines[index] as ChatLine.ToolActivity).copy(
-                                status = when {
-                                    !part.isError -> ToolStatus.DONE
-                                    part.content == USER_STOPPED_BEFORE_APPROVAL_RESULT -> ToolStatus.STOPPED
-                                    else -> ToolStatus.ERROR
-                                },
-                                detail = if (part.content == USER_STOPPED_BEFORE_APPROVAL_RESULT) {
-                                    STOPPED_BEFORE_APPROVAL_MESSAGE
-                                } else {
-                                    part.content
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        return lines
     }
 
     private fun appendStreaming(text: String = "", reasoning: String = "", expectedGeneration: Int) {
@@ -2753,16 +2708,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun summarizeArgs(argsJson: String): String = argsJson.replace("\n", " ").take(120)
-
-    private fun boundedToolInput(argsJson: String): String = if (argsJson.length <= MAX_TOOL_INPUT_CHARS) {
-        argsJson
-    } else {
-        argsJson.take(MAX_TOOL_INPUT_CHARS / 2) +
-            "\n[Input truncated; showing beginning and end.]\n" +
-            argsJson.takeLast(MAX_TOOL_INPUT_CHARS / 2)
-    }
-
     override fun onCleared() {
         // Stop background daemons promptly: the GitHub poll thread checks this attempt every ≤500ms,
         // and the Codex loopback listener would otherwise hold port 1455 until its 5-min timeout.
@@ -2817,6 +2762,84 @@ internal fun branchCutIndex(history: List<ChatMessage>, turn: Int): Int {
 
 internal fun redoCutIndex(history: List<ChatMessage>): Int =
     history.indexOfLast { m -> m.role == Role.USER && m.parts.any { it is MessagePart.Text } }
+
+/**
+ * Native tool events carry no result body. Record each step in history anyway so a reopened chat keeps its
+ * tool lines in order: consecutive calls share one assistant message and their results one user message.
+ */
+internal fun List<ChatMessage>.withToolStarted(segment: List<MessagePart>, call: MessagePart.ToolCall): List<ChatMessage> {
+    val last = lastOrNull()
+    return if (segment.isEmpty() && last?.role == Role.ASSISTANT && last.parts.lastOrNull() is MessagePart.ToolCall) {
+        dropLast(1) + last.copy(parts = last.parts + call)
+    } else {
+        this + ChatMessage(Role.ASSISTANT, segment + call)
+    }
+}
+
+internal fun List<ChatMessage>.withToolFinished(result: MessagePart.ToolResult): List<ChatMessage> {
+    val last = lastOrNull()
+    return if (last?.role == Role.USER && last.parts.isNotEmpty() && last.parts.all { it is MessagePart.ToolResult }) {
+        dropLast(1) + last.copy(parts = last.parts + result)
+    } else {
+        this + ChatMessage(Role.USER, listOf(result))
+    }
+}
+
+/** Rebuild the visible timeline from persisted history, merging each tool result into its tool-call line. */
+internal fun List<ChatMessage>.toChatLines(): List<ChatLine> {
+    val lines = mutableListOf<ChatLine>()
+    for (message in this) {
+        if (message.role == Role.USER) {
+            val text = message.parts.filterIsInstance<MessagePart.Text>().joinToString("\n") { it.text }
+            val images = message.parts.filterIsInstance<MessagePart.Image>()
+            if (text.isNotEmpty() || images.isNotEmpty()) lines += ChatLine.User(text, images)
+        }
+        for (part in message.parts) {
+            when (part) {
+                is MessagePart.Text ->
+                    if (message.role == Role.ASSISTANT) lines += ChatLine.Assistant(part.text)
+                is MessagePart.Image -> Unit
+                is MessagePart.Reasoning -> lines += ChatLine.Reasoning(part.text)
+                is MessagePart.ToolCall ->
+                    lines += ChatLine.ToolActivity(
+                        part.id,
+                        part.name,
+                        ToolStatus.DONE,
+                        summarizeArgs(part.argsJson),
+                        boundedToolInput(part.argsJson),
+                    )
+                is MessagePart.ToolResult -> {
+                    val index = lines.indexOfLast { it is ChatLine.ToolActivity && it.id == part.callId }
+                    if (index >= 0) {
+                        lines[index] = (lines[index] as ChatLine.ToolActivity).copy(
+                            status = when {
+                                !part.isError -> ToolStatus.DONE
+                                part.content == USER_STOPPED_BEFORE_APPROVAL_RESULT -> ToolStatus.STOPPED
+                                else -> ToolStatus.ERROR
+                            },
+                            detail = if (part.content == USER_STOPPED_BEFORE_APPROVAL_RESULT) {
+                                STOPPED_BEFORE_APPROVAL_MESSAGE
+                            } else {
+                                part.content
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+    return lines
+}
+
+private fun summarizeArgs(argsJson: String): String = argsJson.replace("\n", " ").take(120)
+
+private fun boundedToolInput(argsJson: String): String = if (argsJson.length <= MAX_TOOL_INPUT_CHARS) {
+    argsJson
+} else {
+    argsJson.take(MAX_TOOL_INPUT_CHARS / 2) +
+        "\n[Input truncated; showing beginning and end.]\n" +
+        argsJson.takeLast(MAX_TOOL_INPUT_CHARS / 2)
+}
 
 internal fun repairInterruptedHistory(
     history: List<ChatMessage>,

@@ -458,7 +458,7 @@ internal fun McpServerPage(
                     }
                 }
                 SettingsNote(
-                    "Adds ${tools.size} ${if (tools.size == 1) "tool" else "tools"}. Tool calls that change data follow your approval setting.",
+                    "Adds ${tools.size} ${if (tools.size == 1) "tool" else "tools"}. Tool calls always ask for approval.",
                 )
             }
             error?.takeIf { catalogEntry.auth !is PluginAuth.BearerToken || !it.startsWith("Each header") }?.let {
@@ -631,7 +631,7 @@ internal fun McpServerPage(
             if (isNew) {
                 SettingsNote(
                     "MCP servers receive tool inputs from the agent. Review the reported tools before " +
-                        "enabling; mutating actions follow your approval setting.",
+                        "enabling; every tool call asks for approval.",
                 )
             }
             error?.takeUnless { message ->
@@ -808,7 +808,7 @@ internal fun McpServerPage(
                     error = null
                 }
             }
-            SettingsNote("Tool calls that change data follow your approval setting.")
+            SettingsNote("Tool calls always ask for approval.")
             Spacer(Modifier.height(Spacing.s))
             MisulActionButton(
                 "Add plugin",

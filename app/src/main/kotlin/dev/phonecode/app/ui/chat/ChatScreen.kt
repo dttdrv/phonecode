@@ -24,6 +24,7 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -310,8 +311,13 @@ fun ChatScreen(
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia(), attach)
 
     LaunchedEffect(listState, state.currentSessionId) {
-        snapshotFlow { listState.isScrollInProgress to listState.canScrollForward }.collect { (scrolling, canScrollForward) ->
-            if (scrolling) followOutput = !canScrollForward
+        // Only an upward scroll stops following; the tail-follow below scrolls forward, so it can
+        // never switch itself off. Reaching the end by any means resumes following.
+        snapshotFlow {
+            Triple(listState.isScrollInProgress, listState.canScrollForward, listState.lastScrolledBackward)
+        }.collect { (scrolling, canScrollForward, backward) ->
+            if (scrolling && backward && canScrollForward) followOutput = false
+            if (scrolling && !canScrollForward) followOutput = true
         }
     }
 
@@ -321,8 +327,20 @@ fun ChatScreen(
 
     val autoScrollTarget = state.lines.size +
         if (state.streamingReasoning.isNotEmpty() || state.streaming.isNotEmpty()) 1 else 0
-    LaunchedEffect(state.currentSessionId, autoScrollTarget, followOutput) {
-        if (autoScrollTarget > 0 && followOutput) listState.scrollToItem(autoScrollTarget - 1)
+    // isRunning: the finished turn grows its action row without changing the item count.
+    // bottomOverlayHeight: the composer/keyboard grew, so the end moved up behind it.
+    LaunchedEffect(state.currentSessionId, autoScrollTarget, followOutput, state.isRunning, bottomOverlayHeight) {
+        if (autoScrollTarget > 0 && followOutput) {
+            listState.scrollToItem(autoScrollTarget - 1)
+            // scrollToItem aligns the item's top; a reply taller than the screen must show its end.
+            listState.scrollBy(TailScrollPx)
+        }
+    }
+    // Streaming grows the last item in place without changing the item count: keep its newest
+    // line above the composer instead of letting it run below the fold.
+    val streamedLength = state.streaming.length + state.streamingReasoning.length
+    LaunchedEffect(state.currentSessionId, streamedLength) {
+        if (followOutput && streamedLength > 0) listState.scrollBy(TailScrollPx)
     }
 
     var observedCompletion by remember { mutableStateOf(state.lastCompletedAt) }
@@ -353,7 +371,9 @@ fun ChatScreen(
                 hazeState = glassHaze,
                 showTop = blurTopBand,
                 showBottom = blurBottomBand,
-                topHeight = statusInset + topChromeHeight + 12.dp,
+                // Taller than the content inset: the two-line title (chat + project) must sit on a
+                // settled band, not over half-legible text.
+                topHeight = statusInset + topChromeHeight + 40.dp,
                 bottomHeight = with(chromeDensity) { bottomOverlayHeight.toDp() } + 12.dp,
             ) { _ ->
                 // New-chat transition: conversation fades out, empty state fades in (chatgpt-motion.md
@@ -533,6 +553,22 @@ fun ChatScreen(
                 }
             }
 
+            // Scrolled away from a live or long chat: one tap returns to the latest output. Kept
+            // outside the bottom column so showing it never changes the list's bottom padding.
+            AnimatedVisibility(
+                visible = !empty && !followOutput && listState.canScrollForward,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .padding(bottom = with(LocalDensity.current) { bottomOverlayHeight.toDp() } + 8.dp),
+            ) {
+                FloatingIconButton(
+                    Icons.Filled.KeyboardArrowDown,
+                    "Scroll to latest",
+                    onClick = { followOutput = true },
+                )
+            }
+
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .onSizeChanged { bottomOverlayHeight = it.height }
@@ -599,10 +635,11 @@ fun ChatScreen(
                         onClick = { if (modelConfigured) modelOpen = true else onOpenModelSetup() },
                     )
                     Spacer(Modifier.weight(1f))
-                    // Context usage is a glanceable ring beside send; tap for the breakdown.
+                    // Context usage is a glanceable ring beside send, shown once the chat has used
+                    // some context (an empty ring reads as an unchecked radio); tap for the breakdown.
                     val ctxUsed = state.usageInput + state.usageOutput
                     val ctxFrac = state.contextLimit?.let { if (it > 0) ctxUsed.toFloat() / it else 0f } ?: 0f
-                    if (modelConfigured) Box(
+                    if (modelConfigured && ctxUsed > 0) Box(
                         Modifier.size(Spacing.touchTarget).clip(ShapePill)
                             .clickable(role = Role.Button) { modelOpen = false; contextOpen = true }
                             .semantics { contentDescription = "Context usage ${(ctxFrac.coerceIn(0f, 1f) * 100).toInt()} percent" },
@@ -1047,3 +1084,6 @@ private fun readAttachment(context: android.content.Context, uri: Uri): Attachme
         Attachment.Text(name, content)
     }
 }.getOrNull()
+
+/** Larger than any single scroll step; the list clamps it to the end of its content. */
+private const val TailScrollPx = 100_000f

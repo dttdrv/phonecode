@@ -47,8 +47,8 @@ private val bitmaps = mapOf(
     "opencode-go" to R.drawable.brand_opencode,
 )
 
-/** Brands whose mark is plain black: drawn in the ink color so they survive dark mode. */
-private val inkGlyphs = setOf("github", "openai", "codex", "anthropic", "xai")
+/** Brands whose mark is monochrome: drawn in the ink color so they survive dark mode. */
+private val inkGlyphs = setOf("github", "openai", "codex", "anthropic", "xai", "openrouter")
 
 internal fun hasAppIcon(key: String) = key in glyphs || key in bitmaps
 

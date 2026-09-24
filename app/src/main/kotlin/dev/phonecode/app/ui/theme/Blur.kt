@@ -72,8 +72,8 @@ private fun Modifier.edgeDissolve(fromTop: Boolean, edgeColor: Color): Modifier 
             colorStops = if (fromTop) {
                 arrayOf(
                     0f to edgeColor.copy(alpha = EdgeTintAlpha),
-                    0.55f to edgeColor.copy(alpha = 0.70f),
-                    0.80f to edgeColor.copy(alpha = 0.24f),
+                    0.50f to edgeColor.copy(alpha = 0.82f),
+                    0.78f to edgeColor.copy(alpha = 0.32f),
                     1f to Color.Transparent,
                 )
             } else {

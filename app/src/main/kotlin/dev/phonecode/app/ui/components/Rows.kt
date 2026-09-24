@@ -220,10 +220,13 @@ fun MisulActionRow(
     supportingText: String? = null,
     enabled: Boolean = true,
     showDivider: Boolean = true,
+    /** A 36dp leading tile (for example a service app icon) in place of [icon]. */
+    leading: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
     RowShell(
+        leadingInset = if (leading != null) 36.dp else null,
         modifier = modifier
             .graphicsLayer { alpha = if (enabled) 1f else 0.46f }
             .misulRowPressTreatment(interaction)
@@ -240,6 +243,7 @@ fun MisulActionRow(
         supportingText = supportingText,
         showDivider = showDivider,
     ) {
+        leading?.invoke()
         icon?.let {
             Icon(
                 it,

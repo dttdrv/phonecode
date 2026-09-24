@@ -500,7 +500,7 @@ The system is flat by default. Depth comes first from tonal steps, then fine rul
 - **Floating controls:** a higher tonal step with a restrained ambient edge shadow only when overlapping content.
 - **Drawer and modal sheets:** structural shadow plus scrim because they occupy a different interaction plane.
 - **Top and bottom dissolve bands:** at most a 4px progressive backdrop blur with no tinted slab. Apply only where transcript content actually passes beneath chrome.
-- **Frosted controls:** at most 14px backdrop blur with approximately 55% canvas tint, reserved for the floating composer and chrome when live content is visible behind them.
+- **Frosted controls (Liquid Glass):** `Modifier.liquidGlass` / `floatingChrome` — 20dp backdrop blur, canvas tint (≈52% dark, ≈72% light) and a hairline rim; light mode adds a 1dp edge and soft shadow so controls stay distinguishable on white. Reserved for the floating composer and chrome buttons when live content passes behind them; this is the one sanctioned exception to the One Plane Rule.
 
 **The One Plane Rule.** A region may use tonal contrast, a rule, blur, or shadow to establish its edge, but rarely more than two together. Never stack a border, large shadow, gradient, and glass effect on the same component.
 
@@ -543,7 +543,7 @@ The composer is the primary control and remains reachable with one hand.
 
 - Resting height: 56px; multiline growth rises upward to six lines before the field scrolls internally.
 - Leading action: attachment or contextual add menu with a separate visible 48px circular target.
-- Text field: plain-language placeholder tied to readiness, such as “Ask Misul” or “Connect a model to start.”
+- Text field: plain-language placeholder tied to readiness, such as “Ask PhoneCode” or “Connect a model to start.”
 - The text surface is one true capsule, with a stable 48px trailing slot: send when ready, stop while running. Its size never animates as the icon changes.
 - When a sendable draft can be queued during a running turn, queue receives one distinct external 48px action; idle states do not reserve that empty slot.
 - Model selection belongs in session chrome, not inside the typing line.
@@ -716,3 +716,52 @@ Use platform haptics for direct confirmation, completion, warning, and rejection
 - **Don't** use color alone for context pressure, success, warnings, failures, or running state.
 - **Don't** claim work is complete because a process exists, a model responded, or a tool started. Show the actual result and any remaining uncertainty.
 - **Don't** add a feature, destination, control, or status indicator before there is implemented behavior for it.
+
+## Working vocabulary
+
+Build screens from these Compose primitives. Do not invent a parallel button, row, dialog, or menu; extend the primitive when a real need appears. (Pattern borrowed from shadcn/ui: a small set of owned, composable primitives with thoughtful defaults.)
+
+| Need | Use | File |
+|---|---|---|
+| Header or floating icon control | `FloatingIconButton`, `Modifier.floatingChrome` | `ui/components/Actions.kt` |
+| Glass surface over live content | `Modifier.liquidGlass`, `LocalGlassHaze` | `ui/theme/Blur.kt` |
+| Scroll-edge blur behind header/composer | `StretchSyncedScrollChrome` | `ui/components/ScrollChrome.kt` |
+| Settings page | `SettingsPageShell`, `SettingsSaveAction` | `ui/settings/SettingsComponents.kt` |
+| Grouped list | `MisulGroup`, `MisulSectionLabel`, `MisulNavigationRow`, `MisulActionRow`, `MisulToggleRow`, `MisulSelectionRow`, `MisulStatusRow` | `ui/components/Rows.kt` |
+| Text input / search | `MisulField`, `MisulSearchField` | `ui/components/Fields.kt` |
+| Confirmation | `MisulDialog` + equal-width `MisulDialogAction` pills | `ui/components/Overlays.kt` |
+| Contextual menu | `MorphingMenu` | `ui/components/MorphingMenu.kt` |
+| Service or provider mark | `AppIcon(key)` (real brand marks; neutral glyph fallback) | `ui/components/AppIcon.kt` |
+| Custom glyphs | `PhoneIcons` | `ui/components/PhoneIcons.kt` |
+| Live activity label | `ShimmerText`; tool runs via `ToolGroupView` | `ui/chat/ChatTurn.kt` |
+
+Controls on a raised surface (sheet, dialog, menu) use `raisedFillColor()`; never hard-code a surface color.
+
+## Transcript scroll contract
+
+- While following, the newest streamed line stays above the composer; a reply taller than the screen shows its end, not its top.
+- An upward scroll by the user stops following. Reaching the end by any means resumes it. Programmatic scrolls never switch following off.
+- When not following and content continues below, a single floating “Scroll to latest” control sits above the composer. Showing it never changes list padding.
+- Streaming never re-animates layout; completion does not jump the viewport.
+
+## Rejection list
+
+Named so reviewers and agents can recognize them on sight (after Vercel's design.md). A screen that shows one of these is not done.
+
+1. **Initial tiles.** Letter monograms standing in for a service; use `AppIcon` or a neutral glyph.
+2. **Lone segment.** A segmented control or chip row with one option; hide the control.
+3. **Zero gauge.** An empty ring, bar, or counter before there is anything to measure.
+4. **Radio lookalike.** A hollow circle that is not a selection control.
+5. **Card soup.** Assistant replies, tool calls, or settings rows wrapped in their own decorative cards.
+6. **Badge rash.** Pills or badges for routine metadata that plain secondary text would carry.
+7. **Stacked depth.** Border + large shadow + gradient + glass on one component (glass chrome excepted, as specified above).
+8. **Ghost button.** A light-mode control whose edge disappears into a white canvas.
+9. **Top-anchored stream.** Following a long reply by pinning its top while new text runs below the fold.
+10. **Copied glyphs.** Icons traced 1:1 from ChatGPT, Claude, or another product; take the idea, draw our own.
+11. **Placeholder capability.** A row, toggle, or destination for behavior that does not exist yet.
+12. **Vague verbs.** “Continue,” “Proceed,” “OK” on actions with consequences; name the action.
+13. **Toast instructions.** Critical recovery steps carried only by a transient message.
+14. **Narrated process.** Copy that explains how the UI was built or restates the heading.
+15. **Animated frequency.** Motion on typing, sending, token streaming, or other hundreds-per-day actions.
+16. **Decorative delight in work.** Particles, shimmer backgrounds, animated gradients, or fields behind the working transcript (Magic UI–style effects belong only to rare identity moments such as onboarding).
+

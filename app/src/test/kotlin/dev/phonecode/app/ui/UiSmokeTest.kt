@@ -204,7 +204,8 @@ Original instruction.
         compose.onNodeWithContentDescription("Message").performClick()
         compose.onNodeWithContentDescription("Switch model").performClick()
         compose.onNodeWithText("Search models").assertIsDisplayed()
-        compose.onNodeWithText("Reasoning").assertIsDisplayed()
+        // The test model offers a single effort, so there is no reasoning choice to show.
+        compose.onAllNodesWithText("Reasoning").assertCountEquals(0)
         compose.onAllNodesWithText("Agent mode").assertCountEquals(0)
         compose.onNodeWithContentDescription("Search models").performTextInput("definitely-no-such-model")
         compose.onNodeWithText("No models match", substring = true).assertIsDisplayed()
@@ -212,16 +213,8 @@ Original instruction.
         if (done.fetchSemanticsNodes().isNotEmpty()) done.onFirst().performClick()
         compose.waitForIdle()
 
-        compose.onNodeWithContentDescription("Menu").performClick()
-        compose.onNodeWithContentDescription("New chat").performClick()
-        compose.waitForIdle()
-
-        // Context usage breakdown opens from the glanceable ring (moved out of the tools menu).
-        // Done last: this sheet has no in-content dismiss row, so we leave it open - the test only
-        // proves it composes without crashing.
-        compose.onNodeWithContentDescription("Message").performClick()
-        compose.onNodeWithContentDescription("Context usage", substring = true).performClick()
-        compose.onNodeWithText("Input").assertIsDisplayed()
+        // The context ring appears only once a chat has used context; a fresh chat shows none.
+        compose.onAllNodesWithContentDescription("Context usage", substring = true).assertCountEquals(0)
     }
 
     @Test

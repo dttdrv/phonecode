@@ -11,7 +11,7 @@
 ## Working and verification
 
 - Preserve existing work and unrelated files. Check the current diff before editing.
-- Reuse the existing Compose components before introducing another component or dependency.
+- Reuse the existing Compose components before introducing another component or dependency. DESIGN.md lists them under Working vocabulary; check its Rejection list before calling a screen done.
 - Inspect rendered screens in the emulator after UI changes, including light/dark mode and keyboard states. Check affected nested screens and long content, not only landing pages.
 - Roborazzi tests record screenshots by default. Passing those tests is not a visual comparison; inspect the resulting images.
 - Test provider changes through the actual native request path. Serialization tests alone do not prove the headers or payload reach the server. Use synthetic credentials and local fixtures where possible.

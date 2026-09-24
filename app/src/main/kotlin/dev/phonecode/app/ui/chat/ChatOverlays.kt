@@ -602,7 +602,8 @@ private fun ModelSheet(
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             )
         }
-        if (availableReasoningEfforts.isNotEmpty()) {
+        // One effort is no choice: hide the control rather than show a lone pill in an empty track.
+        if (availableReasoningEfforts.size > 1) {
             Text(
                 "Reasoning",
                 style = MaterialTheme.typography.labelMedium,

@@ -174,7 +174,7 @@ internal fun ProvidersPage(vm: ChatViewModel, onOpenProvider: (String) -> Unit, 
                 MisulActionRow(
                     label = "Sign in with ChatGPT",
                     supportingText = "Use models included with your ChatGPT plan",
-                    icon = Icons.Outlined.Cloud,
+                    leading = { AppIcon("openai", 36.dp) },
                 ) {
                     vm.startCodexSignIn()?.let { url ->
                         browserError = openExternalUrl(context, url)

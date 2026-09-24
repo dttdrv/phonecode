@@ -325,7 +325,10 @@ internal fun McpServerPage(
 
     val initialHeaders = headersForEditor(baseline.headers)
     val changed = if (isNew) {
-        name.isNotBlank() || url.isNotBlank() || headers.isNotBlank() || timeout != baseline.timeout.toString() || enabled != baseline.enabled
+        // Compare with what the page opened with: a catalog plugin arrives prefilled, and leaving
+        // it untouched is not an unsaved change.
+        name.trim() != suggestedName.trim() || url != baseline.url || headers != initialHeaders || token.isNotBlank() ||
+            timeout != baseline.timeout.toString() || enabled != baseline.enabled
     } else {
         url != baseline.url || headers != initialHeaders || timeout != baseline.timeout.toString() || enabled != baseline.enabled
     }
@@ -524,6 +527,7 @@ internal fun McpServerPage(
             }
         }
         if (introduction != null) {
+            Spacer(Modifier.height(12.dp))
             MisulGroup {
                 SettingsNavigationRow(
                     label = if (showAdvanced) "Hide connection details" else "Connection details",

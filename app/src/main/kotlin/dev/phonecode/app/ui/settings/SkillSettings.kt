@@ -176,11 +176,15 @@ internal fun SkillsPage(
                 onClick = onNewSkill,
             )
         }
-        val summary = buildString {
-            append("$active active · ${state.skills.size} discovered")
-            if (issues > 0) append(" · $issues need attention")
+        // Only worth a line when something is off; "7 active · 7 discovered" says nothing.
+        if (active != state.skills.size || issues > 0) {
+            SettingsNote(
+                buildString {
+                    append("$active of ${state.skills.size} active")
+                    if (issues > 0) append(" · $issues need attention")
+                },
+            )
         }
-        SettingsNote(summary)
         if (state.skills.size >= 12 || query.isNotBlank()) {
             MisulSearchField(query, { query = it }, "Search skills")
         }

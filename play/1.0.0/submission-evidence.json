@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "applicationId": "dev.phonecode",
+    "versionName": "0.8.6",
+    "versionCode": 61,
+    "aabSha256": null
+  },
+  "requirements": [
+    {
+      "id": "data-safety",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The Play Console Data safety form has not been completed or exported; sharing, taxonomy, and deletion answers in data-safety.md still need a decision.",
+        "No release network capture proves the destinations and payloads listed in data-safety.md, including MCP plugins, GitHub sign-in, web fetch and search, photo attachments, and the report endpoint."
+      ]
+    },
+    {
+      "id": "privacy-policy-url",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The live https://dttdrv.xyz/phonecode-privacy page is dated 13 July 2026 (checked 24 September 2026) and does not match legal/privacy.md dated 24 September 2026."
+      ]
+    },
+    {
+      "id": "terms-url",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The live https://dttdrv.xyz/phonecode-terms page has not been updated to match legal/terms.md dated 24 September 2026."
+      ]
+    },
+    {
+      "id": "foreground-service-declaration",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The specialUse foreground-service declaration in foreground-service.md has not been submitted in Play Console or accepted for a signed AAB."
+      ]
+    },
+    {
+      "id": "foreground-service-video",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "No unedited video from a Play-delivered build shows a user-started turn continuing in the background, the ongoing or Live Update notification, and the Stop action."
+      ]
+    },
+    {
+      "id": "ai-safety",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The Report response flow has not been exercised end to end against the production endpoint from a signed build.",
+        "The restricted-content prevention matrix, report triage owner, and safeguard feedback loop in ai-safety.md are not recorded."
+      ]
+    },
+    {
+      "id": "reviewer-access",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "No dedicated reviewer API key exists and the reviewer path in reviewer-instructions.md has not been run on a signed build."
+      ]
+    },
+    {
+      "id": "content-rating",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "The content-rating and target-audience questionnaires have not been completed in Play Console."
+      ]
+    },
+    {
+      "id": "listing-assets",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "No 1.0.0 listing graphics exist; the 0.5.1 graphics predate the current interface and must not be reused."
+      ]
+    },
+    {
+      "id": "play-policy-status",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "Play Console declarations, warnings, rejections, and required actions have not been checked after producing a signed AAB."
+      ]
+    },
+    {
+      "id": "signed-device-testing",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "No signed release AAB exists; source still declares version 0.8.6 (61), and the release gate stops on the missing upload key, GitHub OAuth client ID, isolated VM guest payload, and release compliance evidence.",
+        "The physical-device lifecycle, background, Stop, Live Update, recovery, and upgrade matrix has not been run on a signed build."
+      ]
+    },
+    {
+      "id": "pre-launch-report",
+      "status": "BLOCKED",
+      "candidateAabSha256": null,
+      "evidence": [],
+      "blockers": [
+        "No Play pre-launch report exists for a signed candidate."
+      ]
+    }
+  ]
+}

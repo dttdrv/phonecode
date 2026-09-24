@@ -37,8 +37,8 @@ are used only to describe origins and interoperability.
 ## Misul Agent native runtime
 
 - File: `app/src/main/jniLibs/arm64-v8a/libmisul.so`
-- SHA-256: `96d1e7616e1551f3f393459826ca4ce88415f3e66a4384546195ad92b3a6c7c5`
-- Source manifest SHA-256: `127d4e4909d4a51c928ee2a17e8f4f97208d89f6cea3be870c7711f33692161b`
+- SHA-256: `e0f6e43e4caf091fc0087bd980996c8aad8863a1c3ae7c7ed78b227876137bf4`
+- Source manifest SHA-256: `f98b4b7cd6507d411a2cc482c47df902db87292754f6bb00552871218b5529f0`
 - License: MIT, Copyright (c) 2026 Misul Computing
 
 The runtime is built separately from the Misul Agent source tree. `native-misul/sources.lock` pins

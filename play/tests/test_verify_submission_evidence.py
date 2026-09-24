@@ -9,7 +9,10 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "play" / "verify_submission_evidence.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-MANIFEST = ROOT / "play" / "0.5.1" / "submission-evidence.json"
+MANIFESTS = (
+    ROOT / "play" / "0.5.1" / "submission-evidence.json",
+    ROOT / "play" / "1.0.0" / "submission-evidence.json",
+)
 
 
 class SubmissionEvidenceValidatorTest(unittest.TestCase):
@@ -129,14 +132,16 @@ class SubmissionEvidenceValidatorTest(unittest.TestCase):
             mismatched.stderr,
         )
 
-    def test_repository_manifest_is_valid_and_truthfully_blocked(self):
-        schema_only = self.run_validator(MANIFEST, "--schema-only")
-        readiness = self.run_validator(MANIFEST)
+    def test_repository_manifests_are_valid_and_truthfully_blocked(self):
+        for manifest in MANIFESTS:
+            with self.subTest(manifest=manifest.parent.name):
+                schema_only = self.run_validator(manifest, "--schema-only")
+                readiness = self.run_validator(manifest)
 
-        self.assertEqual(0, schema_only.returncode, schema_only.stderr)
-        self.assertEqual(1, readiness.returncode)
-        self.assertIn("BLOCKED: data-safety", readiness.stdout)
-        self.assertIn("BLOCKED: pre-launch-report", readiness.stdout)
+                self.assertEqual(0, schema_only.returncode, schema_only.stderr)
+                self.assertEqual(1, readiness.returncode)
+                self.assertIn("BLOCKED: data-safety", readiness.stdout)
+                self.assertIn("BLOCKED: pre-launch-report", readiness.stdout)
 
     def addCleanupPath(self, name: str) -> str:
         directory = Path(tempfile.mkdtemp())

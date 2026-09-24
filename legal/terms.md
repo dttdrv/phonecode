@@ -1,24 +1,24 @@
 # PhoneCode Terms of Service
 
-_Last updated: 22 July 2026_
+_Last updated: 24 September 2026_
 
 These Terms govern your use of PhoneCode, an on-device AI coding client published by Deyan Todorov. By installing or using PhoneCode, you agree to these Terms. If you do not agree, do not use the app.
 
 ## 1. The service
 
-PhoneCode lets an AI agent work with code and files on your device. It can use a permanent app workspace, access folders you explicitly link, run commands in an on-device Linux virtual machine, use Git, search the web, connect to tools, and install software inside that virtual machine.
+PhoneCode lets an AI agent work with code and files on your device. It can use a permanent app workspace, access folders you explicitly link, read photos and files you attach, use Git and GitHub, search and fetch web pages, and call tools on MCP servers and plugins you add. Where your build includes the local command runtime, it can also run commands and install software inside an on-device Linux virtual machine. While the agent works, PhoneCode may keep running in the background with an ongoing notification that lets you stop the work.
 
 PhoneCode does not include an AI model or a general-purpose developer-operated backend. You connect a supported or custom third-party AI provider using your own account, sign-in, or API key. The developer operates only a narrowly scoped endpoint for AI-output reports you deliberately submit. There is no PhoneCode account.
 
 ## 2. Third-party accounts and charges
 
-Your relationship with each AI provider, Git host, search service, package repository, MCP server, and custom endpoint is governed by that service's terms and privacy policy. You are responsible for your credentials, account security, eligibility, usage limits, and any fees charged by those services.
+Your relationship with each AI provider, GitHub or other Git host, search service, website the agent fetches, package repository, MCP server or plugin publisher, and custom endpoint is governed by that service's terms and privacy policy. You are responsible for your credentials, account security, eligibility, usage limits, and any fees charged by those services.
 
 PhoneCode stores credentials with Android Keystore-backed encryption. If your device is lost or compromised, revoke the affected credentials with the provider.
 
 ## 3. Agent access and your responsibility
 
-Depending on your settings and approvals, the agent can read, create, modify, rename, or delete files; run commands and installed software; make network requests; and perform Git operations, including changes to remote repositories. A linked folder remains accessible until you unlink it or revoke Android's grant.
+Depending on your settings and approvals, the agent can read, create, modify, rename, or delete files; run commands and installed software; make network requests; call tools on MCP servers and plugins you add, which can act on the connected account (for example GitHub issues or Stripe data) within the permissions of the token you supply; and perform Git operations, including changes to remote repositories. A linked folder remains accessible until you unlink it or revoke Android's grant.
 
 AI output and tool actions can be wrong, incomplete, insecure, destructive, or unexpected. Review important changes, use version control, keep appropriate backups, and do not grant automatic access you are not prepared to supervise. You are responsible for instructions you give, permissions you grant, code you run or publish, remote actions performed through your accounts, and resulting provider charges.
 
@@ -28,13 +28,13 @@ You may not use PhoneCode to violate the law, infringe another person's rights, 
 
 ## 5. AI output and software installation
 
-PhoneCode does not verify or guarantee generated output. Output may contain errors, vulnerabilities, incompatible code, or material subject to third-party rights or licenses. Test and review it before relying on it.
+PhoneCode does not verify or guarantee generated output. You can report harmful output from a response's Response info menu. Output may contain errors, vulnerabilities, incompatible code, or material subject to third-party rights or licenses. Test and review it before relying on it.
 
-Software installed in the on-device Linux virtual machine comes from third parties and may run build or lifecycle scripts. You are responsible for choosing package sources, reviewing licenses, and evaluating security. Installed software can access the VM workspace and use PhoneCode's network access. PhoneCode does not guarantee that a package is safe, available, or compatible.
+Where your build includes the local command runtime, software installed in the on-device Linux virtual machine comes from third parties and may run build or lifecycle scripts. You are responsible for choosing package sources, reviewing licenses, and evaluating security. Installed software can access the VM workspace and use PhoneCode's network access. PhoneCode does not guarantee that a package is safe, available, or compatible.
 
 ## 6. Privacy
 
-The [PhoneCode Privacy Policy](privacy.md) explains local storage, linked-folder access, AI-output reports, third-party transfers, retention, security, and deletion. It forms part of these Terms.
+The [PhoneCode Privacy Policy](privacy.md) explains local storage, linked-folder access, AI-output reports, third-party transfers including MCP servers and plugins, notifications, retention, security, and deletion. It forms part of these Terms.
 
 ## 7. Age
 
@@ -54,7 +54,7 @@ To the maximum extent allowed by law, the developer is not liable for indirect, 
 
 ## 11. Open-source and third-party licenses
 
-PhoneCode includes open-source components governed by their own licenses. Those licenses remain controlling for the relevant components and are available from the app's Licenses screen and source repository.
+PhoneCode includes open-source components governed by their own licenses. Those licenses remain controlling for the relevant components and are available from the app's Open-source licenses screen and source repository. Provider, plugin, and service names and marks belong to their owners and are shown only to identify the service you connect; no endorsement is implied.
 
 ## 12. Changes and contact
 

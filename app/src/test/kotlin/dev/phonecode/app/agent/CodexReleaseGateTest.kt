@@ -9,6 +9,8 @@ class CodexReleaseGateTest {
     fun releaseGateRejectsCodexButKeepsApiProviders() {
         assertFalse(providerAllowed("codex", codexOAuthEnabled = false))
         assertTrue(providerAllowed("openai", codexOAuthEnabled = false))
+        assertTrue(providerAllowed("anthropic", codexOAuthEnabled = false))
+        assertTrue(dev.phonecode.provider.preset.BuiltInPresets.anthropic.wireFormat.runsInMisul)
     }
 
     @Test

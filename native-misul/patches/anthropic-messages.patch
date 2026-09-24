@@ -1,0 +1,694 @@
+--- a/src/openai_compatible.zig
++++ b/src/openai_compatible.zig
+@@ -23,7 +23,8 @@
+ pub const max_model_id_bytes = 256;
+ pub const max_session_id_bytes = 256;
+ 
+-pub const Dialect = enum { openai_chat, openrouter_chat, deepseek_chat };
++pub const Dialect = enum { openai_chat, openrouter_chat, deepseek_chat, anthropic_messages };
++pub const anthropic_version = "2023-06-01";
+ pub const Header = struct { name: []const u8, value: []const u8 };
+ pub const CacheRetentionWire = enum {
+     prompt_cache_retention_in_memory,
+@@ -319,6 +320,16 @@
+     return std.fmt.allocPrint(allocator, "{s}{s}", .{ slash_trimmed, suffix });
+ }
+ 
++/// Anthropic bases are configured with or without the `/v1` version segment.
++fn anthropicEndpointUrl(allocator: std.mem.Allocator, endpoint: []const u8) ![]u8 {
++    const chat = try endpointUrl(allocator, endpoint);
++    defer allocator.free(chat);
++    const base = chat[0 .. chat.len - "/chat/completions".len];
++    if (std.mem.endsWith(u8, base, "/messages")) return allocator.dupe(u8, base);
++    if (std.mem.endsWith(u8, base, "/v1")) return std.fmt.allocPrint(allocator, "{s}/messages", .{base});
++    return std.fmt.allocPrint(allocator, "{s}/v1/messages", .{base});
++}
++
+ fn parseRetryAfter(value: []const u8, now_seconds: i64) ?u64 {
+     const trimmed = std.mem.trim(u8, value, " \t");
+     if (trimmed.len == 0) return null;
+@@ -541,7 +552,7 @@
+     };
+     defer rendered.deinit();
+     if (observer) |callback| try observeRenderedRequest(&rendered, observer_context.?, callback);
+-    const request_endpoint = endpointUrl(allocator, endpoint) catch |err| {
++    const request_endpoint = (if (dialect == .anthropic_messages) anthropicEndpointUrl(allocator, endpoint) else endpointUrl(allocator, endpoint)) catch |err| {
+         if (err == error.InvalidBaseUrl) {
+             try emitFailure(sink_context, sink, model, .invalid_request, null, "provider endpoint is invalid", null, null, null, null);
+             return;
+@@ -658,10 +669,25 @@
+     const uri = std.Uri.parse(attempt.endpoint) catch return error.InvalidBaseUrl;
+     const authorization = try std.fmt.allocPrint(attempt.allocator, "Bearer {s}", .{api_key});
+     defer attempt.allocator.free(authorization);
+-    var extra: [max_headers + 2]std.http.Header = undefined;
++    var extra: [max_headers + 3]std.http.Header = undefined;
+     for (attempt.headers, 0..) |header, index| extra[index] = .{ .name = header.name, .value = header.value };
+-    extra[attempt.headers.len] = .{ .name = "accept", .value = "text/event-stream" };
+-    extra[attempt.headers.len + 1] = .{ .name = "authorization", .value = authorization };
++    var extra_len = attempt.headers.len;
++    extra[extra_len] = .{ .name = "accept", .value = "text/event-stream" };
++    extra_len += 1;
++    if (attempt.dialect == .anthropic_messages) {
++        extra[extra_len] = .{ .name = "x-api-key", .value = api_key };
++        extra_len += 1;
++        const versioned = for (attempt.headers) |header| {
++            if (std.ascii.eqlIgnoreCase(header.name, "anthropic-version")) break true;
++        } else false;
++        if (!versioned) {
++            extra[extra_len] = .{ .name = "anthropic-version", .value = anthropic_version };
++            extra_len += 1;
++        }
++    } else {
++        extra[extra_len] = .{ .name = "authorization", .value = authorization };
++        extra_len += 1;
++    }
+     var android_connection: ?*std.http.Client.Connection = null;
+     if (comptime builtin.target.abi.isAndroid()) {
+         var original_host_buffer: [std.Io.net.HostName.max_len]u8 = undefined;
+@@ -686,7 +712,7 @@
+             else => return error.ConnectionFailure,
+         };
+     }
+-    var request = client.request(.POST, uri, .{ .connection = android_connection, .redirect_behavior = .unhandled, .headers = .{ .content_type = .{ .override = "application/json" }, .authorization = .{ .omit = {} } }, .extra_headers = extra[0 .. attempt.headers.len + 2] }) catch |err| switch (err) {
++    var request = client.request(.POST, uri, .{ .connection = android_connection, .redirect_behavior = .unhandled, .headers = .{ .content_type = .{ .override = "application/json" }, .authorization = .{ .omit = {} } }, .extra_headers = extra[0..extra_len] }) catch |err| switch (err) {
+         error.Canceled => return error.Canceled,
+         error.OutOfMemory => return error.OutOfMemory,
+         else => return error.ConnectionFailure,
+@@ -707,7 +733,7 @@
+     var request_id_len: usize = 0;
+     var retry_after_ms: ?u64 = null;
+     var header_it = response.head.iterateHeaders();
+-    while (header_it.next()) |header| if (std.ascii.eqlIgnoreCase(header.name, "x-request-id") or std.ascii.eqlIgnoreCase(header.name, "x-openrouter-request-id")) {
++    while (header_it.next()) |header| if (std.ascii.eqlIgnoreCase(header.name, "x-request-id") or std.ascii.eqlIgnoreCase(header.name, "x-openrouter-request-id") or std.ascii.eqlIgnoreCase(header.name, "request-id")) {
+         request_id_len = copyBounded(request_id_storage[0..], header.value);
+         break;
+     };
+@@ -902,6 +928,7 @@
+         .openai_chat => "openai-chat",
+         .openrouter_chat => "openrouter-chat",
+         .deepseek_chat => "deepseek-chat",
++        .anthropic_messages => "anthropic-messages",
+     };
+ }
+ 
+@@ -1021,6 +1048,18 @@
+         if (self.id) |value| allocator.free(value);
+         if (self.name) |value| allocator.free(value);
+         self.arguments.deinit(allocator);
++        self.* = undefined;
++    }
++};
++const WireBlock = struct {
++    wire_index: u64,
++    content_index: usize,
++    thinking: bool,
++    text: std.ArrayList(u8) = .empty,
++    signature: std.ArrayList(u8) = .empty,
++    fn deinit(self: *WireBlock, allocator: std.mem.Allocator) void {
++        self.text.deinit(allocator);
++        self.signature.deinit(allocator);
+         self.* = undefined;
+     }
+ };
+@@ -1055,6 +1094,9 @@
+     usage_seen: bool = false,
+     usage: protocol.Usage = .{},
+     response_bytes: usize = 0,
++    /// Anthropic text and thinking blocks; each keeps its own content index and signature.
++    blocks: std.ArrayList(WireBlock) = .empty,
++    anthropic_usage: [4]u64 = .{ 0, 0, 0, 0 },
+     fn init(allocator: std.mem.Allocator, model: *const protocol.Model, api: []const u8, dialect: Dialect, max_event_bytes: usize, max_response_body: usize, status: u16, request_id: ?[]const u8, api_key: []const u8, headers: []const Header, sink_context: *anyopaque, sink: protocol.StreamSink, callback_attempted: *bool) StreamDecoder {
+         return .{ .allocator = allocator, .model = model, .api = api, .dialect = dialect, .max_event_bytes = max_event_bytes, .max_response_body = max_response_body, .status = status, .request_id = request_id, .api_key = api_key, .headers = headers, .sink_context = sink_context, .sink = sink, .callback_attempted = callback_attempted };
+     }
+@@ -1063,6 +1105,8 @@
+         self.thinking.deinit(self.allocator);
+         for (self.tools.items) |*tool| tool.deinit(self.allocator);
+         self.tools.deinit(self.allocator);
++        for (self.blocks.items) |*block| block.deinit(self.allocator);
++        self.blocks.deinit(self.allocator);
+         self.* = undefined;
+     }
+     fn emit(self: *StreamDecoder, event: protocol.StreamEvent) !void {
+@@ -1105,6 +1149,15 @@
+         defer self.allocator.free(content);
+         if (self.text_started) content[self.text_index.?] = .{ .text = .{ .text = self.text.items } };
+         if (self.thinking_started) content[self.thinking_index.?] = .{ .thinking = .{ .thinking = self.thinking.items } };
++        for (self.blocks.items) |block| {
++            if (block.thinking) {
++                try self.emit(.{ .thinking_end = .{ .content_index = block.content_index, .content = block.text.items } });
++                content[block.content_index] = .{ .thinking = .{ .thinking = block.text.items, .signature = if (block.signature.items.len == 0) null else block.signature.items } };
++            } else {
++                try self.emit(.{ .text_end = .{ .content_index = block.content_index, .content = block.text.items } });
++                content[block.content_index] = .{ .text = .{ .text = block.text.items } };
++            }
++        }
+         var arguments_arena = std.heap.ArenaAllocator.init(self.allocator);
+         defer arguments_arena.deinit();
+         var active_tools: usize = 0;
+@@ -1144,6 +1197,7 @@
+     const decoder: *StreamDecoder = @ptrCast(@alignCast(raw));
+     if (decoder.failed) return;
+     if (decoder.terminated) return decoder.fail(.malformed_response, "provider sent data after completion");
++    if (decoder.dialect == .anthropic_messages) return anthropicEvent(decoder, event);
+     if (std.mem.eql(u8, event.data, "[DONE]")) {
+         decoder.terminated = true;
+         return;
+@@ -1231,6 +1285,7 @@
+         .openai_chat => null,
+         .openrouter_chat => delta.object.get("reasoning"),
+         .deepseek_chat => delta.object.get("reasoning_content"),
++        .anthropic_messages => unreachable,
+     };
+     if (reasoning) |reasoning_value| if (reasoning_value != .null and reasoning_value != .string) return decoder.fail(.malformed_response, "provider reasoning delta was invalid");
+     const tool_calls = delta.object.get("tool_calls");
+@@ -1260,11 +1315,147 @@
+         .deepseek_chat => {
+             if (reasoning) |reasoning_value| if (reasoning_value == .string) try emitThinking(decoder, reasoning_value.string);
+         },
++        .anthropic_messages => unreachable,
+     }
+     if (tool_calls) |calls| {
+         for (calls.array.items) |call| try emitToolDelta(decoder, call);
+     }
+ }
++/// Anthropic Messages SSE: message_start, content_block_start/delta/stop, message_delta,
++/// message_stop, ping, and error. Unknown event types are ignored as the API documents.
++fn anthropicEvent(decoder: *StreamDecoder, event: SseEvent) !void {
++    if (event.data.len > decoder.max_event_bytes) return decoder.fail(.malformed_response, "provider event exceeded bound");
++    if (decoder.response_bytes > decoder.max_response_body or event.data.len > decoder.max_response_body - decoder.response_bytes) return decoder.fail(.malformed_response, "provider response exceeded bound");
++    decoder.response_bytes += event.data.len;
++    var arena = std.heap.ArenaAllocator.init(decoder.allocator);
++    defer arena.deinit();
++    const value = std.json.parseFromSliceLeaky(std.json.Value, arena.allocator(), event.data, .{}) catch |err| switch (err) {
++        error.OutOfMemory => return err,
++        else => return decoder.fail(.malformed_response, "provider event was not valid JSON"),
++    };
++    if (value != .object) return decoder.fail(.malformed_response, "provider event was not an object");
++    const kind = stringField(value.object, "type") orelse return decoder.fail(.malformed_response, "provider event type was missing");
++    if (std.mem.eql(u8, kind, "ping")) return;
++    if (std.mem.eql(u8, kind, "error")) {
++        var diagnostic = try parseDiagnostic(decoder.allocator, decoder.status, event.data, decoder.request_id, decoder.api_key, decoder.headers);
++        if (std.mem.eql(u8, diagnostic.providerType() orelse "", "overloaded_error") or std.mem.eql(u8, diagnostic.providerType() orelse "", "api_error")) diagnostic.category = .transient_provider;
++        return decoder.failDiagnostic(diagnostic);
++    }
++    if (std.mem.eql(u8, kind, "message_start")) {
++        const message = value.object.get("message") orelse return decoder.fail(.malformed_response, "provider message was missing");
++        if (message != .object) return decoder.fail(.malformed_response, "provider message was not an object");
++        try decoder.start();
++        if (message.object.get("usage")) |usage| try anthropicUsage(decoder, usage);
++        return;
++    }
++    if (std.mem.eql(u8, kind, "message_delta")) {
++        if (value.object.get("delta")) |delta| if (delta == .object) if (delta.object.get("stop_reason")) |reason| if (reason != .null) {
++            if (reason != .string) return decoder.fail(.malformed_response, "provider finish reason was invalid");
++            if (std.mem.eql(u8, reason.string, "refusal")) return decoder.fail(.provider, "provider refused the request");
++            const finish = anthropicStopReason(reason.string) orelse return decoder.fail(.malformed_response, "provider finish reason was invalid");
++            if (decoder.finish_reason) |previous| if (previous != finish) return decoder.fail(.malformed_response, "provider finish reason changed");
++            decoder.finish_reason = finish;
++        };
++        if (value.object.get("usage")) |usage| try anthropicUsage(decoder, usage);
++        return;
++    }
++    if (std.mem.eql(u8, kind, "message_stop")) {
++        decoder.terminated = true;
++        return;
++    }
++    const is_start = std.mem.eql(u8, kind, "content_block_start");
++    const is_delta = std.mem.eql(u8, kind, "content_block_delta");
++    if (!is_start and !is_delta) return;
++    if (!decoder.started) return decoder.fail(.malformed_response, "provider content preceded message start");
++    const index = uintField(value.object.get("index") orelse .null) orelse return decoder.fail(.malformed_response, "provider content index was invalid");
++    const payload = value.object.get(if (is_start) "content_block" else "delta") orelse return decoder.fail(.malformed_response, "provider content block was missing");
++    if (payload != .object) return decoder.fail(.malformed_response, "provider content block was not an object");
++    const block_type = stringField(payload.object, "type") orelse return decoder.fail(.malformed_response, "provider content block type was missing");
++    if (is_start) {
++        if (findWireBlock(decoder, index) != null or findWireTool(decoder, index) != null) return decoder.fail(.malformed_response, "provider content index was duplicated");
++        if (std.mem.eql(u8, block_type, "redacted_thinking")) return;
++        if (std.mem.eql(u8, block_type, "tool_use")) {
++            const id = stringField(payload.object, "id") orelse "";
++            const name = stringField(payload.object, "name") orelse "";
++            if (id.len == 0 or name.len == 0) return decoder.fail(.malformed_response, "provider tool identity was invalid");
++            if (decoder.tools.items.len >= max_tool_calls) return decoder.fail(.malformed_response, "provider tool call count exceeded bound");
++            try decoder.tools.append(decoder.allocator, .{ .wire_index = @intCast(@min(index, std.math.maxInt(usize))), .content_index = decoder.next_content_index, .started = true });
++            const tool = &decoder.tools.items[decoder.tools.items.len - 1];
++            decoder.next_content_index += 1;
++            tool.id = try decoder.allocator.dupe(u8, id);
++            tool.name = try decoder.allocator.dupe(u8, name);
++            try decoder.emit(.{ .tool_call_start = tool.content_index });
++            // Non-streamed input arrives whole on the start event; streamed input starts as {}.
++            if (payload.object.get("input")) |input| if (input == .object and input.object.count() != 0) {
++                var rendered = std.Io.Writer.Allocating.init(decoder.allocator);
++                defer rendered.deinit();
++                try writeJson(&rendered.writer, input);
++                try appendBounded(decoder.allocator, &tool.arguments, rendered.writer.buffered(), max_tool_arguments_bytes);
++            };
++            return;
++        }
++        const thinking = std.mem.eql(u8, block_type, "thinking");
++        if (!thinking and !std.mem.eql(u8, block_type, "text")) return decoder.fail(.unsupported, "provider content block type is unsupported");
++        try decoder.blocks.append(decoder.allocator, .{ .wire_index = index, .content_index = decoder.next_content_index, .thinking = thinking });
++        decoder.next_content_index += 1;
++        const block = &decoder.blocks.items[decoder.blocks.items.len - 1];
++        try decoder.emit(if (thinking) .{ .thinking_start = block.content_index } else .{ .text_start = block.content_index });
++        if (stringField(payload.object, if (thinking) "thinking" else "text")) |initial| if (initial.len != 0) try appendWireText(decoder, block, initial);
++        if (thinking) if (stringField(payload.object, "signature")) |signature| try appendBounded(decoder.allocator, &block.signature, signature, decoder.max_response_body);
++        return;
++    }
++    if (std.mem.eql(u8, block_type, "input_json_delta")) {
++        const tool = findWireTool(decoder, index) orelse return decoder.fail(.malformed_response, "provider tool delta had no tool block");
++        const partial = stringField(payload.object, "partial_json") orelse return decoder.fail(.malformed_response, "provider tool arguments were invalid");
++        appendBounded(decoder.allocator, &tool.arguments, partial, max_tool_arguments_bytes) catch |err| if (err == error.OutOfMemory) return err else return decoder.fail(.malformed_response, "provider tool arguments exceeded bound");
++        if (partial.len != 0) try decoder.emit(.{ .tool_call_delta = .{ .content_index = tool.content_index, .delta = partial } });
++        return;
++    }
++    if (std.mem.eql(u8, block_type, "citations_delta")) return;
++    const block = findWireBlock(decoder, index) orelse return decoder.fail(.malformed_response, "provider delta had no content block");
++    if (std.mem.eql(u8, block_type, "signature_delta") and block.thinking) {
++        const signature = stringField(payload.object, "signature") orelse return decoder.fail(.malformed_response, "provider signature was invalid");
++        return appendBounded(decoder.allocator, &block.signature, signature, decoder.max_response_body);
++    }
++    const field = if (block.thinking) "thinking" else "text";
++    if (!std.mem.eql(u8, block_type, if (block.thinking) "thinking_delta" else "text_delta")) return decoder.fail(.malformed_response, "provider delta type did not match its block");
++    const text = stringField(payload.object, field) orelse return decoder.fail(.malformed_response, "provider content delta was invalid");
++    if (text.len != 0) try appendWireText(decoder, block, text);
++}
++fn appendWireText(decoder: *StreamDecoder, block: *WireBlock, text: []const u8) !void {
++    try appendBounded(decoder.allocator, &block.text, text, decoder.max_response_body);
++    try decoder.emit(if (block.thinking) .{ .thinking_delta = .{ .content_index = block.content_index, .delta = text } } else .{ .text_delta = .{ .content_index = block.content_index, .delta = text } });
++}
++fn findWireBlock(decoder: *StreamDecoder, index: u64) ?*WireBlock {
++    for (decoder.blocks.items) |*block| if (block.wire_index == index) return block;
++    return null;
++}
++fn findWireTool(decoder: *StreamDecoder, index: u64) ?*ToolState {
++    for (decoder.tools.items) |*tool| if (tool.wire_index == index) return tool;
++    return null;
++}
++fn anthropicStopReason(value: []const u8) ?protocol.StopReason {
++    if (std.mem.eql(u8, value, "end_turn") or std.mem.eql(u8, value, "stop_sequence") or std.mem.eql(u8, value, "pause_turn")) return .stop;
++    if (std.mem.eql(u8, value, "max_tokens") or std.mem.eql(u8, value, "model_context_window_exceeded")) return .length;
++    if (std.mem.eql(u8, value, "tool_use")) return .tool_use;
++    return null;
++}
++/// Anthropic reports uncached, cache-read, and cache-write input separately; Misul's input
++/// counts all prompt tokens, as OpenAI's prompt_tokens does. Later reports refine earlier ones.
++fn anthropicUsage(decoder: *StreamDecoder, value: std.json.Value) !void {
++    if (value == .null) return;
++    if (value != .object) return decoder.fail(.malformed_response, "provider usage was not an object");
++    const keys = [_][]const u8{ "input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens" };
++    for (keys, 0..) |key, slot| if (value.object.get(key)) |field| if (field != .null) {
++        decoder.anthropic_usage[slot] = uintField(field) orelse return decoder.fail(.malformed_response, "provider usage was invalid");
++    };
++    const counts = decoder.anthropic_usage;
++    const input = std.math.add(u64, counts[0], counts[1]) catch return decoder.fail(.malformed_response, "provider usage was invalid");
++    const prompt = std.math.add(u64, input, counts[2]) catch return decoder.fail(.malformed_response, "provider usage was invalid");
++    const total = std.math.add(u64, prompt, counts[3]) catch return decoder.fail(.malformed_response, "provider usage was invalid");
++    const usage = protocol.Usage{ .input = prompt, .output = counts[3], .cache_read = counts[1], .cache_write = counts[2], .total_tokens = total };
++    if (!decoder.usage_seen or !usageEqual(decoder.usage, usage)) try emitUsage(decoder, usage);
++}
+ const provider_error_finish_message = "The provider ended the response with an error. Try again or choose another model.";
+ const TailChoice = enum { inert, active, changed_finish, error_finish };
+ fn classifyTailChoice(choice: std.json.Value, finish_reason: protocol.StopReason) TailChoice {
+@@ -1445,6 +1636,7 @@
+         if (session_id.len > max_session_id_bytes) return error.RequestTooLarge;
+     }
+     try validateRenderBounds(context, model);
++    if (dialect == .anthropic_messages) return renderAnthropicRequest(allocator, model, context, options);
+     var output = std.Io.Writer.Allocating.initCapacity(allocator, 4096) catch return error.OutOfMemory;
+     errdefer output.deinit();
+     const writer = &output.writer;
+@@ -1479,6 +1671,7 @@
+     switch (dialect) {
+         .openai_chat => try writer.print(",\"max_completion_tokens\":{d},\"stream\":true", .{options.max_tokens orelse model.max_tokens}),
+         .openrouter_chat, .deepseek_chat => try writer.print(",\"max_tokens\":{d},\"stream\":true", .{options.max_tokens orelse model.max_tokens}),
++        .anthropic_messages => unreachable,
+     }
+     if (options.reasoning) |effort| switch (dialect) {
+         .openai_chat => {
+@@ -1494,6 +1687,7 @@
+             try writer.writeAll(",\"thinking\":{\"type\":\"enabled\"},\"reasoning_effort\":");
+             try writeJson(writer, deepSeekEffort(effort));
+         },
++        .anthropic_messages => unreachable,
+     };
+     if (cache_retention_wire) |wire| switch (wire) {
+         .prompt_cache_retention_in_memory => try writer.writeAll(",\"prompt_cache_retention\":\"in_memory\""),
+@@ -1516,6 +1710,156 @@
+     return .{ .bytes = bytes, .cache_prefix_len = prefix_len, .cache_prefix_hash = hash, .allocator = allocator };
+ }
+ 
++/// Anthropic Messages body: tools, system lanes as text blocks, then strictly alternating
++/// turns. Tool results and user text share one user turn; signed thinking is replayed
++/// unchanged and unsigned (foreign) thinking is dropped. Callers ran the shared validation.
++fn renderAnthropicRequest(allocator: std.mem.Allocator, model: *const protocol.Model, context: *const protocol.Context, options: protocol.StreamOptions) !RenderedRequest {
++    var output = std.Io.Writer.Allocating.initCapacity(allocator, 4096) catch return error.OutOfMemory;
++    errdefer output.deinit();
++    const writer = &output.writer;
++    try writer.writeAll("{\"model\":");
++    try writeJson(writer, model.id);
++    if (context.tools.len != 0) {
++        try writer.writeAll(",\"tools\":[");
++        const sorted = try allocator.alloc(*const protocol.Tool, context.tools.len);
++        defer allocator.free(sorted);
++        for (context.tools, 0..) |*tool, index| sorted[index] = tool;
++        std.mem.sort(*const protocol.Tool, sorted, {}, lessTool);
++        for (sorted, 0..) |tool, index| {
++            if (index != 0) try writer.writeByte(',');
++            try writer.writeAll("{\"name\":");
++            try writeJson(writer, tool.name);
++            try writer.writeAll(",\"description\":");
++            try writeJson(writer, tool.description);
++            try writer.writeAll(",\"input_schema\":");
++            try writeCanonicalValue(writer, tool.parameters, allocator);
++            try writer.writeByte('}');
++        }
++        try writer.writeByte(']');
++    }
++    const single_lane = [_][]const u8{context.system_prompt};
++    const lanes: []const []const u8 = if (context.system_prompt_lanes.len != 0) context.system_prompt_lanes else &single_lane;
++    var lane_written = false;
++    for (lanes) |lane| {
++        if (lane.len == 0) continue;
++        try writer.writeAll(if (lane_written) "," else ",\"system\":[");
++        try writer.writeAll("{\"type\":\"text\",\"text\":");
++        try writeJson(writer, lane);
++        try writer.writeByte('}');
++        lane_written = true;
++    }
++    if (lane_written) try writer.writeByte(']');
++    try writer.writeAll(",\"messages\":[");
++    var prefix_len: usize = writer.buffered().len;
++    var turn_written = false;
++    var user_open = false;
++    var user_blocks: usize = 0;
++    for (context.messages, 0..) |message, index| {
++        switch (message) {
++            .user, .tool_result => {
++                if (!user_open) {
++                    if (turn_written) try writer.writeByte(',');
++                    try writer.writeAll("{\"role\":\"user\",\"content\":[");
++                    turn_written = true;
++                    user_open = true;
++                    user_blocks = 0;
++                }
++                switch (message) {
++                    .user => |user| for (user.content) |part| switch (part) {
++                        .text => |text| if (text.text.len != 0) {
++                            if (user_blocks != 0) try writer.writeByte(',');
++                            try writer.writeAll("{\"type\":\"text\",\"text\":");
++                            try writeJson(writer, text.text);
++                            try writer.writeByte('}');
++                            user_blocks += 1;
++                        },
++                        .image => return error.UnsupportedImage,
++                    },
++                    .tool_result => |result| {
++                        if (user_blocks != 0) try writer.writeByte(',');
++                        try writer.writeAll("{\"type\":\"tool_result\",\"tool_use_id\":");
++                        try writeJson(writer, result.tool_call_id);
++                        var text = std.Io.Writer.Allocating.init(allocator);
++                        defer text.deinit();
++                        for (result.content) |part| switch (part) {
++                            .text => |value| try text.writer.writeAll(value.text),
++                            .image => return error.UnsupportedImage,
++                        };
++                        if (text.writer.buffered().len != 0) {
++                            try writer.writeAll(",\"content\":");
++                            try writeJson(writer, text.writer.buffered());
++                        }
++                        if (result.is_error) try writer.writeAll(",\"is_error\":true");
++                        try writer.writeByte('}');
++                        user_blocks += 1;
++                    },
++                    .assistant => unreachable,
++                }
++            },
++            .assistant => |assistant| {
++                if (user_open) try writer.writeAll("]}");
++                user_open = false;
++                if (turn_written) try writer.writeByte(',');
++                try writer.writeAll("{\"role\":\"assistant\",\"content\":[");
++                turn_written = true;
++                var blocks: usize = 0;
++                for (assistant.content) |part| {
++                    switch (part) {
++                        .thinking => |thinking| {
++                            const signature = thinking.signature orelse continue;
++                            if (blocks != 0) try writer.writeByte(',');
++                            try writer.writeAll("{\"type\":\"thinking\",\"thinking\":");
++                            try writeJson(writer, thinking.thinking);
++                            try writer.writeAll(",\"signature\":");
++                            try writeJson(writer, signature);
++                            try writer.writeByte('}');
++                        },
++                        .text => |text| {
++                            if (text.text.len == 0) continue;
++                            if (blocks != 0) try writer.writeByte(',');
++                            try writer.writeAll("{\"type\":\"text\",\"text\":");
++                            try writeJson(writer, text.text);
++                            try writer.writeByte('}');
++                        },
++                        .tool_call => |call| {
++                            if (blocks != 0) try writer.writeByte(',');
++                            try writer.writeAll("{\"type\":\"tool_use\",\"id\":");
++                            try writeJson(writer, call.id);
++                            try writer.writeAll(",\"name\":");
++                            try writeJson(writer, call.name);
++                            try writer.writeAll(",\"input\":");
++                            try writeCanonicalValue(writer, call.arguments, allocator);
++                            try writer.writeByte('}');
++                        },
++                    }
++                    blocks += 1;
++                }
++                // An assistant turn with no replayable content still needs a non-empty body.
++                if (blocks == 0) try writer.writeAll("{\"type\":\"text\",\"text\":\"(no content)\"}");
++                try writer.writeAll("]}");
++            },
++        }
++        if (index + 1 == context.cacheable_message_count) prefix_len = writer.buffered().len;
++    }
++    if (user_open) try writer.writeAll("]}");
++    try writer.print("],\"max_tokens\":{d},\"stream\":true", .{options.max_tokens orelse model.max_tokens});
++    if (options.reasoning) |effort| {
++        try writer.writeAll(",\"thinking\":{\"type\":\"adaptive\"},\"output_config\":{\"effort\":");
++        try writeJson(writer, if (effort == .minimal) "low" else @tagName(effort));
++        try writer.writeByte('}');
++    }
++    // Automatic prompt caching: the API places the breakpoint on the last cacheable block.
++    try writer.writeAll(",\"cache_control\":{\"type\":\"ephemeral\"}}");
++    const bytes = output.toOwnedSlice() catch return error.OutOfMemory;
++    if (bytes.len > max_rendered_request_bytes) {
++        allocator.free(bytes);
++        return error.RequestTooLarge;
++    }
++    var hash: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
++    std.crypto.hash.sha2.Sha256.hash(bytes[0..prefix_len], &hash, .{});
++    return .{ .bytes = bytes, .cache_prefix_len = prefix_len, .cache_prefix_hash = hash, .allocator = allocator };
++}
++
+ fn contextUsesToolWire(context: *const protocol.Context) bool {
+     for (context.messages) |message| switch (message) {
+         .assistant => |assistant| for (assistant.content) |part| switch (part) {
+@@ -1729,7 +2073,7 @@
+                     try writer.writeAll(",\"reasoning\":");
+                     try writeJson(writer, thinking.writer.buffered());
+                 },
+-                .openai_chat => {},
++                .openai_chat, .anthropic_messages => {},
+             };
+             if (calls != 0) {
+                 try writer.writeAll(",\"tool_calls\":[");
+@@ -3619,3 +3963,174 @@
+     try std.testing.expectEqual(protocol.StopReason.tool_use, capture.stop.?);
+     try std.testing.expect(capture.arguments_are_object);
+ }
++
++const AnthropicCapture = struct {
++    text: std.ArrayList(u8) = .empty,
++    thinking: std.ArrayList(u8) = .empty,
++    tool_arguments: std.ArrayList(u8) = .empty,
++    content_kinds: [8]u8 = undefined,
++    content_count: usize = 0,
++    signature_ok: bool = false,
++    tool_ok: bool = false,
++    usage: protocol.Usage = .{},
++    stop: ?protocol.StopReason = null,
++    failed: usize = 0,
++    category: ?protocol.ProviderFailureCategory = null,
++    fn deinit(self: *@This()) void {
++        self.text.deinit(std.testing.allocator);
++        self.thinking.deinit(std.testing.allocator);
++        self.tool_arguments.deinit(std.testing.allocator);
++    }
++    fn receive(raw: *anyopaque, event: protocol.StreamEvent) !void {
++        const capture: *@This() = @ptrCast(@alignCast(raw));
++        switch (event) {
++            .text_delta => |delta| try capture.text.appendSlice(std.testing.allocator, delta.delta),
++            .thinking_delta => |delta| try capture.thinking.appendSlice(std.testing.allocator, delta.delta),
++            .tool_call_delta => |delta| try capture.tool_arguments.appendSlice(std.testing.allocator, delta.delta),
++            .usage => |usage| capture.usage = usage,
++            .done => |message| {
++                capture.stop = message.stop_reason;
++                capture.content_count = message.content.len;
++                for (message.content, 0..) |part, index| switch (part) {
++                    .text => capture.content_kinds[index] = 'x',
++                    .thinking => |thinking| {
++                        capture.content_kinds[index] = 't';
++                        capture.signature_ok = std.mem.eql(u8, thinking.signature orelse "", "sig-1sig-2");
++                    },
++                    .tool_call => |call| {
++                        capture.content_kinds[index] = 'c';
++                        capture.tool_ok = std.mem.eql(u8, call.id, "toolu_1") and std.mem.eql(u8, call.name, "read_file") and std.mem.eql(u8, call.arguments.object.get("path").?.string, "a.txt");
++                    },
++                };
++            },
++            .failed => |message| {
++                capture.failed += 1;
++                capture.category = message.provider_failure.?.category;
++            },
++            else => {},
++        }
++    }
++};
++
++test "Anthropic stream decodes thinking, text, streamed tool input, stop reason, and cache usage" {
++    const model = protocol.Model{ .id = "claude-test", .api = "anthropic-messages", .provider = "anthropic", .context_window = 200000, .max_tokens = 1024 };
++    var capture = AnthropicCapture{};
++    defer capture.deinit();
++    var callback_attempted = false;
++    var decoder = StreamDecoder.init(std.testing.allocator, &model, "anthropic-messages", .anthropic_messages, 64 * 1024, 1024 * 1024, 200, null, "secret", &.{}, &capture, AnthropicCapture.receive, &callback_attempted);
++    defer decoder.deinit();
++    var parser = SseParser.init(std.testing.allocator, 64 * 1024, &decoder, decoderEvent);
++    defer parser.deinit();
++    const fixture =
++        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-test\",\"stop_reason\":null,\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":5,\"cache_read_input_tokens\":100,\"output_tokens\":1}}}\n\n" ++
++        "event: ping\ndata: {\"type\":\"ping\"}\n\n" ++
++        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\n" ++
++        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"plan\"}}\n\n" ++
++        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"sig-1\"}}\n\n" ++
++        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"sig-2\"}}\n\n" ++
++        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n" ++
++        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n" ++
++        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hel\"}}\n\n" ++
++        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"lo\"}}\n\n" ++
++        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\n" ++
++        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"read_file\",\"input\":{}}}\n\n" ++
++        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}}\n\n" ++
++        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\": \\\"a\"}}\n\n" ++
++        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\".txt\\\"}\"}}\n\n" ++
++        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":2}\n\n" ++
++        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":42}}\n\n" ++
++        "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
++    for (fixture, 0..) |_, index| try parser.feed(fixture[index .. index + 1]);
++    try std.testing.expect(decoder.terminated);
++    try parser.finish();
++    try decoder.finish();
++    try std.testing.expectEqual(@as(usize, 0), capture.failed);
++    try std.testing.expectEqual(protocol.StopReason.tool_use, capture.stop.?);
++    try std.testing.expectEqualStrings("Hello", capture.text.items);
++    try std.testing.expectEqualStrings("plan", capture.thinking.items);
++    try std.testing.expectEqualStrings("{\"path\": \"a.txt\"}", capture.tool_arguments.items);
++    try std.testing.expectEqualStrings("txc", capture.content_kinds[0..capture.content_count]);
++    try std.testing.expect(capture.signature_ok and capture.tool_ok);
++    try std.testing.expectEqual(protocol.Usage{ .input = 115, .output = 42, .cache_read = 100, .cache_write = 5, .total_tokens = 157 }, capture.usage);
++}
++
++test "Anthropic stream errors, refusals, and truncation settle as failures" {
++    const model = protocol.Model{ .id = "claude-test", .api = "anthropic-messages", .provider = "anthropic", .context_window = 200000, .max_tokens = 1024 };
++    const start = "{\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}";
++    const Case = struct { events: []const []const u8, category: protocol.ProviderFailureCategory };
++    const cases = [_]Case{
++        .{ .events = &.{ start, "{\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}" }, .category = .transient_provider },
++        .{ .events = &.{ start, "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"refusal\"},\"usage\":{\"output_tokens\":0}}" }, .category = .provider },
++        .{ .events = &.{ start, "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"orphan\"}}" }, .category = .malformed_response },
++        .{ .events = &.{ start, "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}", "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{}\"}}" }, .category = .malformed_response },
++    };
++    for (cases) |case| {
++        var capture = AnthropicCapture{};
++        defer capture.deinit();
++        var callback_attempted = false;
++        var decoder = StreamDecoder.init(std.testing.allocator, &model, "anthropic-messages", .anthropic_messages, 64 * 1024, 1024 * 1024, 200, null, "secret", &.{}, &capture, AnthropicCapture.receive, &callback_attempted);
++        defer decoder.deinit();
++        for (case.events) |data| try decoderEvent(&decoder, .{ .event = "message", .data = data });
++        try std.testing.expectEqual(@as(usize, 1), capture.failed);
++        try std.testing.expectEqual(case.category, capture.category.?);
++    }
++    var capture = AnthropicCapture{};
++    defer capture.deinit();
++    var callback_attempted = false;
++    var decoder = StreamDecoder.init(std.testing.allocator, &model, "anthropic-messages", .anthropic_messages, 64 * 1024, 1024 * 1024, 200, null, "secret", &.{}, &capture, AnthropicCapture.receive, &callback_attempted);
++    defer decoder.deinit();
++    try decoderEvent(&decoder, .{ .event = "message", .data = start });
++    try std.testing.expectError(error.TruncatedProviderResponse, decoder.finish());
++}
++
++test "Anthropic request renders system blocks, merged tool results, signed thinking replay, and effort" {
++    const schema = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{\"type\":\"object\"}", .{});
++    defer schema.deinit();
++    const tools = [_]protocol.Tool{.{ .name = "read_file", .description = "Read a file", .parameters = schema.value }};
++    const arguments = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{\"path\":\"a.txt\"}", .{});
++    defer arguments.deinit();
++    const hello = [_]protocol.UserContent{.{ .text = .{ .text = "hello" } }};
++    const next = [_]protocol.UserContent{.{ .text = .{ .text = "next" } }};
++    const first_result = [_]protocol.UserContent{.{ .text = .{ .text = "A" } }};
++    const second_result = [_]protocol.UserContent{.{ .text = .{ .text = "denied" } }};
++    const assistant = [_]protocol.AssistantContent{
++        .{ .thinking = .{ .thinking = "foreign reasoning" } },
++        .{ .thinking = .{ .thinking = "plan", .signature = "sig" } },
++        .{ .text = .{ .text = "Reading." } },
++        .{ .tool_call = .{ .id = "toolu_1", .name = "read_file", .arguments = arguments.value } },
++        .{ .tool_call = .{ .id = "toolu_2", .name = "read_file", .arguments = arguments.value } },
++    };
++    const messages = [_]protocol.Message{
++        .{ .user = .{ .content = &hello, .timestamp_ms = 0 } },
++        .{ .assistant = .{ .content = &assistant, .api = "anthropic-messages", .provider = "anthropic", .model = "claude-test", .stop_reason = .tool_use, .timestamp_ms = 0 } },
++        .{ .tool_result = .{ .tool_call_id = "toolu_1", .tool_name = "read_file", .content = &first_result, .is_error = false, .timestamp_ms = 0 } },
++        .{ .tool_result = .{ .tool_call_id = "toolu_2", .tool_name = "read_file", .content = &second_result, .is_error = true, .timestamp_ms = 0 } },
++        .{ .user = .{ .content = &next, .timestamp_ms = 0 } },
++    };
++    const lanes = [_][]const u8{ "stable", "", "session" };
++    const model = protocol.Model{ .id = "claude-test", .api = "anthropic-messages", .provider = "anthropic", .context_window = 200000, .max_tokens = 1024, .reasoning = true };
++    const context = protocol.Context{ .system_prompt = "unused", .system_prompt_lanes = &lanes, .messages = &messages, .cacheable_message_count = 3, .tools = &tools };
++    var rendered = try renderRequest(std.testing.allocator, &model, &context, .{ .max_tokens = 512, .reasoning = .xhigh }, .anthropic_messages);
++    defer rendered.deinit();
++    const expected =
++        "{\"model\":\"claude-test\",\"tools\":[{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\"}}]," ++
++        "\"system\":[{\"type\":\"text\",\"text\":\"stable\"},{\"type\":\"text\",\"text\":\"session\"}]," ++
++        "\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}," ++
++        "{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"plan\",\"signature\":\"sig\"},{\"type\":\"text\",\"text\":\"Reading.\"},{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"read_file\",\"input\":{\"path\":\"a.txt\"}},{\"type\":\"tool_use\",\"id\":\"toolu_2\",\"name\":\"read_file\",\"input\":{\"path\":\"a.txt\"}}]}," ++
++        "{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_1\",\"content\":\"A\"},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_2\",\"content\":\"denied\",\"is_error\":true},{\"type\":\"text\",\"text\":\"next\"}]}]," ++
++        "\"max_tokens\":512,\"stream\":true,\"thinking\":{\"type\":\"adaptive\"},\"output_config\":{\"effort\":\"xhigh\"},\"cache_control\":{\"type\":\"ephemeral\"}}";
++    try std.testing.expectEqualStrings(expected, rendered.bytes);
++    // The cache prefix ends after the first tool result, before the user turn closes, so a
++    // later tool result or user text appends to it.
++    const prefix_end = std.mem.indexOf(u8, expected, "\"content\":\"A\"}").? + "\"content\":\"A\"}".len;
++    try std.testing.expectEqual(prefix_end, rendered.cache_prefix_len);
++}
++
++test "Anthropic endpoints accept bases with or without the version segment" {
++    const allocator = std.testing.allocator;
++    inline for (.{ "https://api.anthropic.com", "https://api.anthropic.com/", "https://api.anthropic.com/v1", "https://api.anthropic.com/v1/messages/" }) |base| {
++        const url = try anthropicEndpointUrl(allocator, base);
++        defer allocator.free(url);
++        try std.testing.expectEqualStrings("https://api.anthropic.com/v1/messages", url);
++    }
++}
+--- a/src/runtime.zig
++++ b/src/runtime.zig
+@@ -4219,6 +4219,7 @@
+         .openai_chat => "openai-chat",
+         .openrouter_chat => "openrouter-chat",
+         .deepseek_chat => "deepseek-chat",
++        .anthropic_messages => "anthropic-messages",
+     };
+ }
+ 
+@@ -5140,6 +5141,7 @@
+     try std.testing.expectEqualStrings("openai-chat", apiNameForDialect(.openai_chat));
+     try std.testing.expectEqualStrings("openrouter-chat", apiNameForDialect(.openrouter_chat));
+     try std.testing.expectEqualStrings("deepseek-chat", apiNameForDialect(.deepseek_chat));
++    try std.testing.expectEqualStrings("anthropic-messages", apiNameForDialect(.anthropic_messages));
+ }
+ 
+ test "runtime cancellation is idempotent and cannot settle as success" {

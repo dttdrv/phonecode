@@ -313,7 +313,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun providerFor(id: String): ProviderPreset? {
         if (!providerAllowed(id, BuildConfig.CODEX_OAUTH_ENABLED)) return null
         val preset = BuiltInPresets.byId(id) ?: customPresets[id] ?: return null
-        if (preset.wireFormat != WireFormat.OPENAI_COMPAT) return null
+        if (!preset.wireFormat.runsInMisul) return null
         return preset.withCatalogApi(catalog[catalogProviderId(id)]?.api)
     }
 
@@ -324,7 +324,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Whether the native Misul runtime can execute this provider in the current alpha. */
     fun providerAvailableInMisul(providerId: String): Boolean =
         providerAllowed(providerId, BuildConfig.CODEX_OAUTH_ENABLED) &&
-            allProviders().firstOrNull { it.id == providerId }?.wireFormat == WireFormat.OPENAI_COMPAT
+            allProviders().firstOrNull { it.id == providerId }?.wireFormat?.runsInMisul == true
 
     /** The selected model's token limits from the models.dev catalog, then the custom config, if known. */
     private fun limitFor(option: ModelOption?): dev.phonecode.provider.catalog.Limit? = option?.let {
@@ -559,7 +559,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Build the picker from the catalog for our presets; fall back to built-ins per provider. */
     private fun catalogToOptions(catalog: Catalog): List<ModelOption> {
         val out = mutableListOf<ModelOption>()
-        BuiltInPresets.all.filter { it.wireFormat == WireFormat.OPENAI_COMPAT }.forEach { preset ->
+        BuiltInPresets.all.filter { it.wireFormat.runsInMisul }.forEach { preset ->
             if (preset.id == "codex") {
                 val authenticated = codexModelMetadata.values
                     .sortedWith(compareBy<CodexModelInfo> { it.priority }.thenBy { it.displayName })
@@ -779,7 +779,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 provider.models.mapNotNull { (modelId, model) -> model.context?.let { "$providerId/$modelId" to it } }
             }.toMap()
             val customOptions = cfg.provider.flatMap { (providerId, provider) ->
-                if (customPresets[providerId]?.wireFormat != WireFormat.OPENAI_COMPAT) return@flatMap emptyList()
+                if (customPresets[providerId]?.wireFormat?.runsInMisul != true) return@flatMap emptyList()
                 provider.models.map { (modelId, model) -> ModelOption(providerId, modelId, model.name.ifBlank { modelId }) }
             }
             applyModelOptions(catalogToOptions(catalog) + customOptions)
@@ -2116,7 +2116,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         projectId: String?,
         sessionId: String,
     ): MisulRuntimeSpec {
-        require(preset.wireFormat == WireFormat.OPENAI_COMPAT) { "${preset.displayName} is not available in this alpha" }
+        require(preset.wireFormat.runsInMisul) { "${preset.displayName} is not available in this alpha" }
         val limits = limitFor(selected)
         val contextWindow = (limits?.context ?: 128_000L).coerceAtLeast(1)
         val outputLimit = (limits?.output ?: minOf(32_000L, contextWindow)).coerceIn(1, contextWindow)
@@ -2147,9 +2147,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 id = selected.providerId,
                 endpoint = preset.baseUrl,
                 credential = credential,
-                dialect = when (selected.providerId) {
-                    "openrouter" -> "openrouter_chat"
-                    "deepseek" -> "deepseek_chat"
+                dialect = when {
+                    preset.wireFormat == WireFormat.ANTHROPIC -> "anthropic_messages"
+                    selected.providerId == "openrouter" -> "openrouter_chat"
+                    selected.providerId == "deepseek" -> "deepseek_chat"
                     else -> "openai_chat"
                 },
                 headers = dev.phonecode.app.runtime.providerRequestHeaders(selected.providerId, sessionId, preset.extraHeaders),
@@ -2921,7 +2922,11 @@ internal fun configuredModelForProviderActivation(
 private fun newSessionId(): String = "session-${UUID.randomUUID()}"
 
 internal fun providerAllowed(providerId: String, codexOAuthEnabled: Boolean): Boolean =
-    providerId != "anthropic" && providerId != "codex"
+    providerId != "codex"
+
+/** Wire formats the native Misul runtime speaks. */
+internal val WireFormat.runsInMisul: Boolean
+    get() = this == WireFormat.OPENAI_COMPAT || this == WireFormat.ANTHROPIC
 
 fun builtInModels(codexOAuthEnabled: Boolean = BuildConfig.CODEX_OAUTH_ENABLED): List<ModelOption> = listOf(
     ModelOption("anthropic", "claude-opus-4-8", "Claude Opus 4.8"),

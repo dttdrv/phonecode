@@ -104,11 +104,11 @@ internal fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
                 label = "Allow changes automatically",
                 selected = state.autoAccept,
                 onClick = { if (!state.autoAccept) confirmAutomaticApproval = true },
-                supportingText = "Run workspace changes without approval prompts",
+                supportingText = "Apply file edits without asking. Commands, Git, plugins and settings changes still ask.",
                 showDivider = false,
             )
         }
-        SettingsNote("Reading the active workspace and linked folders is always allowed. Reads outside those locations always ask. Automatic approval controls writes, commands, Git operations, and actions from enabled MCP servers that can change data.")
+        SettingsNote("Reading the active workspace and linked folders is always allowed. Reads outside those locations always ask. Automatic approval covers file edits in the active workspace only.")
         state.notice?.let { notice ->
             SettingsNote(notice, announce = true)
             LaunchedEffect(notice) { kotlinx.coroutines.delay(3000); vm.clearNotice() }
@@ -127,7 +127,7 @@ internal fun FilesPage(vm: ChatViewModel, onBack: () -> Unit) {
     if (confirmAutomaticApproval) {
         ConfirmActionDialog(
             title = "Enable automatic approval?",
-            message = "PhoneCode will run writes in the private workspace and linked phone folders, commands, Git operations, and mutating MCP actions without asking each time. Reads outside linked locations will still ask.",
+            message = "PhoneCode will apply file edits in the active workspace without asking each time. Commands, Git operations, MCP actions, settings changes, and reads outside linked locations will still ask.",
             action = "Enable automatic approval",
             progressAction = "Enabling…",
             inProgress = enablingAutomaticApproval,

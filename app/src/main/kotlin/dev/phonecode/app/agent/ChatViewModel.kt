@@ -42,6 +42,7 @@ import dev.phonecode.app.runtime.MisulRuntimeSpec
 import dev.phonecode.app.runtime.toBoundedMisulImportSession
 import dev.phonecode.app.runtime.userFacingFailure
 import dev.phonecode.app.runtime.isRetryableFailure
+import dev.phonecode.app.runtime.needsApproval
 import dev.phonecode.provider.catalog.Catalog
 import dev.phonecode.provider.catalog.CatalogLoader
 import dev.phonecode.provider.domain.ChatMessage
@@ -123,13 +124,15 @@ enum class TurnOutcome { STOPPED, FAILED }
 
 data class PermissionRequest(val tool: String, val summary: String)
 
-internal fun permissionCanAutoApprove(tool: String, automaticChanges: Boolean): Boolean {
-    if (!automaticChanges) return false
-    val normalized = tool.lowercase()
-    return normalized != "doom_loop" &&
-        normalized != "external_directory" &&
-        !normalized.startsWith("external_directory_")
-}
+// Automatic approval covers edits to files in the active workspace only.
+private val AUTO_APPROVED_FILE_EDITS = setOf("edit_file", "write_file", "apply_patch")
+
+internal fun permissionCanAutoApprove(tool: String, automaticChanges: Boolean): Boolean =
+    automaticChanges && tool in AUTO_APPROVED_FILE_EDITS
+
+/** The user's always-ask tools plus every mutating tool automatic approval does not cover. */
+internal fun alwaysAskTools(userAlwaysAsk: Set<String>, mutatingTools: List<String>): Set<String> =
+    userAlwaysAsk + mutatingTools.filterNot { permissionCanAutoApprove(it, automaticChanges = true) }
 
 data class QuestionRequest(val questions: List<UserQuestion>)
 data class RetryState(val attempt: Int, val message: String)
@@ -2155,7 +2158,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             hostTools = hostTools,
             toolContext = AndroidToolContext({ pinnedWorkspace.absolutePath }, { _, _ -> false }, ::askUser),
             disabledTools = settings.disabledTools,
-            approvalTools = settings.approvalTools,
+            approvalTools = alwaysAskTools(settings.approvalTools, hostTools.filter { it.needsApproval() }.map { it.name }),
         )
     }
 

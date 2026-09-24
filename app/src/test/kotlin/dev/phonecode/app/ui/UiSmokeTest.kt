@@ -970,12 +970,12 @@ Original instruction.
         compose.onNodeWithText("Approval policy").assertIsDisplayed()
         compose.onNodeWithText("Ask before each change").assertIsDisplayed().assertIsSelected()
         compose.onNodeWithText("Allow changes automatically").assertIsDisplayed()
-        compose.onNodeWithText("writes, commands, Git operations", substring = true).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("enabled MCP servers", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("plugins and settings changes still ask", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("file edits in the active workspace only", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Allow changes automatically").performClick()
         compose.onNodeWithText("Enable automatic approval?").assertIsDisplayed()
         compose.onNodeWithText("MCP actions", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("linked phone folders", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("apply file edits in the active workspace", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Enable automatic approval").performClick()
         compose.waitUntil(5_000) {
             runCatching {

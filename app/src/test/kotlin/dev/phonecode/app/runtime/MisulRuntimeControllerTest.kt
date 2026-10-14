@@ -2,6 +2,7 @@ package dev.phonecode.app.runtime
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -12,6 +13,59 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MisulRuntimeControllerTest {
+    @Test
+    fun synchronousResponseReadsPastPreviousTurnRecords() {
+        val records = ArrayDeque(listOf(
+            """{"jsonrpc":"2.0","method":"agent_end","params":{"session_id":"restored"}}""",
+            """{"jsonrpc":"2.0","id":6,"error":{"message":"No active prompt can be aborted"}}""",
+            """{"jsonrpc":"2.0","id":7,"result":{"imported":false}}""",
+            """{"jsonrpc":"2.0","id":8,"result":{}}""",
+        ))
+
+        val response = readMisulResponse(records.removeFirst(), 7, "session/import") { records.removeFirstOrNull() }
+
+        assertFalse(response.getBoolean("imported"))
+        assertEquals(1, records.size)
+    }
+
+    @Test
+    fun synchronousResponseReturnsWithoutPollingWhenTheIdMatches() {
+        val response = readMisulResponse(
+            """{"jsonrpc":"2.0","id":7,"result":{"imported":true}}""",
+            7,
+            "session/import",
+        ) { error("No queued record should be read") }
+
+        assertTrue(response.getBoolean("imported"))
+    }
+
+    @Test
+    fun synchronousResponsePreservesTheMatchingRequestError() {
+        val failure = assertThrows(IllegalStateException::class.java) {
+            readMisulResponse(
+                """{"jsonrpc":"2.0","id":6,"result":{}}""",
+                7,
+                "session/import",
+            ) { """{"jsonrpc":"2.0","id":7,"error":{"message":"Invalid imported message"}}""" }
+        }
+
+        assertEquals("Invalid imported message", failure.message)
+    }
+
+    @Test
+    fun synchronousResponseRejectsMissingOrInvalidMatchingResults() {
+        for (record in listOf(
+            """{"jsonrpc":"2.0","id":6,"result":{}}""",
+            """{"jsonrpc":"2.0","id":7}""",
+            """{"jsonrpc":"2.0","id":7,"result":null}""",
+        )) {
+            val failure = assertThrows(IllegalStateException::class.java) {
+                readMisulResponse(record, 7, "session/import") { null }
+            }
+            assertEquals("Invalid Misul response for session/import", failure.message)
+        }
+    }
+
     @Test
     fun runtimeSpecCarriesTheSelectedPhoneCodeProviderAndModel() {
         val json = fixtureSpec().toJson()

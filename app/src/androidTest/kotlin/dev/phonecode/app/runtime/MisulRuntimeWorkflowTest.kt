@@ -258,6 +258,9 @@ class MisulRuntimeWorkflowTest {
                 assertEquals("completed", result.status)
                 assertEquals("native alpha", result.content)
                 assertTrue(events.any { it == MisulRuntimeEvent.Text("native alpha") })
+                // Abort replies are queued even after a turn settles; import must read past that reply.
+                controller.abort()
+                assertEquals(0, controller.importSessions(runtimeSpec, listOf(legacy)))
                 val request = requests.first()
                 assertTrue(request.startsWith("POST /v1/chat/completions HTTP/1.1"))
                 assertTrue(request.contains("Authorization: Bearer fixture-token", ignoreCase = true))

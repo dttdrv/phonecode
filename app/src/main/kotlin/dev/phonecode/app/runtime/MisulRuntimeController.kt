@@ -274,6 +274,24 @@ internal fun parseMisulRecord(record: String, expectedId: Long): ParsedMisulReco
     ))
 }
 
+internal fun readMisulResponse(
+    firstRecord: String,
+    expectedId: Long,
+    method: String,
+    nextRecord: () -> String?,
+): JSONObject {
+    var record = firstRecord
+    while (true) {
+        val parsed = JSONObject(record)
+        if (parsed.optLong("id", Long.MIN_VALUE) == expectedId) {
+            parsed.optJSONObject("error")?.let { throw IllegalStateException(it.optString("message", "$method failed")) }
+            return checkNotNull(parsed.optJSONObject("result")) { "Invalid Misul response for $method" }
+        }
+        // Native requests return the oldest queued record, which can belong to the previous turn.
+        record = nextRecord() ?: error("Invalid Misul response for $method")
+    }
+}
+
 internal class MisulRuntimeController {
     private val executor = Executors.newSingleThreadExecutor { task -> Thread(task, "misul-runtime") }
     private val dispatcher = executor.asCoroutineDispatcher()
@@ -408,10 +426,7 @@ internal class MisulRuntimeController {
             .toString()
             .encodeToByteArray())
             .decodeToString()
-        val parsed = JSONObject(raw)
-        parsed.optJSONObject("error")?.let { throw IllegalStateException(it.optString("message", "$method failed")) }
-        check(parsed.optLong("id", Long.MIN_VALUE) == id && parsed.has("result")) { "Invalid Misul response for $method" }
-        return parsed.getJSONObject("result")
+        return readMisulResponse(raw, id, method) { native.nextEvent(0)?.decodeToString() }
     }
 
     private companion object {

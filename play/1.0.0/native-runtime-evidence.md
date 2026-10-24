@@ -1,5 +1,7 @@
 # Native runtime evidence
 
+Historical snapshot checked on 24 September 2026. The table below does not identify the current binary. Current artifact and source identities are in `native-misul/sources.lock`; see `native-misul/README.md` for the audited source build. This document does not establish a store release.
+
 Status: **Agent runtime locked in source; command runtime not shipping.**
 
 ## Misul agent runtime (`libmisul.so`)
@@ -7,7 +9,7 @@ Status: **Agent runtime locked in source; command runtime not shipping.**
 | Field | Value (checked 24 September 2026) |
 | --- | --- |
 | File | `app/src/main/jniLibs/arm64-v8a/libmisul.so`, 2,856,144 bytes |
-| SHA-256 | `e0f6e43e4caf091fc0087bd980996c8aad8863a1c3ae7c7ed78b227876137bf4`; matches `native-misul/sources.lock`, `assets/misul-runtime/MANIFEST.sha256`, and `VENDORED_CHECKSUMS` |
+| SHA-256 | `e0f6e43e4caf091fc0087bd980996c8aad8863a1c3ae7c7ed78b227876137bf4`; historical artifact identity |
 | Source manifest SHA-256 | `f98b4b7cd6507d411a2cc482c47df902db87292754f6bb00552871218b5529f0` |
 | Toolchain | Zig 0.16.0, NDK 28.2.13676358, API 26, arm64-v8a |
 | License | MIT, Misul Computing |

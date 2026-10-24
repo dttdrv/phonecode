@@ -133,7 +133,7 @@ internal data class MisulRuntimeSpec(
         .joinToString("") { "%02x".format(it) }
 }
 
-// ponytail: process and git_branch mutate only for some actions; the native gate is per tool name,
+// process and git_branch mutate only for some actions; the native gate is per tool name,
 // so they always ask. Move to per-call host approval if the extra prompts get in the way.
 internal fun Tool.needsApproval(): Boolean = mutating || name == "process" || name == "git_branch"
 

@@ -93,6 +93,9 @@ needed. PhoneCode supports Android 8.0 and newer.
   :app:verifyLegalInventory :app:verifyPrototypeRuntimeBoundary
 ```
 
+The pinned native Misul source is included in [`native-misul/source`](native-misul/source).
+See [`native-misul/README.md`](native-misul/README.md) to rebuild its authenticated app input.
+
 The project has four modules. `:app` holds the Compose UI and Android glue. `:agent` holds the loop,
 prompts, and compaction. `:provider` holds the wire formats and catalog. `:tools` holds the file,
 git, web, todo, MCP, and skills tooling. The three library modules are pure JVM and fully

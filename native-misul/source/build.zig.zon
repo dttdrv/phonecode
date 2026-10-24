@@ -1,0 +1,8 @@
+.{
+    .name = .misul_agent,
+    .version = "0.1.0-alpha",
+    .fingerprint = 0xa1ccd2beac9a2db8,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{},
+    .paths = .{ "build.zig", "build.zig.zon", "src", "README.md", "LICENSE" },
+}

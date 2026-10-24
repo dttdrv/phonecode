@@ -104,7 +104,7 @@ class SessionStore(private val dir: File) {
 
     // In-memory catalog (id -> meta) so the hot list() - rebuilt after every turn and every mutation -
     // never re-parses every session file's full message bodies. Authoritative for this process; the
-    // on-device store has a single writer. ponytail: single-process cache; if a second writer ever
+    // on-device store has a single writer. single-process cache; if a second writer ever
     // appears, drop it and re-scan. All access serializes on LOCK, which also closes the read-modify-write
     // races in the setX/rename helpers (concurrent load+save no longer lose each other's updates).
     private var metaCache: MutableMap<String, SessionMeta>? = null

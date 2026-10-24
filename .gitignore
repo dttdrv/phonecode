@@ -44,3 +44,10 @@ app/screenshots/
 # Local agent coordination and verification notes
 .claude-handoff.md
 .codex-checkpoints/
+
+# Local agent instructions and workflow notes.
+/AGENTS.md
+/GATES.md
+/animation-plans/
+/native-misul/source/.zig-cache/
+/native-misul/source/zig-out/
